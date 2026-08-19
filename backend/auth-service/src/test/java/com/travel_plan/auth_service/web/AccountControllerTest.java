@@ -10,7 +10,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.travel_plan.auth_service.domain.Account;
 import com.travel_plan.auth_service.domain.Role;
 import com.travel_plan.auth_service.repository.AccountRepository;
-import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
