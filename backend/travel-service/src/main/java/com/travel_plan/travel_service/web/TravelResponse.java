@@ -12,7 +12,7 @@ import java.util.UUID;
 public record TravelResponse(
         UUID id,
         String title,
-        UUID ownerId,
+        UUID managerId,
         LocalDate startDate,
         LocalDate endDate,
         long durationDays,
@@ -32,7 +32,7 @@ public record TravelResponse(
         return new TravelResponse(
                 travel.getId(),
                 travel.getTitle(),
-                travel.getOwnerId(),
+                travel.getManagerId(),
                 travel.getStartDate(),
                 travel.getEndDate(),
                 travel.getDurationDays(),

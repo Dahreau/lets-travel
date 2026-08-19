@@ -12,9 +12,12 @@ import com.travel_plan.travel_service.domain.Destination;
 import com.travel_plan.travel_service.domain.Travel;
 import com.travel_plan.travel_service.domain.TravelStatus;
 import com.travel_plan.travel_service.domain.TransportationType;
+import com.travel_plan.travel_service.exception.ForbiddenException;
+import com.travel_plan.travel_service.exception.InvalidTravelRequestException;
 import com.travel_plan.travel_service.exception.TravelNotFoundException;
 import com.travel_plan.travel_service.graph.TravelGraphSyncService;
 import com.travel_plan.travel_service.repository.TravelRepository;
+import com.travel_plan.travel_service.security.AuthenticatedUser;
 import com.travel_plan.travel_service.web.AccommodationRequest;
 import com.travel_plan.travel_service.web.ActivityRequest;
 import com.travel_plan.travel_service.web.DestinationRequest;
@@ -38,11 +41,13 @@ class TravelServiceTest {
     private final TravelGraphSyncService graphSyncService = mock(TravelGraphSyncService.class);
     private final TravelService travelService = new TravelService(travelRepository, graphSyncService);
 
+    private final AuthenticatedUser admin = new AuthenticatedUser("admin", "ADMIN", null);
+
     @Test
     void createBuildsFullTravelGraphAndRecordsRoute() {
         when(travelRepository.save(any(Travel.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        TravelResponse saved = travelService.create(fullRequest());
+        TravelResponse saved = travelService.create(fullRequest(UUID.randomUUID()), admin);
 
         assertThat(saved.title()).isEqualTo("Iberian tour");
         assertThat(saved.destinations()).hasSize(2);
@@ -54,6 +59,26 @@ class TravelServiceTest {
         ArgumentCaptor<List<Destination>> captor = ArgumentCaptor.forClass(List.class);
         verify(graphSyncService).recordRoute(captor.capture());
         assertThat(captor.getValue()).extracting(Destination::getCity).containsExactly("Lisbon", "Porto");
+    }
+
+    @Test
+    void createAsAdminWithoutManagerIdIsRejected() {
+        TravelRequest request = fullRequest(null);
+
+        assertThatThrownBy(() -> travelService.create(request, admin))
+                .isInstanceOf(InvalidTravelRequestException.class);
+    }
+
+    @Test
+    void createAsManagerForcesManagerIdFromJwtIgnoringRequestValue() {
+        UUID managerUserId = UUID.randomUUID();
+        AuthenticatedUser manager = new AuthenticatedUser("manager1", "TRAVEL_MANAGER", managerUserId);
+        when(travelRepository.save(any(Travel.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Le manager (ou un client malveillant) tente de s'attribuer un autre managerId : ignore.
+        TravelResponse saved = travelService.create(fullRequest(UUID.randomUUID()), manager);
+
+        assertThat(saved.managerId()).isEqualTo(managerUserId);
     }
 
     @Test
@@ -84,7 +109,7 @@ class TravelServiceTest {
         Travel existing = Travel.builder()
                 .id(id)
                 .title("Old title")
-                .ownerId(UUID.randomUUID())
+                .managerId(UUID.randomUUID())
                 .startDate(LocalDate.of(2026, Month.SEPTEMBER, 1))
                 .endDate(LocalDate.of(2026, Month.SEPTEMBER, 10))
                 .status(TravelStatus.PLANNED)
@@ -102,7 +127,7 @@ class TravelServiceTest {
         when(travelRepository.findById(id)).thenReturn(Optional.of(existing));
         when(travelRepository.saveAndFlush(any(Travel.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        TravelResponse updated = travelService.update(id, fullRequest());
+        TravelResponse updated = travelService.update(id, fullRequest(UUID.randomUUID()), admin);
 
         assertThat(updated.title()).isEqualTo("Iberian tour");
         assertThat(updated.destinations()).hasSize(2);
@@ -110,9 +135,50 @@ class TravelServiceTest {
     }
 
     @Test
+    void updateByNonOwningManagerIsForbidden() {
+        UUID id = UUID.randomUUID();
+        Travel existing = Travel.builder()
+                .id(id)
+                .title("Old title")
+                .managerId(UUID.randomUUID())
+                .startDate(LocalDate.of(2026, Month.SEPTEMBER, 1))
+                .endDate(LocalDate.of(2026, Month.SEPTEMBER, 10))
+                .status(TravelStatus.PLANNED)
+                .build();
+        when(travelRepository.findById(id)).thenReturn(Optional.of(existing));
+
+        AuthenticatedUser someOtherManager = new AuthenticatedUser("manager2", "TRAVEL_MANAGER", UUID.randomUUID());
+
+        assertThatThrownBy(() -> travelService.update(id, fullRequest(UUID.randomUUID()), someOtherManager))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void updateByOwningManagerSucceeds() {
+        UUID id = UUID.randomUUID();
+        UUID managerUserId = UUID.randomUUID();
+        Travel existing = Travel.builder()
+                .id(id)
+                .title("Old title")
+                .managerId(managerUserId)
+                .startDate(LocalDate.of(2026, Month.SEPTEMBER, 1))
+                .endDate(LocalDate.of(2026, Month.SEPTEMBER, 10))
+                .status(TravelStatus.PLANNED)
+                .build();
+        when(travelRepository.findById(id)).thenReturn(Optional.of(existing));
+        when(travelRepository.saveAndFlush(any(Travel.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthenticatedUser owningManager = new AuthenticatedUser("manager1", "TRAVEL_MANAGER", managerUserId);
+
+        TravelResponse updated = travelService.update(id, fullRequest(UUID.randomUUID()), owningManager);
+
+        assertThat(updated.managerId()).isEqualTo(managerUserId);
+    }
+
+    @Test
     void deleteRemovesRouteThenDeletesTravel() {
         UUID id = UUID.randomUUID();
-        Travel existing = Travel.builder().id(id).build();
+        Travel existing = Travel.builder().id(id).managerId(UUID.randomUUID()).build();
         Destination destination = Destination.builder()
                 .travel(existing)
                 .city("Lisbon")
@@ -123,10 +189,21 @@ class TravelServiceTest {
 
         when(travelRepository.findById(id)).thenReturn(Optional.of(existing));
 
-        travelService.delete(id);
+        travelService.delete(id, admin);
 
         verify(graphSyncService).removeRoute(List.of(destination));
         verify(travelRepository).delete(existing);
+    }
+
+    @Test
+    void deleteByNonOwningManagerIsForbidden() {
+        UUID id = UUID.randomUUID();
+        Travel existing = Travel.builder().id(id).managerId(UUID.randomUUID()).build();
+        when(travelRepository.findById(id)).thenReturn(Optional.of(existing));
+
+        AuthenticatedUser someOtherManager = new AuthenticatedUser("manager2", "TRAVEL_MANAGER", UUID.randomUUID());
+
+        assertThatThrownBy(() -> travelService.delete(id, someOtherManager)).isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -140,7 +217,7 @@ class TravelServiceTest {
         assertThat(travelService.findAll()).hasSize(1);
     }
 
-    private TravelRequest fullRequest() {
+    private TravelRequest fullRequest(UUID managerId) {
         ActivityRequest activity = new ActivityRequest(
                 "Tram 28", "City tour", LocalDate.of(2026, Month.SEPTEMBER, 2), new BigDecimal("3.50"));
         AccommodationRequest accommodation = new AccommodationRequest(
@@ -175,7 +252,7 @@ class TravelServiceTest {
 
         return new TravelRequest(
                 "Iberian tour",
-                UUID.randomUUID(),
+                managerId,
                 LocalDate.of(2026, Month.SEPTEMBER, 1),
                 LocalDate.of(2026, Month.SEPTEMBER, 8),
                 TravelStatus.PLANNED,

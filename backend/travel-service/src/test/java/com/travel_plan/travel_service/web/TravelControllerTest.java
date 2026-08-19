@@ -23,6 +23,7 @@ import com.travel_plan.travel_service.domain.Travel;
 import com.travel_plan.travel_service.domain.TravelStatus;
 import com.travel_plan.travel_service.exception.ApiExceptionHandler;
 import com.travel_plan.travel_service.exception.TravelNotFoundException;
+import com.travel_plan.travel_service.security.AuthenticatedUser;
 import com.travel_plan.travel_service.service.TravelService;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -34,6 +35,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -79,9 +83,11 @@ class TravelControllerTest {
 
     @Test
     void createReturns201ForValidRequest() throws Exception {
-        when(travelService.create(any(TravelRequest.class))).thenReturn(TravelResponse.from(newTravel("Iberian tour")));
+        when(travelService.create(any(TravelRequest.class), any(AuthenticatedUser.class)))
+                .thenReturn(TravelResponse.from(newTravel("Iberian tour")));
 
         mockMvc.perform(post("/api/travels")
+                        .principal(adminAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest("Iberian tour"))))
                 .andExpect(status().isCreated())
@@ -100,6 +106,7 @@ class TravelControllerTest {
                 List.of());
 
         mockMvc.perform(post("/api/travels")
+                        .principal(adminAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -120,6 +127,7 @@ class TravelControllerTest {
                 List.of());
 
         mockMvc.perform(post("/api/travels")
+                        .principal(adminAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -140,6 +148,7 @@ class TravelControllerTest {
                 List.of());
 
         mockMvc.perform(post("/api/travels")
+                        .principal(adminAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -163,6 +172,7 @@ class TravelControllerTest {
                 List.of());
 
         mockMvc.perform(post("/api/travels")
+                        .principal(adminAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -186,6 +196,7 @@ class TravelControllerTest {
                 List.of(transportation));
 
         mockMvc.perform(post("/api/travels")
+                        .principal(adminAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -208,6 +219,7 @@ class TravelControllerTest {
                 List.of());
 
         mockMvc.perform(post("/api/travels")
+                        .principal(adminAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -215,10 +227,11 @@ class TravelControllerTest {
 
     @Test
     void createReturns409WhenDataIntegrityViolation() throws Exception {
-        when(travelService.create(any(TravelRequest.class)))
+        when(travelService.create(any(TravelRequest.class), any(AuthenticatedUser.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate accommodation"));
 
         mockMvc.perform(post("/api/travels")
+                        .principal(adminAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest("Iberian tour"))))
                 .andExpect(status().isConflict());
@@ -227,10 +240,11 @@ class TravelControllerTest {
     @Test
     void updateReturns200ForValidRequest() throws Exception {
         UUID id = UUID.randomUUID();
-        when(travelService.update(any(UUID.class), any(TravelRequest.class)))
+        when(travelService.update(any(UUID.class), any(TravelRequest.class), any(AuthenticatedUser.class)))
                 .thenReturn(TravelResponse.from(newTravel("Updated tour")));
 
         mockMvc.perform(put("/api/travels/{id}", id)
+                        .principal(adminAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest("Updated tour"))))
                 .andExpect(status().isOk())
@@ -240,10 +254,11 @@ class TravelControllerTest {
     @Test
     void updateReturns404WhenTravelMissing() throws Exception {
         UUID id = UUID.randomUUID();
-        when(travelService.update(any(UUID.class), any(TravelRequest.class)))
+        when(travelService.update(any(UUID.class), any(TravelRequest.class), any(AuthenticatedUser.class)))
                 .thenThrow(new TravelNotFoundException(id));
 
         mockMvc.perform(put("/api/travels/{id}", id)
+                        .principal(adminAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest("Iberian tour"))))
                 .andExpect(status().isNotFound());
@@ -253,22 +268,36 @@ class TravelControllerTest {
     void deleteRemovesExistingTravel() throws Exception {
         UUID id = UUID.randomUUID();
 
-        mockMvc.perform(delete("/api/travels/{id}", id)).andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/travels/{id}", id).principal(adminAuth())).andExpect(status().isNoContent());
     }
 
     @Test
     void deleteReturns404WhenTravelMissing() throws Exception {
         UUID id = UUID.randomUUID();
-        doThrow(new TravelNotFoundException(id)).when(travelService).delete(id);
+        // AuthenticatedUser est un record : cette instance est egale (equals()) a celle que
+        // le filtre JWT (simule ici par .principal(adminAuth())) place dans l'Authentication.
+        doThrow(new TravelNotFoundException(id))
+                .when(travelService)
+                .delete(id, new AuthenticatedUser("admin", "ADMIN", null));
 
-        mockMvc.perform(delete("/api/travels/{id}", id)).andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/travels/{id}", id).principal(adminAuth())).andExpect(status().isNotFound());
+    }
+
+    // MockMvc standalone n'a pas la chaine de filtres Spring Security : on simule directement
+    // ce que JwtAuthenticationFilter aurait pose dans le SecurityContext, via .principal(...).
+    // Doit etre une vraie Authentication (pas juste un Principal) pour que le resolveur
+    // d'argument Spring MVC accepte de la lier au parametre "Authentication authentication"
+    // du controller.
+    private Authentication adminAuth() {
+        AuthenticatedUser user = new AuthenticatedUser("admin", "ADMIN", null);
+        return new UsernamePasswordAuthenticationToken(user, null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
     }
 
     private Travel newTravel(String title) {
         Travel travel = Travel.builder()
                 .id(UUID.randomUUID())
                 .title(title)
-                .ownerId(UUID.randomUUID())
+                .managerId(UUID.randomUUID())
                 .startDate(LocalDate.of(2026, Month.SEPTEMBER, 1))
                 .endDate(LocalDate.of(2026, Month.SEPTEMBER, 10))
                 .status(TravelStatus.PLANNED)

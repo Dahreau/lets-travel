@@ -3,6 +3,7 @@ package com.travel_plan.travel_service.security;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import java.util.UUID;
 import javax.crypto.SecretKey;
 import org.springframework.stereotype.Service;
 
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 public class JwtService {
 
     private static final String ROLE_CLAIM = "role";
+    private static final String USER_ID_CLAIM = "userId";
 
     private final SecretKey signingKey;
 
@@ -27,5 +29,11 @@ public class JwtService {
 
     public String extractRole(Claims claims) {
         return claims.get(ROLE_CLAIM, String.class);
+    }
+
+    // Null pour un JWT emis pour le compte ADMIN par defaut (pas de fiche User associee).
+    public UUID extractUserId(Claims claims) {
+        String raw = claims.get(USER_ID_CLAIM, String.class);
+        return raw == null ? null : UUID.fromString(raw);
     }
 }
