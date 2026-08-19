@@ -7,7 +7,7 @@ Juste les commandes à copier-coller pendant l'oral, dans l'ordre du guide compl
 ## Prérequis
 
 ```bash
-TOKEN=$(curl -k -s -X POST https://localhost/api/auth/login \
+TOKEN=$(curl -k -s -X POST https://localhost:8443/api/auth/login \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"admin\",\"password\":\"$(grep -m1 '^DEFAULT_ADMIN_PASSWORD=' .env | cut -d= -f2-)\"}" \
   | jq -r .token)
@@ -19,7 +19,7 @@ TOKEN=$(curl -k -s -X POST https://localhost/api/auth/login \
 
 **Tracing cross-service :**
 ```bash
-curl -k -s https://localhost/api/travels -H "Authorization: Bearer $TOKEN" > /dev/null
+curl -k -s https://localhost:8443/api/travels -H "Authorization: Bearer $TOKEN" > /dev/null
 sleep 2
 docker compose exec zipkin wget -qO- "http://localhost:9411/api/v2/traces?serviceName=travel-service&limit=1" \
   | jq -r '.[0] | sort_by(.timestamp)[] | "\(.traceId[0:8])  \(.localEndpoint.serviceName)  \(.name)"'
@@ -42,11 +42,11 @@ grep -r "hasRole" backend/*/src/main/java --include=SecurityConfig.java
 ```bash
 cat backend/travel-service/src/main/resources/db/migration/V1__create_travel_tables.sql
 cat backend/payment-service/src/main/resources/db/migration/V1__create_payment_tables.sql
-docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7687 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
+docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7688 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
   "MATCH (a:Place)-[r:ROUTE_TO]->(b:Place) RETURN a.city, b.city, r.tripCount;"
 ```
 
-**CI/CD :** http://localhost:8090 (Jenkins) · http://localhost:9000 (SonarQube)
+**CI/CD :** http://localhost:8091 (Jenkins) · http://localhost:9001 (SonarQube)
 
 ## Functional
 
@@ -64,8 +64,8 @@ docker compose ps
 
 **API admin-only :**
 ```bash
-curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost/api/travels
-curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost/api/travels -H "Authorization: Bearer $TOKEN"
+curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost:8443/api/travels
+curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost:8443/api/travels -H "Authorization: Bearer $TOKEN"
 ```
 → `401` puis `200`.
 
@@ -81,14 +81,14 @@ cat > /tmp/user.json <<'EOF'
 }
 EOF
 
-USER_ID=$(curl -k -s -X POST https://localhost/api/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/user.json | jq -r .id)
+USER_ID=$(curl -k -s -X POST https://localhost:8443/api/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/user.json | jq -r .id)
 
-curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"
-curl -k -s -w "\nHTTP: %{http_code}\n" -X PUT https://localhost/api/users/$USER_ID -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"firstName":"Jean","lastName":"Dupont-Martin","email":"jean.dupont@example.com","role":"TRAVELER"}'
-curl -k -s -w "\nHTTP: %{http_code}\n" -X DELETE https://localhost/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"
-curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"
+curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost:8443/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"
+curl -k -s -w "\nHTTP: %{http_code}\n" -X PUT https://localhost:8443/api/users/$USER_ID -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"firstName":"Jean","lastName":"Dupont-Martin","email":"jean.dupont@example.com","role":"TRAVELER"}'
+curl -k -s -w "\nHTTP: %{http_code}\n" -X DELETE https://localhost:8443/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"
+curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost:8443/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"
 
-curl -k -s -w "\nHTTP: %{http_code}\n" -X POST https://localhost/api/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"firstName":"Test","lastName":"NoEmail","role":"TRAVELER"}'
+curl -k -s -w "\nHTTP: %{http_code}\n" -X POST https://localhost:8443/api/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"firstName":"Test","lastName":"NoEmail","role":"TRAVELER"}'
 ```
 </details>
 
@@ -108,11 +108,11 @@ cat > /tmp/travel.json <<'EOF'
 }
 EOF
 
-TRAVEL_ID=$(curl -k -s -X POST https://localhost/api/travels -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/travel.json | jq -r .id)
+TRAVEL_ID=$(curl -k -s -X POST https://localhost:8443/api/travels -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/travel.json | jq -r .id)
 
-curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost/api/travels/$TRAVEL_ID -H "Authorization: Bearer $TOKEN"
+curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost:8443/api/travels/$TRAVEL_ID -H "Authorization: Bearer $TOKEN"
 
-docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7687 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
+docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7688 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
   "MATCH (a:Place)-[r:ROUTE_TO]->(b:Place) RETURN a.city, b.city, r.tripCount;"
 ```
 </details>
@@ -126,36 +126,36 @@ cat > /tmp/pm.json <<'EOF'
  "providerToken": "pm_card_visa", "brand": "Visa", "last4": "4242", "isDefault": true}
 EOF
 
-PM_ID=$(curl -k -s -X POST https://localhost/api/payment-methods -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/pm.json | jq -r .id)
+PM_ID=$(curl -k -s -X POST https://localhost:8443/api/payment-methods -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/pm.json | jq -r .id)
 
 cat > /tmp/payment.json <<EOF
 {"travelId": "$TRAVEL_ID", "ownerId": "11111111-1111-1111-1111-111111111111",
  "paymentMethodId": "$PM_ID", "amount": 150.00, "currency": "eur"}
 EOF
 
-PAYMENT_ID=$(curl -k -s -X POST https://localhost/api/payments -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/payment.json | jq -r .id)
+PAYMENT_ID=$(curl -k -s -X POST https://localhost:8443/api/payments -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/payment.json | jq -r .id)
 
-curl -k -s -w "\nHTTP: %{http_code}\n" -X DELETE https://localhost/api/payment-methods/$PM_ID -H "Authorization: Bearer $TOKEN"
-curl -k -s https://localhost/api/payments/$PAYMENT_ID -H "Authorization: Bearer $TOKEN"
+curl -k -s -w "\nHTTP: %{http_code}\n" -X DELETE https://localhost:8443/api/payment-methods/$PM_ID -H "Authorization: Bearer $TOKEN"
+curl -k -s https://localhost:8443/api/payments/$PAYMENT_ID -H "Authorization: Bearer $TOKEN"
 ```
 </details>
 
 **Erreurs :**
 ```bash
-curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost/api/payment-methods/00000000-0000-0000-0000-000000000000 -H "Authorization: Bearer $TOKEN"
-curl -k -s -w "\nHTTP: %{http_code}\n" -X POST https://localhost/api/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"role":"SUPERADMIN"}'
+curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost:8443/api/payment-methods/00000000-0000-0000-0000-000000000000 -H "Authorization: Bearer $TOKEN"
+curl -k -s -w "\nHTTP: %{http_code}\n" -X POST https://localhost:8443/api/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"role":"SUPERADMIN"}'
 ```
 
 **Auth/RBAC :**
 ```bash
-curl -k -s -o /dev/null -w "%{http_code}\n" -X POST https://localhost/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"wrong"}'
-curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost/api/travels
+curl -k -s -o /dev/null -w "%{http_code}\n" -X POST https://localhost:8443/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"wrong"}'
+curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost:8443/api/travels
 ```
 
 **Load balancing :**
 ```bash
 for i in $(seq 1 30); do
-  curl -k -s -o /dev/null -w "%{http_code} " https://localhost/api/travels -H "Authorization: Bearer $TOKEN"
+  curl -k -s -o /dev/null -w "%{http_code} " https://localhost:8443/api/travels -H "Authorization: Bearer $TOKEN"
 done
 echo
 sleep 3
@@ -166,12 +166,12 @@ docker compose exec zipkin wget -qO- "http://localhost:9411/api/v2/traces?servic
 
 **Failover :**
 ```bash
-docker stop travel-plan-app-travel-service-2
+docker stop lets-travel-app-travel-service-2
 for i in $(seq 1 10); do
-  curl -k -s -o /dev/null -w "%{http_code} " https://localhost/api/travels -H "Authorization: Bearer $TOKEN"
+  curl -k -s -o /dev/null -w "%{http_code} " https://localhost:8443/api/travels -H "Authorization: Bearer $TOKEN"
 done
 echo
-docker start travel-plan-app-travel-service-2
+docker start lets-travel-app-travel-service-2
 ```
 
 **Code review :**

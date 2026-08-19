@@ -13,7 +13,7 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-BASE_URL="${BASE_URL:-https://localhost}"
+BASE_URL="${BASE_URL:-https://localhost:8443}"
 ADMIN_USERNAME="${DEFAULT_ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-}"
 

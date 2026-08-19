@@ -18,12 +18,12 @@ docker compose exec vault vault write -f -field=secret_id auth/approle/role/trav
 docker compose port vault 8200 || echo "Vault n'a pas de port publié : ajoute temporairement '127.0.0.1:8200:8200' sous vault.ports dans docker-compose.yml puis 'docker compose up -d vault' avant de continuer"
 ```
 
-Puis lance le service (Postgres est sur le port `5434`, pas le `5432` par défaut ; Neo4j exige une connexion chiffrée, `bolt://` seul échoue) :
+Puis lance le service (Postgres est sur le port `5435`, pas le `5432` par défaut ; Neo4j exige une connexion chiffrée, `bolt://` seul échoue) :
 
 ```bash
 cd backend/travel-service
-DB_HOST=localhost DB_PORT=5434 DB_PASSWORD=<ton TRAVEL_DB_PASSWORD> \
-NEO4J_URI=bolt+ssc://localhost:7687 NEO4J_PASSWORD=<ton NEO4J_PASSWORD> \
+DB_HOST=localhost DB_PORT=5435 DB_PASSWORD=<ton TRAVEL_DB_PASSWORD> \
+NEO4J_URI=bolt+ssc://localhost:7688 NEO4J_PASSWORD=<ton NEO4J_PASSWORD> \
 VAULT_ADDR=http://localhost:8200 VAULT_ROLE_ID=<role_id> VAULT_SECRET_ID=<secret_id> \
 ./mvnw spring-boot:run
 ```

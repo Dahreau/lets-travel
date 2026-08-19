@@ -28,7 +28,7 @@ ansible-playbook -i inventory.ini playbooks/site.yml --ask-become-pass
 Une fois terminé, l'application est accessible en HTTPS :
 
 ```bash
-curl -k https://localhost/api/travels
+curl -k https://localhost:8443/api/travels
 ```
 
 (`-k` parce que le certificat est auto-signé — normal en local, pas un vrai certificat signé par une autorité publique.)
@@ -67,7 +67,7 @@ Chaque microservice a besoin d'un identifiant Vault (`VAULT_ROLE_ID`/`VAULT_SECR
 
 Première approche testée (et invalidée en pratique) : pointer `api-gateway` vers le nom de service partagé (`http://travel-service:8083`) en comptant sur le DNS round-robin intégré à Docker pour répartir les requêtes entre les 2 répliques. Ça ne marche pas comme prévu : le client HTTP interne garde sa connexion en vie (keep-alive) vers la première IP résolue et ne refait jamais de lookup DNS tant que la connexion reste ouverte — en test de charge réel, 100% du trafic est resté collé à une seule réplique. Le failover, lui, fonctionnait déjà (Docker retire un conteneur arrêté du DNS), mais pas la répartition de charge, pourtant explicitement demandée à l'audit.
 
-Fix : `RouteConfig.java` utilise déjà `spring-cloud-starter-loadbalancer` (filtre `lb(...)`) au-dessus d'un `SimpleDiscoveryClient` — mais celui-ci ne déclarait qu'une seule instance par service, donc rien à répartir. `application.properties` déclare maintenant 2 instances par service, une par nom de conteneur Compose (`travel-plan-app-travel-service-1`/`-2`, stables tant que `deploy.replicas` reste à 2), injectées via `docker-compose.yml`. Le `RoundRobinLoadBalancer` par défaut de Spring Cloud alterne alors réellement entre les deux à chaque appel, chacune gardant sa propre connexion — vérifié via les traces Zipkin (IP différente par réplique) et par coupure d'une réplique en direct (failover confirmé sans interruption).
+Fix : `RouteConfig.java` utilise déjà `spring-cloud-starter-loadbalancer` (filtre `lb(...)`) au-dessus d'un `SimpleDiscoveryClient` — mais celui-ci ne déclarait qu'une seule instance par service, donc rien à répartir. `application.properties` déclare maintenant 2 instances par service, une par nom de conteneur Compose (`lets-travel-app-travel-service-1`/`-2`, stables tant que `deploy.replicas` reste à 2 et que le nom de projet Compose — `name: lets-travel-app` — ne change pas), injectées via `docker-compose.yml`. Le `RoundRobinLoadBalancer` par défaut de Spring Cloud alterne alors réellement entre les deux à chaque appel, chacune gardant sa propre connexion — vérifié via les traces Zipkin (IP différente par réplique) et par coupure d'une réplique en direct (failover confirmé sans interruption).
 
 ### Pourquoi Nginx ne fait que le TLS, pas le routage entre microservices
 

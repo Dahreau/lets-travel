@@ -12,7 +12,9 @@ Premier lancement : le script crée `infra/ci/.env` depuis `.env.example` et s'a
 
 - ⚠️ Ce `.env` doit être **à côté de `docker-compose.yml`** (`infra/ci/.env`), pas dans `infra/ci/jenkins/` — Compose ne charge que celui du dossier où il tourne. Sans ça, `sonarqube-db` refuse de démarrer (mot de passe vide). Le script gère déjà ça correctement (il se place dans `infra/ci` avant de lancer Compose).
 
-Jenkins → http://localhost:8090 · SonarQube → http://localhost:9000
+Jenkins → http://localhost:8091 · SonarQube → http://localhost:9001
+
+(8091/9001, pas 8090/9000 : décalés pour laisser tourner en parallèle l'instance CI de travel-plan, dont ce repo est issu — voir `docs/nouveautes-vs-travel-plan.md`.)
 
 ## Réglages à faire une fois (pas automatisables)
 

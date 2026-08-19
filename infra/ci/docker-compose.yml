@@ -1,10 +1,10 @@
-name: travel-plan-ci
+name: lets-travel-ci
 
 services:
   jenkins:
     build:
       context: ./jenkins
-    container_name: travel-plan-jenkins
+    container_name: lets-travel-jenkins
     restart: unless-stopped
     environment:
       JENKINS_ADMIN_ID: ${JENKINS_ADMIN_ID:-admin}
@@ -13,7 +13,8 @@ services:
       SONAR_TOKEN: ${SONAR_TOKEN}
       HOST_REPO_PATH: ${HOST_REPO_PATH}
     ports:
-      - "8090:8080"
+      # 8091 (pas 8090) : 8090 est le port de l'instance travel-plan, gardee utilisable en parallele.
+      - "8091:8080"
     volumes:
       - jenkins_home:/var/jenkins_home
       - ./jenkins/casc.yaml:/var/jenkins_home/casc.yaml:ro
@@ -25,7 +26,7 @@ services:
 
   sonarqube:
     image: sonarqube:community
-    container_name: travel-plan-sonarqube
+    container_name: lets-travel-sonarqube
     restart: unless-stopped
     depends_on:
       sonarqube-db:
@@ -35,7 +36,8 @@ services:
       SONAR_JDBC_USERNAME: sonar
       SONAR_JDBC_PASSWORD: ${SONARQUBE_DB_PASSWORD}
     ports:
-      - "9000:9000"
+      # 9001 (pas 9000) : 9000 est le port de l'instance travel-plan, gardee utilisable en parallele.
+      - "9001:9000"
     volumes:
       - sonarqube_data:/opt/sonarqube/data
       - sonarqube_extensions:/opt/sonarqube/extensions
@@ -45,7 +47,7 @@ services:
 
   sonarqube-db:
     image: postgres:16-alpine
-    container_name: travel-plan-sonarqube-db
+    container_name: lets-travel-sonarqube-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: sonar
