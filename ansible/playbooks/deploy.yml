@@ -72,10 +72,12 @@
           - -days
           - "365"
           - -subj
-          - /CN=travel-plan-internal
+          - /CN=lets-travel-internal
           # SAN requis (pas juste CN) : nginx et api-gateway verifient le hostname du certificat.
+          # Les noms DNS suivent le nom de projet Compose (docker-compose.yml: name: lets-travel-app) —
+          # a regenerer (supprimer le .crt/.key existants) si ce nom de projet change un jour.
           - -addext
-          - "subjectAltName=DNS:api-gateway,DNS:travel-plan-app-auth-service-1,DNS:travel-plan-app-auth-service-2,DNS:travel-plan-app-user-service-1,DNS:travel-plan-app-user-service-2,DNS:travel-plan-app-travel-service-1,DNS:travel-plan-app-travel-service-2,DNS:travel-plan-app-payment-service-1,DNS:travel-plan-app-payment-service-2"
+          - "subjectAltName=DNS:api-gateway,DNS:lets-travel-app-auth-service-1,DNS:lets-travel-app-auth-service-2,DNS:lets-travel-app-user-service-1,DNS:lets-travel-app-user-service-2,DNS:lets-travel-app-travel-service-1,DNS:lets-travel-app-travel-service-2,DNS:lets-travel-app-payment-service-1,DNS:lets-travel-app-payment-service-2"
         creates: "{{ project_dir }}/infra/internal-tls/certs/internal.crt"
 
     - name: Pre-pull third-party images explicitly for linux/amd64

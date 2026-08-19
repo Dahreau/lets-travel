@@ -27,11 +27,11 @@ docker compose exec vault vault kv put secret/payment-service/paypal client_id=x
 
 **Ça ne se propage pas automatiquement à l'équipe.** Vault tourne en mode serveur réel (stockage persistant sur volume Docker), mais une instance par machine — ce que tu écris ici n'existe que dans ton Vault local, pas celui d'un collègue qui lance la stack de son côté (contrairement au secret JWT, auto-généré pour tout le monde par `bootstrap.sh`). Deux options, au choix de l'équipe : chacun crée son propre compte sandbox Stripe/PayPal et répète ces deux commandes chez lui (cohérent avec le reste du projet, comportement identique puisqu'on est en sandbox), ou l'équipe partage une seule paire de clés de test par un canal privé (jamais commitée dans le repo) — acceptable seulement parce que ce sont des clés sandbox, sans argent réel en jeu.
 
-Puis lance le service (Postgres est sur le port `5434`, pas le `5432` par défaut) :
+Puis lance le service (Postgres est sur le port `5435`, pas le `5432` par défaut) :
 
 ```bash
 cd backend/payment-service
-DB_HOST=localhost DB_PORT=5434 DB_PASSWORD=<ton PAYMENT_DB_PASSWORD> \
+DB_HOST=localhost DB_PORT=5435 DB_PASSWORD=<ton PAYMENT_DB_PASSWORD> \
 VAULT_ADDR=http://localhost:8200 VAULT_ROLE_ID=<role_id> VAULT_SECRET_ID=<secret_id> \
 ./mvnw spring-boot:run
 ```

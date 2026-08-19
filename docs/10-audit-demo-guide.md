@@ -7,7 +7,7 @@ Une entrée par question **littérale** de `travel-plan_audit.md` (même formula
 Prérequis pour toute la section Functional : la stack tourne (`docker compose ps` → tout `Healthy`) et un token admin est en variable d'env. La commande ci-dessous va lire le vrai mot de passe directement dans `.env`, aucune édition manuelle nécessaire :
 
 ```bash
-TOKEN=$(curl -k -s -X POST https://localhost/api/auth/login \
+TOKEN=$(curl -k -s -X POST https://localhost:8443/api/auth/login \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"admin\",\"password\":\"$(grep -m1 '^DEFAULT_ADMIN_PASSWORD=' .env | cut -d= -f2-)\"}" \
   | jq -r .token)
@@ -35,7 +35,7 @@ Pour ne pas avoir à taper les exemples CRUD ci-dessous en direct pendant l'oral
 Le JSON brut de l'API Zipkin est illisible tel quel à l'oral. Fais une requête précise juste avant d'interroger Zipkin (`limit=1` = la trace la plus récente — si tu n'as rien demandé juste avant, tu retombes sur une trace au hasard, ou rien du tout) :
 
 ```bash
-curl -k -s https://localhost/api/travels -H "Authorization: Bearer $TOKEN" > /dev/null
+curl -k -s https://localhost:8443/api/travels -H "Authorization: Bearer $TOKEN" > /dev/null
 sleep 2   # laisse le temps au span de remonter à Zipkin avant de l'interroger
 docker compose exec zipkin wget -qO- "http://localhost:9411/api/v2/traces?serviceName=travel-service&limit=1" \
   | jq -r '.[0] | sort_by(.timestamp)[] | "\(.traceId[0:8])  \(.localEndpoint.serviceName)  \(.name)"'
@@ -74,8 +74,8 @@ Chaque décision non-évidente du fichier est déjà commentée en français dan
 
 | Question | Réponse courte | Exemple |
 |---|---|---|
-| Are there unit tests for each functionality and are the tests running for each new PR? | Oui, tests présents pour les 5 services (controller/service/repository/security/provider) ; `Jenkinsfile` lance `mvn clean verify` + `ng test` par service dans le stage `Build & Test` | `Jenkinsfile`, stage `Build & Test`, ou http://localhost:8090 (Jenkins, port `8090` — voir `infra/ci/docker-compose.yml`) |
-| Is the SonarQube report free from any error or warning that can break the CI/CD Process? | Le pipeline bloque si le Quality Gate est rouge (`-Dsonar.qualitygate.wait=true`) ; version du plugin épinglée pour éviter le warning "unspecified plugin version" | http://localhost:9000 (SonarQube), montrer un Quality Gate vert récent |
+| Are there unit tests for each functionality and are the tests running for each new PR? | Oui, tests présents pour les 5 services (controller/service/repository/security/provider) ; `Jenkinsfile` lance `mvn clean verify` + `ng test` par service dans le stage `Build & Test` | `Jenkinsfile`, stage `Build & Test`, ou http://localhost:8091 (Jenkins, port `8091` — voir `infra/ci/docker-compose.yml`) |
+| Is the SonarQube report free from any error or warning that can break the CI/CD Process? | Le pipeline bloque si le Quality Gate est rouge (`-Dsonar.qualitygate.wait=true`) ; version du plugin épinglée pour éviter le warning "unspecified plugin version" | http://localhost:9001 (SonarQube), montrer un Quality Gate vert récent |
 
 ### "Detail the security measures implemented."
 
@@ -121,7 +121,7 @@ Deux comportements différents à pointer dans ces fichiers : `destinations`/`ac
 **Neo4j ne stocke pas les voyages** : c'est un graphe séparé de "quelles villes sont reliées entre elles par au moins un voyage" (`PlaceNode`/`ROUTE_TO`), utile pour suggérer des destinations, indépendant de la durée de vie d'un `Travel` précis — une ville reste dans le graphe même si le voyage qui l'a créée est supprimé (décision assumée, voir `audit-findings.md`) :
 
 ```bash
-docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7687 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
+docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7688 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
   "MATCH (a:Place)-[r:ROUTE_TO]->(b:Place) RETURN a.city, b.city, r.tripCount;"
 ```
 
@@ -158,8 +158,8 @@ docker compose ps
 ### "Test each microservice API."
 
 ```bash
-curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost/api/travels                              # sans token
-curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost/api/travels -H "Authorization: Bearer $TOKEN"  # avec token admin
+curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost:8443/api/travels                              # sans token
+curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost:8443/api/travels -H "Authorization: Bearer $TOKEN"  # avec token admin
 ```
 
 **Are all the microservices' APIs only accessible when logged in with an Admin profile?** → le premier `401`/`403`, le second `200`.
@@ -178,15 +178,15 @@ cat > /tmp/user.json <<'EOF'
 }
 EOF
 
-USER_ID=$(curl -k -s -X POST https://localhost/api/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/user.json | jq -r .id)
+USER_ID=$(curl -k -s -X POST https://localhost:8443/api/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/user.json | jq -r .id)
 
-curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"
-curl -k -s -w "\nHTTP: %{http_code}\n" -X PUT https://localhost/api/users/$USER_ID -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"firstName":"Jean","lastName":"Dupont-Martin","email":"jean.dupont@example.com","role":"TRAVELER"}'
-curl -k -s -w "\nHTTP: %{http_code}\n" -X DELETE https://localhost/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"
-curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"   # doit être 404
+curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost:8443/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"
+curl -k -s -w "\nHTTP: %{http_code}\n" -X PUT https://localhost:8443/api/users/$USER_ID -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"firstName":"Jean","lastName":"Dupont-Martin","email":"jean.dupont@example.com","role":"TRAVELER"}'
+curl -k -s -w "\nHTTP: %{http_code}\n" -X DELETE https://localhost:8443/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"
+curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost:8443/api/users/$USER_ID -H "Authorization: Bearer $TOKEN"   # doit être 404
 
 # Erreur de validation (champ manquant, doit lister le champ)
-curl -k -s -w "\nHTTP: %{http_code}\n" -X POST https://localhost/api/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"firstName":"Test","lastName":"NoEmail","role":"TRAVELER"}'
+curl -k -s -w "\nHTTP: %{http_code}\n" -X POST https://localhost:8443/api/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"firstName":"Test","lastName":"NoEmail","role":"TRAVELER"}'
 ```
 </details>
 
@@ -206,12 +206,12 @@ cat > /tmp/travel.json <<'EOF'
 }
 EOF
 
-TRAVEL_ID=$(curl -k -s -X POST https://localhost/api/travels -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/travel.json | jq -r .id)
+TRAVEL_ID=$(curl -k -s -X POST https://localhost:8443/api/travels -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/travel.json | jq -r .id)
 
-curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost/api/travels/$TRAVEL_ID -H "Authorization: Bearer $TOKEN"
+curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost:8443/api/travels/$TRAVEL_ID -H "Authorization: Bearer $TOKEN"
 
 # Preuve que la route est aussi écrite dans Neo4j (pas juste Postgres), et que ce hop est bien en bolt+ssc (TLS)
-docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7687 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
+docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7688 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
   "MATCH (a:Place)-[r:ROUTE_TO]->(b:Place) RETURN a.city, b.city, r.tripCount;"
 ```
 </details>
@@ -227,18 +227,18 @@ cat > /tmp/pm.json <<'EOF'
  "providerToken": "pm_card_visa", "brand": "Visa", "last4": "4242", "isDefault": true}
 EOF
 
-PM_ID=$(curl -k -s -X POST https://localhost/api/payment-methods -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/pm.json | jq -r .id)
+PM_ID=$(curl -k -s -X POST https://localhost:8443/api/payment-methods -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/pm.json | jq -r .id)
 
 cat > /tmp/payment.json <<EOF
 {"travelId": "$TRAVEL_ID", "ownerId": "11111111-1111-1111-1111-111111111111",
  "paymentMethodId": "$PM_ID", "amount": 150.00, "currency": "eur"}
 EOF
 
-PAYMENT_ID=$(curl -k -s -X POST https://localhost/api/payments -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/payment.json | jq -r .id)
+PAYMENT_ID=$(curl -k -s -X POST https://localhost:8443/api/payments -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @/tmp/payment.json | jq -r .id)
 
 # Supprimer le moyen de paiement : le paiement doit survivre (cascade SET NULL, pas de perte de trace financière)
-curl -k -s -w "\nHTTP: %{http_code}\n" -X DELETE https://localhost/api/payment-methods/$PM_ID -H "Authorization: Bearer $TOKEN"
-curl -k -s https://localhost/api/payments/$PAYMENT_ID -H "Authorization: Bearer $TOKEN"   # paymentMethodId doit être null, le reste intact
+curl -k -s -w "\nHTTP: %{http_code}\n" -X DELETE https://localhost:8443/api/payment-methods/$PM_ID -H "Authorization: Bearer $TOKEN"
+curl -k -s https://localhost:8443/api/payments/$PAYMENT_ID -H "Authorization: Bearer $TOKEN"   # paymentMethodId doit être null, le reste intact
 ```
 
 Le refund (`POST /payments/{id}/refund`) existe et notifie réellement Stripe/PayPal (voir `PaymentService.refund()`), mais nécessite une vraie clé `sk_test_...` dans `.env` pour être démontré en live — non requis par l'audit, à ne mentionner que si demandé. PayPal fonctionne différemment de Stripe côté token de test : pas d'équivalent statique à `pm_card_visa`, il faut créer un ordre puis le faire approuver par un compte sandbox buyer via OAuth PayPal, plus long à dérouler en direct. Pour l'oral : mentionner que l'intégration existe et est testée (`PayPalPaymentProvider.java`, `PayPalPaymentProviderTest.java`, même interface `PaymentProvider` que Stripe) sans forcément l'exécuter en live.
@@ -258,10 +258,10 @@ Le refund (`POST /payments/{id}/refund`) existe et notifie réellement Stripe/Pa
 
 ```bash
 # Mauvais mot de passe -> 401
-curl -k -s -o /dev/null -w "%{http_code}\n" -X POST https://localhost/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"wrong"}'
+curl -k -s -o /dev/null -w "%{http_code}\n" -X POST https://localhost:8443/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"wrong"}'
 
 # Token absent sur une route protégée -> 401/403
-curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost/api/travels
+curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost:8443/api/travels
 ```
 
 **Was the authentication service robust and did the role-based access control function correctly?** → les deux commandes ci-dessus + le test "Admin profile only" plus haut couvrent RBAC et robustesse (échec explicite, pas de fuite d'info).
@@ -273,7 +273,7 @@ curl -k -s -o /dev/null -w "%{http_code}\n" https://localhost/api/travels
 
 ```bash
 for i in $(seq 1 30); do
-  curl -k -s -o /dev/null -w "%{http_code} " https://localhost/api/travels -H "Authorization: Bearer $TOKEN"
+  curl -k -s -o /dev/null -w "%{http_code} " https://localhost:8443/api/travels -H "Authorization: Bearer $TOKEN"
 done
 echo
 sleep 3
@@ -290,12 +290,12 @@ Doit montrer 2 IPs différentes avec un compte comparable (ex : 175/175) — pre
 <summary>Failover (couper un replica en pleine charge)</summary>
 
 ```bash
-docker stop travel-plan-app-travel-service-2
+docker stop lets-travel-app-travel-service-2
 for i in $(seq 1 10); do
-  curl -k -s -o /dev/null -w "%{http_code} " https://localhost/api/travels -H "Authorization: Bearer $TOKEN"
+  curl -k -s -o /dev/null -w "%{http_code} " https://localhost:8443/api/travels -H "Authorization: Bearer $TOKEN"
 done
 echo
-docker start travel-plan-app-travel-service-2
+docker start lets-travel-app-travel-service-2
 ```
 
 **Did the microservices demonstrate effective load balancing and failover under heavy traffic?** → toutes les requêtes restent `200` malgré la coupure ; la répartition ci-dessus prouve que ce n'est pas un hasard de DNS.
@@ -303,7 +303,7 @@ docker start travel-plan-app-travel-service-2
 
 ### "Validate CI/CD pipeline and code quality."
 
-**Did the CI/CD pipeline function correctly for build, test, and deployment processes, and were code quality standards maintained?** → http://localhost:8090 (Jenkins), montrer un build récent vert sur `main`/une PR (stages `Checkout → Build & Test → SonarQube → Deploy`), puis http://localhost:9000 (SonarQube) avec le Quality Gate passé.
+**Did the CI/CD pipeline function correctly for build, test, and deployment processes, and were code quality standards maintained?** → http://localhost:8091 (Jenkins), montrer un build récent vert sur `main`/une PR (stages `Checkout → Build & Test → SonarQube → Deploy`), puis http://localhost:9001 (SonarQube) avec le Quality Gate passé.
 
 ### "Assess code review and best practices."
 
@@ -317,7 +317,7 @@ git log --oneline -20
 
 ### "Check SonarQube logs in recent pull requests."
 
-**Is the log free of warnings about unsupported or deprecated libraries? / Are the security vulnerabilities found by SonarQube resolved in the pull requests?** → http://localhost:9000, onglet **Projects** → choisir un service → **Activity**, vérifier l'absence de warning "deprecated/unsupported library" et que les vulnérabilités signalées sont à 0 sur l'analyse la plus récente.
+**Is the log free of warnings about unsupported or deprecated libraries? / Are the security vulnerabilities found by SonarQube resolved in the pull requests?** → http://localhost:9001, onglet **Projects** → choisir un service → **Activity**, vérifier l'absence de warning "deprecated/unsupported library" et que les vulnérabilités signalées sont à 0 sur l'analyse la plus récente.
 
 À part : le pipeline Ansible/Jenkins lui-même affiche un warning de dépréciation (`ansible.builtin.apt_repository` deprecated, sans lien avec SonarQube) — si demandé, ce n'est pas ce que cette question du jury vise, mais autant le savoir expliquer si on te le fait remarquer.
 

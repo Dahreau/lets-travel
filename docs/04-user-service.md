@@ -18,11 +18,11 @@ docker compose exec vault vault write -f -field=secret_id auth/approle/role/user
 docker compose port vault 8200 || echo "Vault n'a pas de port publié : ajoute temporairement '127.0.0.1:8200:8200' sous vault.ports dans docker-compose.yml puis 'docker compose up -d vault' avant de continuer"
 ```
 
-Puis lance le service (Postgres est sur le port `5434`, pas le `5432` par défaut) :
+Puis lance le service (Postgres est sur le port `5435`, pas le `5432` par défaut) :
 
 ```bash
 cd backend/user-service
-DB_HOST=localhost DB_PORT=5434 DB_PASSWORD=<ton USER_DB_PASSWORD> \
+DB_HOST=localhost DB_PORT=5435 DB_PASSWORD=<ton USER_DB_PASSWORD> \
 VAULT_ADDR=http://localhost:8200 VAULT_ROLE_ID=<role_id> VAULT_SECRET_ID=<secret_id> \
 ./mvnw spring-boot:run
 ```

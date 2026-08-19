@@ -10,10 +10,10 @@
 
 Premier lancement : le script crée `.env` à la racine du repo depuis `.env.example` et s'arrête — édite les mots de passe Postgres/Neo4j/Vault (jamais commit ce fichier, seul `.env.example` est versionné), puis relance le script.
 
-Postgres `127.0.0.1:5434` (5432 en interne — 5434 côté host pour éviter un conflit de port local, voir commentaire dans `docker-compose.yml`) · Neo4j Browser http://localhost:7474
+Postgres `127.0.0.1:5435` (5432 en interne — décalé côté host pour éviter un conflit avec un autre conteneur local et avec l'instance travel-plan, voir commentaire dans `docker-compose.yml`) · Neo4j Browser http://localhost:7475
 
 - **Vault n'est plus accessible depuis l'host** (durcissement réseau, cf. `08-ansible-deploy-tls.md`) : plus de port publié, plus de token racine à connaître pour l'usage courant. Toutes les commandes passent par `docker compose exec vault vault ...` (voir plus bas) ; le vrai `VAULT_ROOT_TOKEN` est régénéré à froid par `ansible/playbooks/vault-unseal.yml` et écrit dans `.env`, jamais fixe.
-- Les ports publiés sont paramétrables (`POSTGRES_HOST_PORT`, `NEO4J_HTTP_HOST_PORT`, etc. — voir `.env.example`), utile seulement en cas de conflit si tu fais tourner une deuxième copie de la stack. Rien à changer normalement.
+- Les ports Postgres/Neo4j publiés sont en dur dans `docker-compose.yml` (5435/7475/7688 — pas paramétrables via `.env`, contrairement à ceux de Nginx). Seuls ceux de Nginx sont paramétrables (`NGINX_HTTP_HOST_PORT`/`NGINX_HTTPS_HOST_PORT`, voir `.env.example`). Rien à changer normalement — déjà décalés par rapport à travel-plan pour tourner en parallèle sans collision.
 
 ## Ce qui est construit
 
@@ -33,15 +33,15 @@ Depuis ta machine (host), utilise `localhost`. Depuis un autre conteneur du mêm
 
 | Brique | Depuis ta machine | Depuis un conteneur |
 |---|---|---|
-| Postgres | `127.0.0.1:5434` | `postgres:5432` |
-| Neo4j | Browser http://localhost:7474 · Bolt `localhost:7687` (chiffré, `bolt+ssc://`) | `bolt+ssc://neo4j:7687` |
+| Postgres | `127.0.0.1:5435` | `postgres:5432` |
+| Neo4j | Browser http://localhost:7475 · Bolt `localhost:7688` (chiffré, `bolt+ssc://`) | `bolt+ssc://neo4j:7687` |
 | Vault | non exposé sur l'host — `docker compose exec vault vault ...` uniquement | `vault:8200` (HTTPS, cert auto-signé) |
 | Zipkin | non exposé sur l'host non plus (même durcissement) — `docker compose exec zipkin wget -qO- http://localhost:9411/...` uniquement | `zipkin:9411` |
 
 **Postgres** :
 
 ```bash
-psql -h 127.0.0.1 -p 5434 -U auth_user -d auth_db
+psql -h 127.0.0.1 -p 5435 -U auth_user -d auth_db
 ```
 
 Depuis `application.properties` (interne au réseau Docker) : `spring.datasource.url=jdbc:postgresql://postgres:5432/auth_db?sslmode=require`.
