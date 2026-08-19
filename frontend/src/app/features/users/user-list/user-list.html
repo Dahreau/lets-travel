@@ -1,0 +1,52 @@
+<app-page-header title="users" subtitle="Comptes admins et voyageurs">
+  <a routerLink="/users/new" class="btn btn-primary">+ new user</a>
+</app-page-header>
+
+@if (loading()) {
+  <app-spinner />
+} @else if (users().length === 0) {
+  <div class="empty-state">Aucun utilisateur</div>
+} @else {
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Email</th>
+          <th>Téléphone</th>
+          <th>Rôle</th>
+          <th>Ville</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (user of users(); track user.id) {
+          <tr>
+            <td>{{ user.firstName }} {{ user.lastName }}</td>
+            <td>{{ user.email }}</td>
+            <td>{{ user.phone || '—' }}</td>
+            <td><app-badge [value]="user.role" /></td>
+            <td>{{ user.address?.city || '—' }}</td>
+            <td class="actions">
+              <a [routerLink]="['/users', user.id, 'edit']" class="btn btn-ghost btn-sm">edit</a>
+              <button type="button" class="btn btn-danger btn-sm" (click)="deleteTarget.set(user)">
+                delete
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}
+
+@if (deleteTarget(); as target) {
+  <app-confirm-dialog
+    title="Supprimer l'utilisateur"
+    [message]="
+      'Supprimer ' + target.firstName + ' ' + target.lastName + ' ? Son adresse sera supprimée avec lui. Cette action est irréversible.'
+    "
+    (confirmed)="confirmDelete()"
+    (cancelled)="deleteTarget.set(null)"
+  />
+}

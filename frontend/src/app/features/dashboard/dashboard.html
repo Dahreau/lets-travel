@@ -1,0 +1,30 @@
+<app-page-header title="dashboard" subtitle="system status" />
+
+@if (loading()) {
+  <app-spinner />
+} @else if (stats(); as s) {
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">users</div>
+      <div class="stat-value">{{ s.users }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">travels</div>
+      <div class="stat-value">{{ s.travels }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">payments</div>
+      <div class="stat-value">{{ s.payments }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">payment-methods</div>
+      <div class="stat-value">{{ s.paymentMethods }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="page-subtitle" style="margin-bottom: 0">
+      // tous les microservices répondent — auth, users, travels, payments
+    </p>
+  </div>
+}

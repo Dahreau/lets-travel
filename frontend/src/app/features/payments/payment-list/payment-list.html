@@ -1,0 +1,49 @@
+<app-page-header title="payments" subtitle="Transactions Stripe / PayPal">
+  <a routerLink="/payments/new" class="btn btn-primary">+ new payment</a>
+</app-page-header>
+
+@if (loading()) {
+  <app-spinner />
+} @else if (payments().length === 0) {
+  <div class="empty-state">Aucun paiement</div>
+} @else {
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Montant</th>
+          <th>Provider</th>
+          <th>Statut</th>
+          <th>Travel</th>
+          <th>Owner</th>
+          <th>Créé le</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (payment of payments(); track payment.id) {
+          <tr>
+            <td>{{ payment.amount }} {{ payment.currency }}</td>
+            <td><app-badge [value]="payment.provider" /></td>
+            <td><app-badge [value]="payment.status" /></td>
+            <td>{{ payment.travelId | slice: 0 : 8 }}…</td>
+            <td>{{ payment.ownerId | slice: 0 : 8 }}…</td>
+            <td>{{ payment.createdAt | slice: 0 : 10 }}</td>
+            <td class="actions">
+              @if (payment.status === 'SUCCEEDED') {
+                <button
+                  type="button"
+                  class="btn btn-danger btn-sm"
+                  [disabled]="refundingId() === payment.id"
+                  (click)="refund(payment)"
+                >
+                  {{ refundingId() === payment.id ? 'refunding...' : 'refund' }}
+                </button>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

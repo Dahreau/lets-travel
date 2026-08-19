@@ -1,0 +1,54 @@
+<app-page-header title="travels" subtitle="Destinations, dates, activités, transports">
+  <a routerLink="/travels/new" class="btn btn-primary">+ new travel</a>
+</app-page-header>
+
+@if (loading()) {
+  <app-spinner />
+} @else if (travels().length === 0) {
+  <div class="empty-state">Aucun voyage</div>
+} @else {
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Titre</th>
+          <th>Owner</th>
+          <th>Dates</th>
+          <th>Durée</th>
+          <th>Destinations</th>
+          <th>Statut</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (travel of travels(); track travel.id) {
+          <tr>
+            <td>{{ travel.title }}</td>
+            <td>{{ travel.ownerId | slice: 0 : 8 }}…</td>
+            <td>{{ travel.startDate }} → {{ travel.endDate }}</td>
+            <td>{{ travel.durationDays }}j</td>
+            <td>{{ travel.destinations.length }}</td>
+            <td><app-badge [value]="travel.status" /></td>
+            <td class="actions">
+              <a [routerLink]="['/travels', travel.id, 'edit']" class="btn btn-ghost btn-sm">edit</a>
+              <button type="button" class="btn btn-danger btn-sm" (click)="deleteTarget.set(travel)">
+                delete
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}
+
+@if (deleteTarget(); as target) {
+  <app-confirm-dialog
+    title="Supprimer le voyage"
+    [message]="
+      'Supprimer « ' + target.title + ' » ? Toutes ses destinations, activités, hébergements et transports seront supprimés. Cette action est irréversible.'
+    "
+    (confirmed)="confirmDelete()"
+    (cancelled)="deleteTarget.set(null)"
+  />
+}

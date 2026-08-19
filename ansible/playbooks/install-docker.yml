@@ -1,0 +1,75 @@
+---
+- name: Install Docker Engine and the Compose plugin
+  hosts: travel_plan
+  become: true
+
+  tasks:
+    - name: Check whether Docker is already installed
+      ansible.builtin.command: docker --version
+      register: docker_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install prerequisite packages
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+      when: docker_check.rc != 0
+
+    - name: Create the apt keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+      when: docker_check.rc != 0
+
+    - name: Add Docker's official GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+      when: docker_check.rc != 0
+
+    - name: Add the Docker apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ ansible_architecture }} signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename | default('jammy') }} stable
+        state: present
+        filename: docker
+      when: docker_check.rc != 0
+
+    - name: Install Docker Engine, CLI and the Compose plugin
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+      when: docker_check.rc != 0
+
+    - name: Allow the current user to run Docker without sudo
+      ansible.builtin.user:
+        name: "{{ ansible_user_id }}"
+        groups: docker
+        append: true
+      when: docker_check.rc != 0
+
+    - name: Check whether the buildx plugin is already present
+      ansible.builtin.command: docker buildx version
+      register: buildx_check
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure the buildx plugin is present (needed for "additional_contexts" in compose builds)
+      ansible.builtin.apt:
+        name: docker-buildx-plugin
+        state: present
+        update_cache: true
+      when: buildx_check.rc != 0

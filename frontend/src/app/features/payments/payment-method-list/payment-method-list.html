@@ -1,0 +1,52 @@
+<app-page-header title="payment-methods" subtitle="Cartes et comptes PayPal enregistrés">
+  <a routerLink="/payment-methods/new" class="btn btn-primary">+ new method</a>
+</app-page-header>
+
+@if (loading()) {
+  <app-spinner />
+} @else if (methods().length === 0) {
+  <div class="empty-state">Aucun moyen de paiement</div>
+} @else {
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Owner</th>
+          <th>Provider</th>
+          <th>Type</th>
+          <th>Carte</th>
+          <th>Défaut</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (method of methods(); track method.id) {
+          <tr>
+            <td>{{ method.ownerId | slice: 0 : 8 }}…</td>
+            <td><app-badge [value]="method.provider" /></td>
+            <td>{{ method.type }}</td>
+            <td>{{ method.brand || '—' }} {{ method.last4 ? '••' + method.last4 : '' }}</td>
+            <td>{{ method.isDefault ? 'oui' : '—' }}</td>
+            <td class="actions">
+              <a [routerLink]="['/payment-methods', method.id, 'edit']" class="btn btn-ghost btn-sm">
+                edit
+              </a>
+              <button type="button" class="btn btn-danger btn-sm" (click)="deleteTarget.set(method)">
+                delete
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}
+
+@if (deleteTarget(); as target) {
+  <app-confirm-dialog
+    title="Supprimer le moyen de paiement"
+    message="Ce moyen de paiement sera supprimé. Les paiements existants qui l'utilisent seront conservés (la référence sera simplement effacée)."
+    (confirmed)="confirmDelete()"
+    (cancelled)="deleteTarget.set(null)"
+  />
+}

@@ -1,0 +1,47 @@
+<div class="login-screen">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="ascii">[ 01 ]</div>
+      <h1 class="login-title">travel-plan<span class="blink">_</span></h1>
+      <p class="login-subtitle">// admin access only</p>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <div class="field">
+        <label class="label" for="username">login</label>
+        <input
+          id="username"
+          class="input"
+          type="text"
+          formControlName="username"
+          autocomplete="username"
+          [class.invalid]="form.controls.username.invalid && form.controls.username.touched"
+        />
+      </div>
+
+      <div class="field">
+        <label class="label" for="password">password</label>
+        <input
+          id="password"
+          class="input"
+          type="password"
+          formControlName="password"
+          autocomplete="current-password"
+          [class.invalid]="form.controls.password.invalid && form.controls.password.touched"
+        />
+      </div>
+
+      @if (errorMessage()) {
+        <p class="error-text login-error">{{ errorMessage() }}</p>
+      }
+
+      <button type="submit" class="btn btn-primary login-submit" [disabled]="loading()">
+        @if (loading()) {
+          connecting...
+        } @else {
+          $ authenticate
+        }
+      </button>
+    </form>
+  </div>
+</div>

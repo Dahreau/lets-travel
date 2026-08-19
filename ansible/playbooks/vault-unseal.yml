@@ -1,0 +1,293 @@
+---
+# Vault tourne maintenant en mode serveur réel (storage "file", TLS), plus en
+# mode dev : il démarre scellé (sealed) à chaque conteneur neuf et doit être
+# initialisé une seule fois dans sa vie. Toutes les commandes passent par
+# `docker compose exec` (le CLI vault à l'intérieur du conteneur, sur
+# 127.0.0.1) plutôt que par des appels HTTP externes : le port 8200 n'est plus
+# publié sur l'host (durcissement réseau), donc rien en dehors du réseau
+# Docker `app` ne peut de toute façon joindre Vault directement.
+- name: Initialize and unseal Vault
+  hosts: travel_plan
+  vars:
+    project_dir: "{{ playbook_dir }}/../.."
+    unseal_key_file: "{{ project_dir }}/infra/vault/.unseal-key.txt"
+
+  tasks:
+    - name: Ensure .env exists (copied from .env.example on first run only)
+      ansible.builtin.copy:
+        src: "{{ project_dir }}/.env.example"
+        dest: "{{ project_dir }}/.env"
+        force: false
+        mode: "0600"
+
+    - name: Ensure the Vault certs directory exists
+      ansible.builtin.file:
+        path: "{{ project_dir }}/infra/vault/certs"
+        state: directory
+        mode: "0755"
+
+    - name: Generate a self-signed TLS certificate for Vault's listener (skipped if it already exists)
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -x509
+          - -newkey
+          - rsa:2048
+          - -nodes
+          - -keyout
+          - "{{ project_dir }}/infra/vault/certs/vault.key"
+          - -out
+          - "{{ project_dir }}/infra/vault/certs/vault.crt"
+          - -days
+          - "365"
+          - -subj
+          - /CN=vault
+          - -addext
+          - subjectAltName=DNS:vault
+        creates: "{{ project_dir }}/infra/vault/certs/vault.crt"
+
+    - name: Fix ownership of the persistent Vault data volume (a brand-new Docker volume is created owned by root, but the Vault image runs as a non-root user)
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-directory
+          - "{{ project_dir }}"
+          - run
+          - --rm
+          - --user
+          - root
+          - --entrypoint
+          - sh
+          - vault
+          - -c
+          - mkdir -p /vault/data && chown -R vault:vault /vault/data
+      changed_when: true
+
+    - name: Start only the Vault container (it must be running before it can be initialized/unsealed)
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-directory
+          - "{{ project_dir }}"
+          - up
+          - -d
+          - vault
+      changed_when: true
+
+    - name: Wait for the Vault CLI to respond inside the container
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-directory
+          - "{{ project_dir }}"
+          - exec
+          - -T
+          - vault
+          - vault
+          - status
+          - -format=json
+      register: vault_status_raw
+      until: vault_status_raw.rc in [0, 2]
+      retries: 20
+      delay: 3
+      changed_when: false
+      failed_when: false
+
+    - name: Parse Vault status
+      ansible.builtin.set_fact:
+        vault_status: "{{ vault_status_raw.stdout | from_json }}"
+
+    - name: Check whether a usable unseal key is stored on disk
+      ansible.builtin.stat:
+        path: "{{ unseal_key_file }}"
+      register: unseal_key_stat
+
+    - name: Self-heal - Vault initialized but unseal key missing (data is disposable, cf. bootstrap.sh)
+      when:
+        - vault_status.initialized | default(false)
+        - not unseal_key_stat.stat.exists
+      block:
+        - name: Stop and remove the Vault container
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - rm
+              - -f
+              - -s
+              - vault
+          changed_when: true
+
+        - name: Resolve the real vault_data volume name (never hardcoded)
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - config
+              - --format
+              - json
+          register: compose_config_raw
+          changed_when: false
+
+        - name: Remove Vault's data volume so it reinitializes clean
+          ansible.builtin.command:
+            argv:
+              - docker
+              - volume
+              - rm
+              - "{{ (compose_config_raw.stdout | from_json).volumes.vault_data.name }}"
+          changed_when: true
+
+        - name: Fix ownership of the fresh Vault data volume
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - run
+              - --rm
+              - --user
+              - root
+              - --entrypoint
+              - sh
+              - vault
+              - -c
+              - mkdir -p /vault/data && chown -R vault:vault /vault/data
+          changed_when: true
+
+        - name: Restart Vault on the fresh volume
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - up
+              - -d
+              - vault
+          changed_when: true
+
+        - name: Wait for the Vault CLI to respond after the reset
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - exec
+              - -T
+              - vault
+              - vault
+              - status
+              - -format=json
+          register: vault_status_raw
+          until: vault_status_raw.rc in [0, 2]
+          retries: 20
+          delay: 3
+          changed_when: false
+          failed_when: false
+
+        - name: Re-parse Vault status after the reset
+          ansible.builtin.set_fact:
+            vault_status: "{{ vault_status_raw.stdout | from_json }}"
+
+    - name: Initialize Vault (first run only — single key share, justified for a single-operator/demo deployment, not a multi-party production cluster)
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-directory
+          - "{{ project_dir }}"
+          - exec
+          - -T
+          - vault
+          - vault
+          - operator
+          - init
+          - -key-shares=1
+          - -key-threshold=1
+          - -format=json
+      register: vault_init_raw
+      when: not (vault_status.initialized | default(false))
+
+    - name: Persist the root token into .env (idempotent, updates the existing line)
+      ansible.builtin.lineinfile:
+        path: "{{ project_dir }}/.env"
+        regexp: "^VAULT_ROOT_TOKEN="
+        line: "VAULT_ROOT_TOKEN={{ (vault_init_raw.stdout | from_json).root_token }}"
+      when: vault_init_raw is not skipped
+      no_log: true
+
+    - name: Persist the unseal key in a dedicated, restricted file (never in .env, never committed)
+      ansible.builtin.copy:
+        content: "{{ (vault_init_raw.stdout | from_json).unseal_keys_b64[0] }}"
+        dest: "{{ unseal_key_file }}"
+        mode: "0600"
+      when: vault_init_raw is not skipped
+      no_log: true
+
+    - name: Re-check seal status after a possible fresh init
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-directory
+          - "{{ project_dir }}"
+          - exec
+          - -T
+          - vault
+          - vault
+          - status
+          - -format=json
+      register: vault_status_after_raw
+      changed_when: false
+      failed_when: false
+
+    - name: Parse Vault status after init
+      ansible.builtin.set_fact:
+        vault_status_after: "{{ vault_status_after_raw.stdout | from_json }}"
+
+    - name: Read the stored unseal key
+      ansible.builtin.slurp:
+        src: "{{ unseal_key_file }}"
+      register: unseal_key_raw
+      when: vault_status_after.sealed | default(true)
+
+    - name: Unseal Vault using the stored key (safe to skip if already unsealed)
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-directory
+          - "{{ project_dir }}"
+          - exec
+          - -T
+          - vault
+          - vault
+          - operator
+          - unseal
+          - "{{ unseal_key_raw.content | b64decode | trim }}"
+      when: vault_status_after.sealed | default(true)
+      no_log: true
+
+# Pourquoi une seule part de clé (-key-shares=1 -key-threshold=1)
+#
+# Le partage de Shamir (plusieurs parts de clé, un seuil pour reconstituer la
+# clé complète) sert à répartir la confiance entre plusieurs opérateurs
+# humains dans une vraie organisation — aucun d'eux seul ne peut déverrouiller
+# Vault. Ici, un seul opérateur (le déploiement Ansible/Jenkins lui-même)
+# gère tout le cycle de vie : un partage à 5 clés dont 3 nécessaires n'ajoute
+# aucune sécurité réelle, juste de la complexité à automatiser (il faudrait
+# stocker les 5 parts quelque part de toute façon). Le compromis assumé et
+# documenté ici : une seule clé, sur disque, permissions 0600, jamais commitée
+# — le même niveau de confiance que le root token actuel, juste persistant
+# plutôt qu'en mémoire.

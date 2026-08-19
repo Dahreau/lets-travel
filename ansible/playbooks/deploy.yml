@@ -1,0 +1,171 @@
+---
+- name: Deploy the full Travel-Plan stack (infra + microservices + reverse proxy)
+  hosts: travel_plan
+  vars:
+    project_dir: "{{ playbook_dir }}/../.."
+
+  tasks:
+    - name: Ensure .env exists (copied from .env.example on first run only)
+      ansible.builtin.copy:
+        src: "{{ project_dir }}/.env.example"
+        dest: "{{ project_dir }}/.env"
+        force: false
+        mode: "0600"
+
+    - name: Add any .env keys introduced later in .env.example that are still missing
+      ansible.builtin.shell: |
+        set -e
+        while IFS= read -r line; do
+          case "$line" in
+            \#*|"") continue ;;
+          esac
+          key="${line%%=*}"
+          grep -q "^${key}=" "{{ project_dir }}/.env" || echo "$line" >> "{{ project_dir }}/.env"
+        done < "{{ project_dir }}/.env.example"
+      changed_when: false
+      no_log: true
+
+    - name: Ensure the Nginx certs directory exists
+      ansible.builtin.file:
+        path: "{{ project_dir }}/infra/nginx/certs"
+        state: directory
+        mode: "0755"
+
+    - name: Generate a self-signed TLS certificate for Nginx (skipped if it already exists)
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -x509
+          - -newkey
+          - rsa:2048
+          - -nodes
+          - -keyout
+          - "{{ project_dir }}/infra/nginx/certs/travel-plan.key"
+          - -out
+          - "{{ project_dir }}/infra/nginx/certs/travel-plan.crt"
+          - -days
+          - "365"
+          - -subj
+          - /CN=travel-plan.local
+        creates: "{{ project_dir }}/infra/nginx/certs/travel-plan.crt"
+
+    - name: Ensure the internal service-to-service TLS certs directory exists
+      ansible.builtin.file:
+        path: "{{ project_dir }}/infra/internal-tls/certs"
+        state: directory
+        mode: "0755"
+
+    - name: Generate a self-signed TLS certificate for internal service-to-service traffic (skipped if it already exists)
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -x509
+          - -newkey
+          - rsa:2048
+          - -nodes
+          - -keyout
+          - "{{ project_dir }}/infra/internal-tls/certs/internal.key"
+          - -out
+          - "{{ project_dir }}/infra/internal-tls/certs/internal.crt"
+          - -days
+          - "365"
+          - -subj
+          - /CN=travel-plan-internal
+          # SAN requis (pas juste CN) : nginx et api-gateway verifient le hostname du certificat.
+          - -addext
+          - "subjectAltName=DNS:api-gateway,DNS:travel-plan-app-auth-service-1,DNS:travel-plan-app-auth-service-2,DNS:travel-plan-app-user-service-1,DNS:travel-plan-app-user-service-2,DNS:travel-plan-app-travel-service-1,DNS:travel-plan-app-travel-service-2,DNS:travel-plan-app-payment-service-1,DNS:travel-plan-app-payment-service-2"
+        creates: "{{ project_dir }}/infra/internal-tls/certs/internal.crt"
+
+    - name: Pre-pull third-party images explicitly for linux/amd64
+      ansible.builtin.command:
+        argv:
+          - docker
+          - pull
+          - --platform
+          - linux/amd64
+          - "{{ item }}"
+      loop:
+        - postgres:18-alpine
+        - neo4j:5.26
+        - "hashicorp/vault:2.0@sha256:db6a5f78749204d0a8d002be1cc6e9a2a6de53dffce41a894c4a06d309dca360"
+        - openzipkin/zipkin:3
+        - nginx:1.27-alpine
+      register: pull_result
+      changed_when: "'Downloaded newer image' in pull_result.stdout"
+
+    - name: Force-remove any previous vault-init container (one-shot init container; reusing a stopped one can hit a stale Docker Desktop/WSL2 bind-mount bug)
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-directory
+          - "{{ project_dir }}"
+          - rm
+          - -f
+          - -s
+          - vault-init
+      register: vault_init_rm
+      changed_when: "'Removing' in vault_init_rm.stdout"
+      failed_when: false
+
+    - name: Force-remove postgres, neo4j and nginx before recreate (same host-port/bind-mount release race as vault-init, they're the other services publishing ports)
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-directory
+          - "{{ project_dir }}"
+          - rm
+          - -f
+          - -s
+          - postgres
+          - neo4j
+          - nginx
+      register: db_containers_rm
+      changed_when: "'Removing' in db_containers_rm.stdout"
+      failed_when: false
+
+    - name: Deploy infra, microservices and the reverse proxy (docker compose up)
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-directory
+          - "{{ project_dir }}"
+          - up
+          - -d
+          - --remove-orphans
+          - --build
+      changed_when: compose_up_result.rc == 0
+      failed_when: false
+      register: compose_up_result
+
+    - name: Show docker compose output (always, even when this pass tolerates failure)
+      ansible.builtin.debug:
+        msg: "{{ (compose_up_result.stdout_lines | default([])) + (compose_up_result.stderr_lines | default([])) }}"
+
+    - name: Fetch vault-init container logs (its own stdout is invisible to "compose up -d")
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-directory
+          - "{{ project_dir }}"
+          - logs
+          - vault-init
+      register: vault_init_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Show vault-init container logs
+      ansible.builtin.debug:
+        msg: "{{ (vault_init_logs.stdout_lines | default([])) + (vault_init_logs.stderr_lines | default([])) }}"
+
+    - name: Fail loudly unless this pass is expected to leave services unhealthy (pre-Vault-secrets bootstrap pass)
+      ansible.builtin.fail:
+        msg: "{{ compose_up_result.stderr }}"
+      when:
+        - not (tolerate_unhealthy_dependencies | default(false))
+        - compose_up_result.rc != 0

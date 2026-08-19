@@ -1,0 +1,59 @@
+<app-page-header title="new payment" />
+
+@if (loading()) {
+  <app-spinner />
+} @else {
+  <form [formGroup]="form" (ngSubmit)="submit()" class="card">
+    <div class="form-grid">
+      <div class="field">
+        <label class="label" for="travelId">Voyage<span class="req">*</span></label>
+        <select id="travelId" class="select" formControlName="travelId">
+          <option value="" disabled>— sélectionner —</option>
+          @for (travel of travels(); track travel.id) {
+            <option [value]="travel.id">{{ travel.title }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="ownerId">Owner<span class="req">*</span></label>
+        <select id="ownerId" class="select" formControlName="ownerId">
+          <option value="" disabled>— sélectionner —</option>
+          @for (user of users(); track user.id) {
+            <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="paymentMethodId">Moyen de paiement<span class="req">*</span></label>
+        <select id="paymentMethodId" class="select" formControlName="paymentMethodId">
+          <option value="" disabled>— sélectionner —</option>
+          @for (method of paymentMethods(); track method.id) {
+            <option [value]="method.id">
+              {{ method.provider }} · {{ method.brand || method.type }}
+              {{ method.last4 ? '••' + method.last4 : '' }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="amount">Montant<span class="req">*</span></label>
+        <input id="amount" class="input" type="number" step="0.01" formControlName="amount" />
+      </div>
+
+      <div class="field">
+        <label class="label" for="currency">Devise<span class="req">*</span></label>
+        <input id="currency" class="input" formControlName="currency" maxlength="3" />
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" [disabled]="saving()">
+        {{ saving() ? 'saving...' : '$ save' }}
+      </button>
+      <a routerLink="/payments" class="btn btn-ghost">cancel</a>
+    </div>
+  </form>
+}

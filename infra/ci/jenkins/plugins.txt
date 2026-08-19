@@ -1,0 +1,15 @@
+git
+github
+github-branch-source
+workflow-aggregator
+pipeline-stage-view
+pipeline-graph-view
+docker-workflow
+sonar
+configuration-as-code
+credentials-binding
+timestamper
+ansicolor
+ws-cleanup
+matrix-auth
+dark-theme

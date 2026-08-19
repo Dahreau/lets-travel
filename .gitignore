@@ -1,0 +1,72 @@
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+*.pid
+*.seed
+*.pid.lock
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Dependency directories
+node_modules/
+bower_components/
+
+# Build directories
+dist/
+build/
+out/
+target/
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.swp
+*.bak
+*.orig
+*.save
+
+# Compiled files
+*.class
+*.o
+*.so
+*.dll
+*.exe
+*.pyc
+*.pyo
+*.pdb
+*.app
+
+# CI (Jenkins/SonarQube) — déjà couvert par la règle .env générique ci-dessus
+
+# Copie de travail que Jenkins recrée à chaque Deploy pour que le daemon Docker
+# de l'hôte (piloté via le socket monté) voie les fichiers à un vrai chemin hôte
+infra/ci/deploy-workspace/
+
+# Certificats TLS auto-signés (générés par Ansible, jamais commités)
+infra/nginx/certs/*.crt
+infra/nginx/certs/*.key
+!infra/nginx/certs/.gitkeep
+infra/vault/certs/*.crt
+infra/vault/certs/*.key
+!infra/vault/certs/.gitkeep
+infra/internal-tls/certs/*.crt
+infra/internal-tls/certs/*.key
+!infra/internal-tls/certs/.gitkeep
+
+# Clé de déscellement Vault (générée une seule fois par vault-unseal.yml, jamais commitée)
+infra/vault/.unseal-key.txt

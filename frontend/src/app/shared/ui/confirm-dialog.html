@@ -1,0 +1,18 @@
+<div class="overlay" (click)="cancelled.emit()">
+  <div class="dialog" (click)="$event.stopPropagation()">
+    <h2 class="dialog-title">{{ title() }}</h2>
+    <p class="dialog-message">{{ message() }}</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost" (click)="cancelled.emit()">Annuler</button>
+      <button
+        type="button"
+        class="btn"
+        [class.btn-danger]="danger()"
+        [class.btn-primary]="!danger()"
+        (click)="confirmed.emit()"
+      >
+        {{ confirmLabel() }}
+      </button>
+    </div>
+  </div>
+</div>

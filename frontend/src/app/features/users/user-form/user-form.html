@@ -1,0 +1,89 @@
+<app-page-header [title]="isEdit() ? 'edit user' : 'new user'" />
+
+@if (loading()) {
+  <app-spinner />
+} @else {
+  <form [formGroup]="form" (ngSubmit)="submit()" class="card">
+    <div class="form-grid">
+      <div class="field">
+        <label class="label" for="firstName">Prénom<span class="req">*</span></label>
+        <input
+          id="firstName"
+          class="input"
+          formControlName="firstName"
+          [class.invalid]="form.controls.firstName.invalid && form.controls.firstName.touched"
+        />
+      </div>
+
+      <div class="field">
+        <label class="label" for="lastName">Nom<span class="req">*</span></label>
+        <input
+          id="lastName"
+          class="input"
+          formControlName="lastName"
+          [class.invalid]="form.controls.lastName.invalid && form.controls.lastName.touched"
+        />
+      </div>
+
+      <div class="field">
+        <label class="label" for="email">Email<span class="req">*</span></label>
+        <input
+          id="email"
+          class="input"
+          type="email"
+          formControlName="email"
+          [class.invalid]="form.controls.email.invalid && form.controls.email.touched"
+        />
+      </div>
+
+      <div class="field">
+        <label class="label" for="phone">Téléphone</label>
+        <input id="phone" class="input" formControlName="phone" />
+      </div>
+
+      <div class="field">
+        <label class="label" for="role">Rôle<span class="req">*</span></label>
+        <select id="role" class="select" formControlName="role">
+          @for (role of roles; track role) {
+            <option [value]="role">{{ role }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <div class="checkbox-row" style="margin: 8px 0 16px">
+      <input type="checkbox" [checked]="hasAddress()" (change)="toggleAddress()" id="hasAddress" />
+      <label for="hasAddress">adresse renseignée</label>
+    </div>
+
+    @if (hasAddress()) {
+      <div class="subcard" [formGroup]="form.controls.address">
+        <div class="form-grid">
+          <div class="field">
+            <label class="label" for="street">Rue<span class="req">*</span></label>
+            <input id="street" class="input" formControlName="street" />
+          </div>
+          <div class="field">
+            <label class="label" for="city">Ville<span class="req">*</span></label>
+            <input id="city" class="input" formControlName="city" />
+          </div>
+          <div class="field">
+            <label class="label" for="postalCode">Code postal<span class="req">*</span></label>
+            <input id="postalCode" class="input" formControlName="postalCode" />
+          </div>
+          <div class="field">
+            <label class="label" for="country">Pays<span class="req">*</span></label>
+            <input id="country" class="input" formControlName="country" />
+          </div>
+        </div>
+      </div>
+    }
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" [disabled]="saving()">
+        {{ saving() ? 'saving...' : '$ save' }}
+      </button>
+      <a routerLink="/users" class="btn btn-ghost">cancel</a>
+    </div>
+  </form>
+}

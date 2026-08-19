@@ -1,0 +1,199 @@
+<app-page-header [title]="isEdit() ? 'edit travel' : 'new travel'" />
+
+@if (loading()) {
+  <app-spinner />
+} @else {
+  <form [formGroup]="form" (ngSubmit)="submit()" class="card">
+    <div class="form-grid">
+      <div class="field">
+        <label class="label" for="title">Titre<span class="req">*</span></label>
+        <input id="title" class="input" formControlName="title" />
+      </div>
+
+      <div class="field">
+        <label class="label" for="ownerId">Owner<span class="req">*</span></label>
+        <select id="ownerId" class="select" formControlName="ownerId">
+          <option value="" disabled>— sélectionner —</option>
+          @for (user of users(); track user.id) {
+            <option [value]="user.id">{{ user.firstName }} {{ user.lastName }} — {{ user.email }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="startDate">Date de début<span class="req">*</span></label>
+        <input id="startDate" class="input" type="date" formControlName="startDate" />
+      </div>
+
+      <div class="field">
+        <label class="label" for="endDate">Date de fin<span class="req">*</span></label>
+        <input id="endDate" class="input" type="date" formControlName="endDate" />
+      </div>
+
+      <div class="field">
+        <label class="label" for="status">Statut<span class="req">*</span></label>
+        <select id="status" class="select" formControlName="status">
+          @for (status of statuses; track status) {
+            <option [value]="status">{{ status }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <h2 class="section-title">destinations</h2>
+
+    @for (destination of destinationsArray.controls; track destination; let dIndex = $index) {
+      <div class="subcard" [formGroup]="destination">
+        <div class="subcard-head">
+          <span class="subcard-index">#{{ dIndex + 1 }}</span>
+          <button type="button" class="btn btn-danger btn-sm" (click)="removeDestination(dIndex)">
+            remove destination
+          </button>
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label class="label">Ville<span class="req">*</span></label>
+            <input class="input" formControlName="city" />
+          </div>
+          <div class="field">
+            <label class="label">Pays<span class="req">*</span></label>
+            <input class="input" formControlName="country" />
+          </div>
+          <div class="field">
+            <label class="label">Arrivée<span class="req">*</span></label>
+            <input class="input" type="date" formControlName="arrivalDate" />
+          </div>
+          <div class="field">
+            <label class="label">Départ<span class="req">*</span></label>
+            <input class="input" type="date" formControlName="departureDate" />
+          </div>
+        </div>
+
+        <div class="checkbox-row" style="margin-bottom: 12px">
+          <input
+            type="checkbox"
+            [checked]="destination.controls.accommodation.enabled"
+            (change)="toggleAccommodation(dIndex)"
+            [id]="'accom-' + dIndex"
+          />
+          <label [for]="'accom-' + dIndex">hébergement</label>
+        </div>
+
+        @if (destination.controls.accommodation.enabled) {
+          <div class="subcard" [formGroup]="destination.controls.accommodation">
+            <div class="form-grid">
+              <div class="field">
+                <label class="label">Nom<span class="req">*</span></label>
+                <input class="input" formControlName="name" />
+              </div>
+              <div class="field">
+                <label class="label">Type<span class="req">*</span></label>
+                <select class="select" formControlName="type">
+                  @for (type of accommodationTypes; track type) {
+                    <option [value]="type">{{ type }}</option>
+                  }
+                </select>
+              </div>
+              <div class="field">
+                <label class="label">Adresse<span class="req">*</span></label>
+                <input class="input" formControlName="address" />
+              </div>
+              <div class="field">
+                <label class="label">Check-in<span class="req">*</span></label>
+                <input class="input" type="date" formControlName="checkIn" />
+              </div>
+              <div class="field">
+                <label class="label">Check-out<span class="req">*</span></label>
+                <input class="input" type="date" formControlName="checkOut" />
+              </div>
+            </div>
+          </div>
+        }
+
+        <h3 class="section-subtitle">activités</h3>
+        @for (activity of destinationActivities(dIndex).controls; track activity; let aIndex = $index) {
+          <div class="subcard" [formGroup]="activity">
+            <div class="form-grid">
+              <div class="field">
+                <label class="label">Nom<span class="req">*</span></label>
+                <input class="input" formControlName="name" />
+              </div>
+              <div class="field">
+                <label class="label">Date<span class="req">*</span></label>
+                <input class="input" type="date" formControlName="date" />
+              </div>
+              <div class="field">
+                <label class="label">Coût</label>
+                <input class="input" type="number" step="0.01" formControlName="cost" />
+              </div>
+              <div class="field">
+                <label class="label">Description</label>
+                <input class="input" formControlName="description" />
+              </div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" (click)="removeActivity(dIndex, aIndex)">
+              remove activity
+            </button>
+          </div>
+        }
+        <button type="button" class="btn btn-ghost btn-sm" (click)="addActivity(dIndex)">
+          + add activity
+        </button>
+      </div>
+    }
+
+    <button type="button" class="btn btn-secondary" (click)="addDestination()">+ add destination</button>
+
+    <h2 class="section-title">transports</h2>
+
+    @for (transportation of transportationsArray.controls; track transportation; let tIndex = $index) {
+      <div class="subcard" [formGroup]="transportation">
+        <div class="form-grid">
+          <div class="field">
+            <label class="label">Type<span class="req">*</span></label>
+            <select class="select" formControlName="type">
+              @for (type of transportationTypes; track type) {
+                <option [value]="type">{{ type }}</option>
+              }
+            </select>
+          </div>
+          <div class="field">
+            <label class="label">Provider</label>
+            <input class="input" formControlName="provider" />
+          </div>
+          <div class="field">
+            <label class="label">De<span class="req">*</span></label>
+            <input class="input" formControlName="fromLocation" />
+          </div>
+          <div class="field">
+            <label class="label">Vers<span class="req">*</span></label>
+            <input class="input" formControlName="toLocation" />
+          </div>
+          <div class="field">
+            <label class="label">Départ<span class="req">*</span></label>
+            <input class="input" type="datetime-local" formControlName="departureTime" />
+          </div>
+          <div class="field">
+            <label class="label">Arrivée<span class="req">*</span></label>
+            <input class="input" type="datetime-local" formControlName="arrivalTime" />
+          </div>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="removeTransportation(tIndex)">
+          remove transportation
+        </button>
+      </div>
+    }
+
+    <button type="button" class="btn btn-secondary" (click)="addTransportation()">
+      + add transportation
+    </button>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" [disabled]="saving()">
+        {{ saving() ? 'saving...' : '$ save' }}
+      </button>
+      <a routerLink="/travels" class="btn btn-ghost">cancel</a>
+    </div>
+  </form>
+}

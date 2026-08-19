@@ -1,0 +1,45 @@
+<div class="shell">
+  <aside class="sidebar" [class.open]="sidebarOpen()">
+    <div class="brand">
+      <span class="brand-mark">[01]</span>
+      <span class="brand-name">travel-plan<span class="blink">_</span></span>
+    </div>
+    <div class="nav-path">~/admin</div>
+    <nav class="nav">
+      @for (item of navItems; track item.path) {
+        <a
+          [routerLink]="item.path"
+          routerLinkActive="active"
+          class="nav-link"
+          (click)="closeSidebar()"
+        >
+          <span class="nav-prefix">$</span>{{ item.label }}
+        </a>
+      }
+    </nav>
+  </aside>
+
+  @if (sidebarOpen()) {
+    <div class="scrim" (click)="closeSidebar()"></div>
+  }
+
+  <div class="main">
+    <header class="topbar">
+      <button type="button" class="burger" (click)="toggleSidebar()" aria-label="Menu">
+        &#9776;
+      </button>
+      <div class="topbar-spacer"></div>
+      <div class="topbar-user">
+        <span class="user-name">{{ username() ?? '...' }}</span>
+        <span class="badge badge-info">admin</span>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="logout()">logout</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <div class="container">
+        <router-outlet></router-outlet>
+      </div>
+    </main>
+  </div>
+</div>

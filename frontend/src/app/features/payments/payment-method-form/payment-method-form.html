@@ -1,0 +1,64 @@
+<app-page-header [title]="isEdit() ? 'edit payment method' : 'new payment method'" />
+
+@if (loading()) {
+  <app-spinner />
+} @else {
+  <form [formGroup]="form" (ngSubmit)="submit()" class="card">
+    <div class="form-grid">
+      <div class="field">
+        <label class="label" for="ownerId">Owner<span class="req">*</span></label>
+        <select id="ownerId" class="select" formControlName="ownerId">
+          <option value="" disabled>— sélectionner —</option>
+          @for (user of users(); track user.id) {
+            <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="provider">Provider<span class="req">*</span></label>
+        <select id="provider" class="select" formControlName="provider">
+          @for (provider of providers; track provider) {
+            <option [value]="provider">{{ provider }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="type">Type<span class="req">*</span></label>
+        <select id="type" class="select" formControlName="type">
+          @for (type of methodTypes; track type) {
+            <option [value]="type">{{ type }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="providerToken">Token provider<span class="req">*</span></label>
+        <input id="providerToken" class="input" formControlName="providerToken" />
+      </div>
+
+      <div class="field">
+        <label class="label" for="brand">Marque</label>
+        <input id="brand" class="input" formControlName="brand" placeholder="Visa, Mastercard…" />
+      </div>
+
+      <div class="field">
+        <label class="label" for="last4">4 derniers chiffres</label>
+        <input id="last4" class="input" formControlName="last4" maxlength="4" />
+      </div>
+    </div>
+
+    <div class="checkbox-row">
+      <input type="checkbox" formControlName="isDefault" id="isDefault" />
+      <label for="isDefault">moyen de paiement par défaut</label>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" [disabled]="saving()">
+        {{ saving() ? 'saving...' : '$ save' }}
+      </button>
+      <a routerLink="/payment-methods" class="btn btn-ghost">cancel</a>
+    </div>
+  </form>
+}
