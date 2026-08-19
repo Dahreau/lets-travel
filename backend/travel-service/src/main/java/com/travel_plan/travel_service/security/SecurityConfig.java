@@ -28,6 +28,17 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable()) // NOSONAR java:S4502 - API stateless (JWT en header Authorization, aucun cookie de session), donc pas de surface CSRF
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Routes /subscriptions AVANT les regles generiques /api/travels/** ci-dessous :
+                        // sinon "DELETE /api/travels/**" (ADMIN/TRAVEL_MANAGER only) interceptait en
+                        // premier un DELETE .../subscriptions/{id} et empechait un simple TRAVELER
+                        // d'annuler son propre abonnement. S'abonner/se desabonner = TRAVELER minimum
+                        // (herite par TRAVEL_MANAGER/ADMIN via la RoleHierarchy). Voir liste d'abonnes
+                        // en revanche : reservee au Travel Manager proprietaire + Admin (verifie en
+                        // plus dans SubscriptionService), pas visible par un simple traveler.
+                        .requestMatchers(HttpMethod.POST, "/api/travels/*/subscriptions").hasRole(TRAVELER_ROLE)
+                        .requestMatchers(HttpMethod.DELETE, "/api/travels/*/subscriptions/*").hasRole(TRAVELER_ROLE)
+                        .requestMatchers(HttpMethod.GET, "/api/travels/*/subscriptions")
+                        .hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
                         // Un Travel Manager cree/modifie/supprime ses propres voyages (verifie en
                         // plus dans TravelService, la HttpSecurity ne sait pas encore lequel est "le sien").
                         .requestMatchers(HttpMethod.POST, "/api/travels").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
