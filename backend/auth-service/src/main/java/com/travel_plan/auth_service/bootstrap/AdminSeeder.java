@@ -1,8 +1,8 @@
 package com.travel_plan.auth_service.bootstrap;
 
-import com.travel_plan.auth_service.domain.Admin;
+import com.travel_plan.auth_service.domain.Account;
 import com.travel_plan.auth_service.domain.Role;
-import com.travel_plan.auth_service.repository.AdminRepository;
+import com.travel_plan.auth_service.repository.AccountRepository;
 import java.time.Instant;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,17 +14,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class AdminSeeder implements CommandLineRunner {
 
-    private final AdminRepository adminRepository;
+    private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
     private final String defaultUsername;
     private final String defaultPassword;
 
     public AdminSeeder(
-            AdminRepository adminRepository,
+            AccountRepository accountRepository,
             PasswordEncoder passwordEncoder,
             @Value("${app.admin.default-username}") String defaultUsername,
             @Value("${app.admin.default-password}") String defaultPassword) {
-        this.adminRepository = adminRepository;
+        this.accountRepository = accountRepository;
         this.passwordEncoder = passwordEncoder;
         this.defaultUsername = defaultUsername;
         this.defaultPassword = defaultPassword;
@@ -32,18 +32,19 @@ public class AdminSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        if (adminRepository.count() > 0) {
+        if (accountRepository.count() > 0) {
             return;
         }
 
-        Admin admin = Admin.builder()
+        Account admin = Account.builder()
                 .username(defaultUsername)
                 .passwordHash(passwordEncoder.encode(defaultPassword))
                 .role(Role.ADMIN)
+                .userId(null)
                 .createdAt(Instant.now())
                 .build();
 
-        adminRepository.save(admin);
+        accountRepository.save(admin);
         log.warn("Admin par defaut '{}' cree avec le mot de passe de app.admin.default-password. Change-le des la premiere connexion.", defaultUsername);
     }
 }

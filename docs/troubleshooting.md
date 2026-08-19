@@ -43,3 +43,29 @@ Ce fichier liste, dans l'ordre où on les a rencontrés, les problèmes réels t
 **Solution** : `git update-index --chmod=+x backend/*/mvnw` sur les 5 fichiers — ne change que le mode suivi par Git (métadonnée), aucune ligne de contenu modifiée (vérifiable : le hash du blob reste le même). Poussé sur `fix/mvnw-permissions`, corrige le build sans toucher au code.
 
 **Comment vérifier soi-même** : comparer `git ls-files --stage backend/*/mvnw` entre les deux repos (mêmes hash de blob, modes différents) est la preuve la plus directe — pas besoin de deviner, la commande le montre noir sur blanc.
+
+## 7. Scanner SonarQube en échec avec `401 Unauthorized` malgré un `SONAR_TOKEN` déjà rempli
+
+**Problème** : une fois le build/tests passés (voir point 6), le stage `Sonar` échouait sur les 5 services avec `Failed to query server version: ... HTTP 401 Unauthorized`, alors que `SONAR_TOKEN` n'était pas vide dans `infra/ci/.env`. Deux causes distinctes, empilées : (1) `infra/ci/jenkins/casc.yaml` ne lit `${SONAR_TOKEN}` qu'**au démarrage** du conteneur Jenkins pour créer le credential `sonar-token` — modifier `.env` après coup ne suffit pas, il faut recréer le conteneur ; (2) la valeur déjà présente dans `.env` n'avait en réalité jamais été générée sur l'instance `lets-travel-sonarqube` elle-même (page "Generate Tokens" → "No tokens") — probablement copiée depuis `travel-plan` au moment du bootstrap du repo, donc invalide ici même après recréation du conteneur.
+
+**Solution** : générer un vrai token sur l'instance concernée (**http://localhost:9001**, pas `:9000` qui est celui de `travel-plan`) via *My Account → Security → Generate Tokens* (type "Global Analysis Token" ou "User Token"), le coller dans `SONAR_TOKEN` de `infra/ci/.env`, puis forcer la recréation du conteneur Jenkins pour qu'il relise la valeur :
+```bash
+cd infra/ci
+docker compose up -d --force-recreate jenkins
+```
+
+**À retenir** : sur ce projet, toute variable d'`infra/ci/.env` consommée par `casc.yaml` (`GITHUB_TOKEN`, `SONAR_TOKEN`, mot de passe admin Jenkins) n'est prise en compte qu'au démarrage du conteneur — un `.env` modifié à chaud ne suffit jamais, il faut recréer (`--force-recreate`) le service concerné.
+
+## 8. `auth-service` ne compile plus après ajout de validations Bean Validation (`jakarta.validation` introuvable)
+
+**Problème** : en ajoutant `@Valid`/`@NotBlank`/`@NotNull`/`@AssertTrue` sur un nouveau DTO d'`auth-service` (branche `feat/travel-manager-role`), le build échoue avec `package jakarta.validation does not exist`. Cause : `auth-service` n'avait jusque-là jamais eu besoin de Bean Validation (`LoginRequest` n'a aucune annotation de validation), donc son `pom.xml` n'a jamais inclus `spring-boot-starter-validation` — contrairement à `travel-service`, qui l'a depuis le début (`TravelRequest` en a besoin).
+
+**Solution** : ajouter la dépendance manquante dans `backend/auth-service/pom.xml` :
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-validation</artifactId>
+</dependency>
+```
+
+**À retenir** : avant d'ajouter des annotations `@Valid`/`jakarta.validation.*` à un service, vérifier que `spring-boot-starter-validation` est bien dans son `pom.xml` — chaque microservice a ses propres dépendances, ce n'est pas parce qu'un service voisin (ici `travel-service`) l'a déjà que tous l'ont.

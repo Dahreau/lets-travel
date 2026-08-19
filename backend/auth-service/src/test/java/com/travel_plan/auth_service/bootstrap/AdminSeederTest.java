@@ -6,41 +6,41 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.travel_plan.auth_service.domain.Admin;
-import com.travel_plan.auth_service.repository.AdminRepository;
+import com.travel_plan.auth_service.domain.Account;
+import com.travel_plan.auth_service.repository.AccountRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 class AdminSeederTest {
 
-    private AdminRepository adminRepository;
+    private AccountRepository accountRepository;
     private PasswordEncoder passwordEncoder;
     private AdminSeeder seeder;
 
     @BeforeEach
     void setUp() {
-        adminRepository = mock(AdminRepository.class);
+        accountRepository = mock(AccountRepository.class);
         passwordEncoder = mock(PasswordEncoder.class);
-        seeder = new AdminSeeder(adminRepository, passwordEncoder, "admin", "changeme");
+        seeder = new AdminSeeder(accountRepository, passwordEncoder, "admin", "changeme");
     }
 
     @Test
     void createsDefaultAdminWhenNoneExists() {
-        when(adminRepository.count()).thenReturn(0L);
+        when(accountRepository.count()).thenReturn(0L);
         when(passwordEncoder.encode("changeme")).thenReturn("hashed");
 
         seeder.run();
 
-        verify(adminRepository).save(any(Admin.class));
+        verify(accountRepository).save(any(Account.class));
     }
 
     @Test
     void doesNothingWhenAdminAlreadyExists() {
-        when(adminRepository.count()).thenReturn(1L);
+        when(accountRepository.count()).thenReturn(1L);
 
         seeder.run();
 
-        verify(adminRepository, never()).save(any(Admin.class));
+        verify(accountRepository, never()).save(any(Account.class));
     }
 }

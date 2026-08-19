@@ -1,6 +1,6 @@
 package com.travel_plan.auth_service;
 
-import com.travel_plan.auth_service.repository.AdminRepository;
+import com.travel_plan.auth_service.repository.AccountRepository;
 import javax.crypto.SecretKey;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -21,7 +21,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class AuthServiceApplicationTests {
 
 	@MockitoBean
-	private AdminRepository adminRepository;
+	private AccountRepository accountRepository;
 
 	@MockitoBean
 	private SecretKey jwtSigningKey;

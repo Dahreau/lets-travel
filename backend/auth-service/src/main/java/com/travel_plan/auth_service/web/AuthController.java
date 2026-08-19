@@ -1,7 +1,7 @@
 package com.travel_plan.auth_service.web;
 
-import com.travel_plan.auth_service.domain.Admin;
-import com.travel_plan.auth_service.repository.AdminRepository;
+import com.travel_plan.auth_service.domain.Account;
+import com.travel_plan.auth_service.repository.AccountRepository;
 import com.travel_plan.auth_service.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,20 +19,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final AdminRepository adminRepository;
+    private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-        Admin admin = adminRepository.findByUsername(request.username())
+        Account account = accountRepository.findByUsername(request.username())
                 .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
-        if (!passwordEncoder.matches(request.password(), admin.getPasswordHash())) {
+        if (!passwordEncoder.matches(request.password(), account.getPasswordHash())) {
             throw new BadCredentialsException("Invalid credentials");
         }
 
-        String token = jwtService.generateToken(admin.getUsername(), admin.getRole().name());
+        String token = jwtService.generateToken(account.getUsername(), account.getRole().name(), account.getUserId());
         return ResponseEntity.ok(new LoginResponse(token));
     }
 

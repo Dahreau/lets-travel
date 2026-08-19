@@ -115,7 +115,7 @@ class TravelRepositoryTest {
     private Travel newTravel() {
         return Travel.builder()
                 .title("Iberian tour")
-                .ownerId(UUID.randomUUID())
+                .managerId(UUID.randomUUID())
                 .startDate(LocalDate.of(2026, Month.SEPTEMBER, 1))
                 .endDate(LocalDate.of(2026, Month.SEPTEMBER, 10))
                 .status(TravelStatus.PLANNED)

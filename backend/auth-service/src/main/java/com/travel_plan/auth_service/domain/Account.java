@@ -15,14 +15,18 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
+// Anciennement "Admin" : generalise pour porter les identifiants de connexion
+// des 3 roles (TRAVELER, TRAVEL_MANAGER, ADMIN), pas seulement les admins.
+// Le profil metier (nom, email, adresse...) reste dans user-service ; userId
+// fait juste le lien entre les deux, comme Payment.ownerId le fait ailleurs.
 @Entity
-@Table(name = "admins")
+@Table(name = "accounts")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Admin {
+public class Account {
 
     @Id
     @UuidGenerator
@@ -38,6 +42,11 @@ public class Admin {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;
+
+    // Null pour le compte ADMIN par defaut (AdminSeeder) : il n'a pas de fiche
+    // User associee dans user-service. Obligatoire pour TRAVELER/TRAVEL_MANAGER.
+    @Column(name = "user_id")
+    private UUID userId;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

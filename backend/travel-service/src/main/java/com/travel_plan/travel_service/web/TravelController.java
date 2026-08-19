@@ -1,11 +1,13 @@
 package com.travel_plan.travel_service.web;
 
+import com.travel_plan.travel_service.security.AuthenticatedUser;
 import com.travel_plan.travel_service.service.TravelService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,18 +37,23 @@ public class TravelController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TravelResponse create(@Valid @RequestBody TravelRequest request) {
-        return travelService.create(request);
+    public TravelResponse create(@Valid @RequestBody TravelRequest request, Authentication authentication) {
+        return travelService.create(request, principal(authentication));
     }
 
     @PutMapping("/{id}")
-    public TravelResponse update(@PathVariable UUID id, @Valid @RequestBody TravelRequest request) {
-        return travelService.update(id, request);
+    public TravelResponse update(
+            @PathVariable UUID id, @Valid @RequestBody TravelRequest request, Authentication authentication) {
+        return travelService.update(id, request, principal(authentication));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) {
-        travelService.delete(id);
+    public void delete(@PathVariable UUID id, Authentication authentication) {
+        travelService.delete(id, principal(authentication));
+    }
+
+    private AuthenticatedUser principal(Authentication authentication) {
+        return (AuthenticatedUser) authentication.getPrincipal();
     }
 }

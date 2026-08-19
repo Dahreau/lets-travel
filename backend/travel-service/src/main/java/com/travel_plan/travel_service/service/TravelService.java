@@ -5,9 +5,12 @@ import com.travel_plan.travel_service.domain.Activity;
 import com.travel_plan.travel_service.domain.Destination;
 import com.travel_plan.travel_service.domain.Transportation;
 import com.travel_plan.travel_service.domain.Travel;
+import com.travel_plan.travel_service.exception.ForbiddenException;
+import com.travel_plan.travel_service.exception.InvalidTravelRequestException;
 import com.travel_plan.travel_service.exception.TravelNotFoundException;
 import com.travel_plan.travel_service.graph.TravelGraphSyncService;
 import com.travel_plan.travel_service.repository.TravelRepository;
+import com.travel_plan.travel_service.security.AuthenticatedUser;
 import com.travel_plan.travel_service.web.AccommodationRequest;
 import com.travel_plan.travel_service.web.ActivityRequest;
 import com.travel_plan.travel_service.web.DestinationRequest;
@@ -26,6 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class TravelService {
 
+    private static final String TRAVEL_MANAGER_ROLE = "TRAVEL_MANAGER";
+    private static final String ADMIN_ROLE = "ADMIN";
+
     private final TravelRepository travelRepository;
     private final TravelGraphSyncService graphSyncService;
 
@@ -37,10 +43,10 @@ public class TravelService {
         return TravelResponse.from(getOrThrow(id));
     }
 
-    public TravelResponse create(TravelRequest request) {
+    public TravelResponse create(TravelRequest request, AuthenticatedUser caller) {
         Travel travel = Travel.builder()
                 .title(request.title())
-                .ownerId(request.ownerId())
+                .managerId(resolveManagerId(request.managerId(), caller))
                 .startDate(request.startDate())
                 .endDate(request.endDate())
                 .status(request.status())
@@ -54,12 +60,13 @@ public class TravelService {
         return TravelResponse.from(saved);
     }
 
-    public TravelResponse update(UUID id, TravelRequest request) {
+    public TravelResponse update(UUID id, TravelRequest request, AuthenticatedUser caller) {
         Travel travel = getOrThrow(id);
+        requireOwnershipOrAdmin(travel, caller);
         List<Destination> oldRoute = orderedDestinations(travel);
 
         travel.setTitle(request.title());
-        travel.setOwnerId(request.ownerId());
+        travel.setManagerId(resolveManagerId(request.managerId(), caller));
         travel.setStartDate(request.startDate());
         travel.setEndDate(request.endDate());
         travel.setStatus(request.status());
@@ -75,10 +82,34 @@ public class TravelService {
         return TravelResponse.from(saved);
     }
 
-    public void delete(UUID id) {
+    public void delete(UUID id, AuthenticatedUser caller) {
         Travel travel = getOrThrow(id);
+        requireOwnershipOrAdmin(travel, caller);
         graphSyncService.removeRoute(orderedDestinations(travel));
         travelRepository.delete(travel);
+    }
+
+    // TRAVEL_MANAGER : force a son propre userId, toute valeur envoyee dans la requete est
+    // ignoree (un manager ne peut pas s'attribuer/attribuer a un autre manager un voyage).
+    // ADMIN : doit fournir explicitement managerId, puisque son propre JWT n'en porte pas.
+    private UUID resolveManagerId(UUID requestedManagerId, AuthenticatedUser caller) {
+        if (TRAVEL_MANAGER_ROLE.equals(caller.role())) {
+            return caller.userId();
+        }
+        if (requestedManagerId == null) {
+            throw new InvalidTravelRequestException(
+                    "managerId is required when an admin creates or updates a travel on behalf of a manager");
+        }
+        return requestedManagerId;
+    }
+
+    private void requireOwnershipOrAdmin(Travel travel, AuthenticatedUser caller) {
+        if (ADMIN_ROLE.equals(caller.role())) {
+            return;
+        }
+        if (!travel.getManagerId().equals(caller.userId())) {
+            throw new ForbiddenException("You can only manage your own travels");
+        }
     }
 
     private Travel getOrThrow(UUID id) {
