@@ -69,3 +69,25 @@ docker compose up -d --force-recreate jenkins
 ```
 
 **À retenir** : avant d'ajouter des annotations `@Valid`/`jakarta.validation.*` à un service, vérifier que `spring-boot-starter-validation` est bien dans son `pom.xml` — chaque microservice a ses propres dépendances, ce n'est pas parce qu'un service voisin (ici `travel-service`) l'a déjà que tous l'ont.
+
+## 9. `TravelServiceApplicationTests.contextLoads` échoue après ajout d'un nouveau repository (`SubscriptionRepository`)
+
+**Problème** : en ajoutant `SubscriptionRepository`/`SubscriptionService` (branche `feat/traveler-subscriptions`), `mvn test` échoue avec `UnsatisfiedDependencyException: ... No qualifying bean of type 'SubscriptionRepository' available`, sur le test `contextLoads` uniquement (83 tests run, 1 error) — tous les tests unitaires/MockMvc passent, seul le chargement du contexte Spring complet plante.
+
+**Cause** : `TravelServiceApplicationTests` est un test de "smoke" qui vérifie que le contexte Spring démarre sans vraie infrastructure (pas de vrai Postgres/Neo4j) : il exclut `DataSourceAutoConfiguration`/`HibernateJpaAutoConfiguration`/`Neo4jAutoConfiguration` via `@EnableAutoConfiguration(exclude = ...)`, ce qui désactive la création automatique des proxies Spring Data JPA. À la place, chaque repository utilisé quelque part dans l'appli est déclaré à la main avec `@MockitoBean` (`travelRepository`, `placeRepository`, etc.). En ajoutant `SubscriptionRepository` (injecté dans le nouveau `SubscriptionService`) sans ajouter son `@MockitoBean` correspondant dans cette classe de test, Spring ne trouve plus aucun bean — ni réel (JPA désactivé), ni mocké (oublié) — pour le construire.
+
+**Solution** : ajouter le mock manquant dans `TravelServiceApplicationTests.java` :
+```java
+@MockitoBean
+private SubscriptionRepository subscriptionRepository;
+```
+
+**À retenir** : `TravelServiceApplicationTests` doit être mis à jour à chaque nouveau repository Spring Data JPA ajouté à `travel-service`, pas seulement les tests unitaires du nouveau code — sinon le smoke test de démarrage du contexte casse silencieusement, même si tout le reste (services, controllers, DB réelle en local) fonctionne.
+
+## 10. SonarQube (Quality Gate "New Code") : `Instant.now()`/`LocalDate.now()` sans fuseau explicite (règle `S6355`)
+
+**Problème** : le scan SonarQube du PR `feat/traveler-subscriptions` échoue avec *"Explicitly specify the time zone by passing a ZoneId or a Clock to the .now() method."* sur `SubscriptionService.java` (2x `Instant.now()`, 1x `LocalDate.now()` pour le cutoff d'annulation à 3 jours). La règle ne s'applique qu'au "New Code" (lignes ajoutées dans cette branche) — le code pré-existant qui fait la même chose (`Travel.java`, `ApiExceptionHandler.java`) n'est pas remonté, car non modifié par cette branche.
+
+**Solution** : introduction d'un bean `Clock` unique (`config/ClockConfig.java`, `Clock.systemUTC()`), injecté dans `SubscriptionService` via son constructeur (`@RequiredArgsConstructor` le prend automatiquement en ajoutant le field `private final Clock clock;`), puis `Instant.now(clock)`/`LocalDate.now(clock)` à la place des appels nus. Bénéfice au passage : `SubscriptionServiceTest` utilise maintenant une `Clock.fixed(...)` au lieu de dépendre de l'horloge système au moment où les tests tournent (plus déterministe, notamment pour les tests du cutoff à J-3 pile). Les fichiers de test qui n'avaient besoin que d'un timestamp arbitraire (pas de logique métier testée) sont passés à `Instant.now(Clock.systemUTC())` — suffisant pour satisfaire la règle sans introduire de dépendance inutile.
+
+**À retenir** : ne plus jamais utiliser `Instant.now()`/`LocalDate.now()`/`LocalDateTime.now()` sans argument dans du nouveau code sur ce projet — toujours passer le bean `Clock` (`clock()` dans `ClockConfig`) par injection de dépendances. Ça satisfait Sonar et ça rend le code testable avec une horloge fixe plutôt que de dépendre de l'instant réel d'exécution.
