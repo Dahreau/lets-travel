@@ -17,6 +17,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    private static final String ADMIN_ROLE = "ADMIN";
+    private static final String TRAVEL_MANAGER_ROLE = "TRAVEL_MANAGER";
+    private static final String TRAVELER_ROLE = "TRAVELER";
+
     private final JwtService jwtService;
 
     @Bean
@@ -26,13 +30,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Un Travel Manager cree/modifie/supprime ses propres voyages (verifie en
                         // plus dans TravelService, la HttpSecurity ne sait pas encore lequel est "le sien").
-                        .requestMatchers(HttpMethod.POST, "/api/travels").hasAnyRole("ADMIN", "TRAVEL_MANAGER")
-                        .requestMatchers(HttpMethod.PUT, "/api/travels/**").hasAnyRole("ADMIN", "TRAVEL_MANAGER")
-                        .requestMatchers(HttpMethod.DELETE, "/api/travels/**").hasAnyRole("ADMIN", "TRAVEL_MANAGER")
+                        .requestMatchers(HttpMethod.POST, "/api/travels").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
+                        .requestMatchers(HttpMethod.PUT, "/api/travels/**").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
+                        .requestMatchers(HttpMethod.DELETE, "/api/travels/**").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
                         // Le reste (GET, y compris la liste complete) reste ADMIN-only pour l'instant :
                         // un "GET mes voyages" filtre pour un manager est une fonctionnalite a part
                         // (dashboard manager), pas encore construite.
-                        .anyRequest().hasRole("ADMIN"))
+                        .anyRequest().hasRole(ADMIN_ROLE))
                 .addFilterBefore(
                         new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
 
@@ -46,8 +50,8 @@ public class SecurityConfig {
     @Bean
     public RoleHierarchy roleHierarchy() {
         return RoleHierarchyImpl.withDefaultRolePrefix()
-                .role("ADMIN").implies("TRAVEL_MANAGER")
-                .role("TRAVEL_MANAGER").implies("TRAVELER")
+                .role(ADMIN_ROLE).implies(TRAVEL_MANAGER_ROLE)
+                .role(TRAVEL_MANAGER_ROLE).implies(TRAVELER_ROLE)
                 .build();
     }
 }

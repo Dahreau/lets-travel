@@ -148,8 +148,9 @@ class TravelServiceTest {
         when(travelRepository.findById(id)).thenReturn(Optional.of(existing));
 
         AuthenticatedUser someOtherManager = new AuthenticatedUser("manager2", "TRAVEL_MANAGER", UUID.randomUUID());
+        TravelRequest request = fullRequest(UUID.randomUUID());
 
-        assertThatThrownBy(() -> travelService.update(id, fullRequest(UUID.randomUUID()), someOtherManager))
+        assertThatThrownBy(() -> travelService.update(id, request, someOtherManager))
                 .isInstanceOf(ForbiddenException.class);
     }
 
