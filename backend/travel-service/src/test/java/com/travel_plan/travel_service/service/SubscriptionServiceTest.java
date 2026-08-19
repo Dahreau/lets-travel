@@ -22,8 +22,10 @@ import com.travel_plan.travel_service.repository.SubscriptionRepository;
 import com.travel_plan.travel_service.repository.TravelRepository;
 import com.travel_plan.travel_service.security.AuthenticatedUser;
 import com.travel_plan.travel_service.web.SubscriptionResponse;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -33,8 +35,11 @@ class SubscriptionServiceTest {
 
     private final SubscriptionRepository subscriptionRepository = mock(SubscriptionRepository.class);
     private final TravelRepository travelRepository = mock(TravelRepository.class);
+    // Horloge fixe plutot que Clock.systemUTC() : les tests de cutoff (a J-3 pile) ne dependent plus
+    // de l'instant reel d'execution, ce qui evite un flake theorique si le test tourne pile a minuit.
+    private final Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
     private final SubscriptionService subscriptionService =
-            new SubscriptionService(subscriptionRepository, travelRepository);
+            new SubscriptionService(subscriptionRepository, travelRepository, clock);
 
     private final UUID travelId = UUID.randomUUID();
     private final UUID managerId = UUID.randomUUID();
@@ -244,8 +249,8 @@ class SubscriptionServiceTest {
                 .id(travelId)
                 .title("Iberian tour")
                 .managerId(managerId)
-                .startDate(LocalDate.now().plusDays(daysFromNow))
-                .endDate(LocalDate.now().plusDays(daysFromNow + 7))
+                .startDate(LocalDate.now(clock).plusDays(daysFromNow))
+                .endDate(LocalDate.now(clock).plusDays(daysFromNow + 7))
                 .status(TravelStatus.PLANNED)
                 .build();
     }
@@ -256,7 +261,7 @@ class SubscriptionServiceTest {
                 .travel(travel)
                 .travelerId(subscriberId)
                 .status(SubscriptionStatus.ACTIVE)
-                .subscribedAt(Instant.now())
+                .subscribedAt(Instant.now(clock))
                 .build();
     }
 }

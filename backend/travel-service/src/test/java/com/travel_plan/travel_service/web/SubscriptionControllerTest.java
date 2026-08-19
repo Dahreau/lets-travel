@@ -17,6 +17,7 @@ import com.travel_plan.travel_service.exception.SubscriptionCutoffException;
 import com.travel_plan.travel_service.exception.SubscriptionNotFoundException;
 import com.travel_plan.travel_service.security.AuthenticatedUser;
 import com.travel_plan.travel_service.service.SubscriptionService;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -51,7 +52,7 @@ class SubscriptionControllerTest {
         UUID subscriptionId = UUID.randomUUID();
         when(subscriptionService.subscribe(travelId, travelerAuth().user()))
                 .thenReturn(new SubscriptionResponse(
-                        subscriptionId, travelId, travelerId, SubscriptionStatus.ACTIVE, Instant.now(), null));
+                        subscriptionId, travelId, travelerId, SubscriptionStatus.ACTIVE, Instant.now(Clock.systemUTC()), null));
 
         mockMvc.perform(post("/api/travels/{travelId}/subscriptions", travelId).principal(travelerAuth().token()))
                 .andExpect(status().isCreated())
@@ -118,7 +119,7 @@ class SubscriptionControllerTest {
         AuthenticatedManager manager = managerAuth();
         when(subscriptionService.listSubscribers(travelId, manager.user()))
                 .thenReturn(List.of(new SubscriptionResponse(
-                        UUID.randomUUID(), travelId, travelerId, SubscriptionStatus.ACTIVE, Instant.now(), null)));
+                        UUID.randomUUID(), travelId, travelerId, SubscriptionStatus.ACTIVE, Instant.now(Clock.systemUTC()), null)));
 
         mockMvc.perform(get("/api/travels/{travelId}/subscriptions", travelId).principal(manager.token()))
                 .andExpect(status().isOk())

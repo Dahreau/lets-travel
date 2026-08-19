@@ -13,6 +13,7 @@ import com.travel_plan.travel_service.repository.SubscriptionRepository;
 import com.travel_plan.travel_service.repository.TravelRepository;
 import com.travel_plan.travel_service.security.AuthenticatedUser;
 import com.travel_plan.travel_service.web.SubscriptionResponse;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -32,6 +33,7 @@ public class SubscriptionService {
 
     private final SubscriptionRepository subscriptionRepository;
     private final TravelRepository travelRepository;
+    private final Clock clock;
 
     public SubscriptionResponse subscribe(UUID travelId, AuthenticatedUser caller) {
         Travel travel = getTravelOrThrow(travelId);
@@ -47,7 +49,7 @@ public class SubscriptionService {
                 .travel(travel)
                 .travelerId(travelerId)
                 .status(SubscriptionStatus.ACTIVE)
-                .subscribedAt(Instant.now())
+                .subscribedAt(Instant.now(clock))
                 .build();
 
         return SubscriptionResponse.from(subscriptionRepository.save(subscription));
@@ -73,7 +75,7 @@ public class SubscriptionService {
         }
 
         subscription.setStatus(SubscriptionStatus.CANCELLED);
-        subscription.setCancelledAt(Instant.now());
+        subscription.setCancelledAt(Instant.now(clock));
         subscriptionRepository.save(subscription);
     }
 
@@ -121,7 +123,7 @@ public class SubscriptionService {
     }
 
     private boolean isPastCancellationCutoff(LocalDate travelStartDate) {
-        return LocalDate.now().isAfter(travelStartDate.minusDays(CANCELLATION_CUTOFF_DAYS));
+        return LocalDate.now(clock).isAfter(travelStartDate.minusDays(CANCELLATION_CUTOFF_DAYS));
     }
 
     private Travel getTravelOrThrow(UUID travelId) {

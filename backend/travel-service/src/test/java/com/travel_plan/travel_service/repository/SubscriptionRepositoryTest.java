@@ -6,6 +6,7 @@ import com.travel_plan.travel_service.domain.Subscription;
 import com.travel_plan.travel_service.domain.SubscriptionStatus;
 import com.travel_plan.travel_service.domain.Travel;
 import com.travel_plan.travel_service.domain.TravelStatus;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Month;
@@ -84,7 +85,7 @@ class SubscriptionRepositoryTest {
                 .travel(travel)
                 .travelerId(travelerId)
                 .status(status)
-                .subscribedAt(Instant.now())
+                .subscribedAt(Instant.now(Clock.systemUTC()))
                 .build();
     }
 }
