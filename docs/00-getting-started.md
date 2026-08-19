@@ -42,6 +42,7 @@ Vault, Zipkin) — voir `02-app-infra.md`.
 - [`09-admin-dashboard.md`](09-admin-dashboard.md) — Admin Dashboard Angular (branche `feat/admin-dashboard`).
 - [`10-audit-demo-guide.md`](10-audit-demo-guide.md) — pour chaque point de `travel-plan_audit.md`, la commande exacte à taper ou le point à savoir expliquer à l'oral.
 - [`nouveautes-vs-buy02.md`](nouveautes-vs-buy02.md) — tout ce qui est vraiment nouveau par rapport à buy-02, mis à jour à chaque branche.
+- [`troubleshooting.md`](troubleshooting.md) — journal des problèmes réels rencontrés (infra, CI/CD, code), avec la cause et le correctif. Pas numéroté ni lié à une branche précise, mis à jour en continu.
 
 Chaque nouvelle page prend le numéro suivant au moment où sa branche est
 construite — pas de trous ni de numéros réservés à l'avance, pour éviter le
