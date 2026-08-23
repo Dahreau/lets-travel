@@ -44,9 +44,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/travels").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
                         .requestMatchers(HttpMethod.PUT, "/api/travels/**").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
                         .requestMatchers(HttpMethod.DELETE, "/api/travels/**").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
-                        // Le reste (GET, y compris la liste complete) reste ADMIN-only pour l'instant :
-                        // un "GET mes voyages" filtre pour un manager est une fonctionnalite a part
-                        // (dashboard manager), pas encore construite.
+                        // GET (liste + detail) ouvert a tout appelant authentifie (TRAVELER minimum,
+                        // herite par TRAVEL_MANAGER/ADMIN) : un Traveler doit pouvoir consulter/parcourir
+                        // les voyages pour s'y abonner (feat/traveler-subscriptions) et payer
+                        // (feat/travel-pricing-and-traveler-payment, qui recupere le prix via ce meme
+                        // GET, appele avec le JWT propage de l'appelant original - voir
+                        // payment-service TravelServiceClient). Un "GET mes voyages" filtre pour un
+                        // manager reste une fonctionnalite a part (dashboard manager), pas encore construite.
+                        .requestMatchers(HttpMethod.GET, "/api/travels/**").hasRole(TRAVELER_ROLE)
                         .anyRequest().hasRole(ADMIN_ROLE))
                 .addFilterBefore(
                         new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);

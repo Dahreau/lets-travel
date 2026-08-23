@@ -12,6 +12,7 @@ import io.jsonwebtoken.MalformedJwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -31,18 +32,25 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void setsAuthenticationForValidToken() throws Exception {
+        UUID userId = UUID.randomUUID();
         Claims claims = mock(Claims.class);
         when(request.getHeader("Authorization")).thenReturn("Bearer valid-token");
         when(jwtService.validateAndParse("valid-token")).thenReturn(claims);
-        when(claims.getSubject()).thenReturn("admin@travel-plan.com");
-        when(jwtService.extractRole(claims)).thenReturn("ADMIN");
+        when(claims.getSubject()).thenReturn("traveler1");
+        when(jwtService.extractRole(claims)).thenReturn("TRAVELER");
+        when(jwtService.extractUserId(claims)).thenReturn(userId);
 
         filter.doFilterInternal(request, response, filterChain);
 
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         assertThat(authentication).isNotNull();
-        assertThat(authentication.getName()).isEqualTo("admin@travel-plan.com");
-        assertThat(authentication.getAuthorities()).extracting(Object::toString).containsExactly("ROLE_ADMIN");
+        assertThat(authentication.getName()).isEqualTo("traveler1");
+        assertThat(authentication.getAuthorities()).extracting(Object::toString).containsExactly("ROLE_TRAVELER");
+        assertThat(authentication.getPrincipal()).isInstanceOf(AuthenticatedUser.class);
+        AuthenticatedUser principal = (AuthenticatedUser) authentication.getPrincipal();
+        assertThat(principal.username()).isEqualTo("traveler1");
+        assertThat(principal.role()).isEqualTo("TRAVELER");
+        assertThat(principal.userId()).isEqualTo(userId);
         verify(filterChain).doFilter(request, response);
     }
 

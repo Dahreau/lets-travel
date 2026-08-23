@@ -50,6 +50,8 @@ public class TravelService {
                 .startDate(request.startDate())
                 .endDate(request.endDate())
                 .status(request.status())
+                .price(request.price())
+                .currency(request.currency().toUpperCase())
                 .build();
 
         attachDestinations(travel, request.destinations());
@@ -70,6 +72,8 @@ public class TravelService {
         travel.setStartDate(request.startDate());
         travel.setEndDate(request.endDate());
         travel.setStatus(request.status());
+        travel.setPrice(request.price());
+        travel.setCurrency(request.currency().toUpperCase());
 
         attachDestinations(travel, request.destinations());
         attachTransportations(travel, request.transportations());

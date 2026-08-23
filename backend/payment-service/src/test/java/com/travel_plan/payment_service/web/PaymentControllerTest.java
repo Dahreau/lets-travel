@@ -19,6 +19,7 @@ import com.travel_plan.payment_service.exception.ApiExceptionHandler;
 import com.travel_plan.payment_service.exception.InvalidRefundException;
 import com.travel_plan.payment_service.exception.PaymentMethodNotFoundException;
 import com.travel_plan.payment_service.exception.PaymentNotFoundException;
+import com.travel_plan.payment_service.security.AuthenticatedUser;
 import com.travel_plan.payment_service.service.PaymentService;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -26,11 +27,17 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class PaymentControllerTest {
+
+    private static final String AUTH_HEADER_VALUE = "Bearer test-token";
 
     private PaymentService paymentService;
     private MockMvc mockMvc;
@@ -58,9 +65,11 @@ class PaymentControllerTest {
     @Test
     void findByIdReturns404WhenMissing() throws Exception {
         UUID id = UUID.randomUUID();
-        when(paymentService.findById(id)).thenThrow(new PaymentNotFoundException(id));
+        when(paymentService.findById(any(UUID.class), any(AuthenticatedUser.class)))
+                .thenThrow(new PaymentNotFoundException(id));
 
-        mockMvc.perform(get("/api/payments/{id}", id)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/payments/{id}", id).principal(travelerAuth()))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -75,9 +84,12 @@ class PaymentControllerTest {
 
     @Test
     void createReturns201ForValidRequest() throws Exception {
-        when(paymentService.create(any(PaymentRequest.class))).thenReturn(newPayment(PaymentStatus.SUCCEEDED));
+        when(paymentService.create(any(PaymentRequest.class), any(AuthenticatedUser.class), any(String.class)))
+                .thenReturn(newPayment(PaymentStatus.SUCCEEDED));
 
         mockMvc.perform(post("/api/payments")
+                        .principal(travelerAuth())
+                        .header(HttpHeaders.AUTHORIZATION, AUTH_HEADER_VALUE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest())))
                 .andExpect(status().isCreated())
@@ -85,23 +97,35 @@ class PaymentControllerTest {
     }
 
     @Test
-    void createReturns400WhenAmountNotPositive() throws Exception {
-        PaymentRequest request = new PaymentRequest(
-                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("-10.00"), "EUR");
+    void createReturns400WhenTravelIdMissing() throws Exception {
+        PaymentRequest request = new PaymentRequest(null, null, UUID.randomUUID());
 
         mockMvc.perform(post("/api/payments")
+                        .principal(travelerAuth())
+                        .header(HttpHeaders.AUTHORIZATION, AUTH_HEADER_VALUE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
+    void createReturns400WhenAuthorizationHeaderMissing() throws Exception {
+        mockMvc.perform(post("/api/payments")
+                        .principal(travelerAuth())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validRequest())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void createReturns404WhenPaymentMethodMissing() throws Exception {
         UUID methodId = UUID.randomUUID();
-        when(paymentService.create(any(PaymentRequest.class)))
+        when(paymentService.create(any(PaymentRequest.class), any(AuthenticatedUser.class), any(String.class)))
                 .thenThrow(new PaymentMethodNotFoundException(methodId));
 
         mockMvc.perform(post("/api/payments")
+                        .principal(travelerAuth())
+                        .header(HttpHeaders.AUTHORIZATION, AUTH_HEADER_VALUE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest())))
                 .andExpect(status().isNotFound());
@@ -123,6 +147,13 @@ class PaymentControllerTest {
         when(paymentService.refund(id)).thenThrow(new InvalidRefundException(id));
 
         mockMvc.perform(post("/api/payments/{id}/refund", id)).andExpect(status().isConflict());
+    }
+
+    // MockMvc standalone n'a pas la chaine de filtres Spring Security : on simule directement
+    // ce que JwtAuthenticationFilter aurait pose dans le SecurityContext, via .principal(...).
+    private Authentication travelerAuth() {
+        AuthenticatedUser user = new AuthenticatedUser("traveler1", "TRAVELER", UUID.randomUUID());
+        return new UsernamePasswordAuthenticationToken(user, null, List.of(new SimpleGrantedAuthority("ROLE_TRAVELER")));
     }
 
     private Payment newPayment(PaymentStatus status) {
@@ -148,7 +179,6 @@ class PaymentControllerTest {
     }
 
     private PaymentRequest validRequest() {
-        return new PaymentRequest(
-                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("99.90"), "EUR");
+        return new PaymentRequest(UUID.randomUUID(), null, UUID.randomUUID());
     }
 }

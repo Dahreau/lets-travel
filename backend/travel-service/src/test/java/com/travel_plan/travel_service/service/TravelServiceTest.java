@@ -257,6 +257,8 @@ class TravelServiceTest {
                 LocalDate.of(2026, Month.SEPTEMBER, 1),
                 LocalDate.of(2026, Month.SEPTEMBER, 8),
                 TravelStatus.PLANNED,
+                new BigDecimal("450.00"),
+                "EUR",
                 List.of(lisbon, porto),
                 List.of(transportation));
     }

@@ -102,6 +102,8 @@ class TravelControllerTest {
                 LocalDate.of(2026, Month.SEPTEMBER, 1),
                 LocalDate.of(2026, Month.SEPTEMBER, 10),
                 TravelStatus.PLANNED,
+                new BigDecimal("450.00"),
+                "EUR",
                 List.of(),
                 List.of());
 
@@ -120,6 +122,8 @@ class TravelControllerTest {
                 LocalDate.of(2026, Month.SEPTEMBER, 10),
                 LocalDate.of(2026, Month.SEPTEMBER, 1),
                 TravelStatus.PLANNED,
+                new BigDecimal("450.00"),
+                "EUR",
                 List.of(new DestinationRequest(
                         "Lisbon", "Portugal",
                         LocalDate.of(2026, Month.SEPTEMBER, 1), LocalDate.of(2026, Month.SEPTEMBER, 5),
@@ -141,6 +145,8 @@ class TravelControllerTest {
                 LocalDate.of(2026, Month.SEPTEMBER, 1),
                 LocalDate.of(2026, Month.SEPTEMBER, 10),
                 TravelStatus.PLANNED,
+                new BigDecimal("450.00"),
+                "EUR",
                 List.of(new DestinationRequest(
                         "Lisbon", "Portugal",
                         LocalDate.of(2026, Month.SEPTEMBER, 5), LocalDate.of(2026, Month.SEPTEMBER, 1),
@@ -165,6 +171,8 @@ class TravelControllerTest {
                 LocalDate.of(2026, Month.SEPTEMBER, 1),
                 LocalDate.of(2026, Month.SEPTEMBER, 10),
                 TravelStatus.PLANNED,
+                new BigDecimal("450.00"),
+                "EUR",
                 List.of(new DestinationRequest(
                         "Lisbon", "Portugal",
                         LocalDate.of(2026, Month.SEPTEMBER, 1), LocalDate.of(2026, Month.SEPTEMBER, 5),
@@ -189,6 +197,8 @@ class TravelControllerTest {
                 LocalDate.of(2026, Month.SEPTEMBER, 1),
                 LocalDate.of(2026, Month.SEPTEMBER, 10),
                 TravelStatus.PLANNED,
+                new BigDecimal("450.00"),
+                "EUR",
                 List.of(new DestinationRequest(
                         "Lisbon", "Portugal",
                         LocalDate.of(2026, Month.SEPTEMBER, 1), LocalDate.of(2026, Month.SEPTEMBER, 5),
@@ -212,6 +222,8 @@ class TravelControllerTest {
                 LocalDate.of(2026, Month.SEPTEMBER, 1),
                 LocalDate.of(2026, Month.SEPTEMBER, 10),
                 TravelStatus.PLANNED,
+                new BigDecimal("450.00"),
+                "EUR",
                 List.of(new DestinationRequest(
                         "Lisbon", "Portugal",
                         LocalDate.of(2026, Month.SEPTEMBER, 1), LocalDate.of(2026, Month.SEPTEMBER, 5),
@@ -301,6 +313,8 @@ class TravelControllerTest {
                 .startDate(LocalDate.of(2026, Month.SEPTEMBER, 1))
                 .endDate(LocalDate.of(2026, Month.SEPTEMBER, 10))
                 .status(TravelStatus.PLANNED)
+                .price(new BigDecimal("450.00"))
+                .currency("EUR")
                 .build();
 
         Destination destination = Destination.builder()
@@ -365,6 +379,8 @@ class TravelControllerTest {
                 LocalDate.of(2026, Month.SEPTEMBER, 1),
                 LocalDate.of(2026, Month.SEPTEMBER, 10),
                 TravelStatus.PLANNED,
+                new BigDecimal("450.00"),
+                "EUR",
                 List.of(destination),
                 List.of());
     }
