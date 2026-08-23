@@ -9,11 +9,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.travel_plan.payment_service.client.TravelServiceClient;
+import com.travel_plan.payment_service.client.TravelSummary;
 import com.travel_plan.payment_service.domain.MethodType;
 import com.travel_plan.payment_service.domain.Payment;
 import com.travel_plan.payment_service.domain.PaymentMethod;
 import com.travel_plan.payment_service.domain.PaymentStatus;
 import com.travel_plan.payment_service.domain.ProviderType;
+import com.travel_plan.payment_service.exception.ForbiddenException;
+import com.travel_plan.payment_service.exception.InvalidPaymentRequestException;
 import com.travel_plan.payment_service.exception.InvalidRefundException;
 import com.travel_plan.payment_service.exception.PaymentMethodNotFoundException;
 import com.travel_plan.payment_service.exception.PaymentNotFoundException;
@@ -22,6 +26,7 @@ import com.travel_plan.payment_service.provider.PaymentProvider;
 import com.travel_plan.payment_service.provider.PaymentProviderResolver;
 import com.travel_plan.payment_service.repository.PaymentMethodRepository;
 import com.travel_plan.payment_service.repository.PaymentRepository;
+import com.travel_plan.payment_service.security.AuthenticatedUser;
 import com.travel_plan.payment_service.web.PaymentRequest;
 import java.math.BigDecimal;
 import java.util.List;
@@ -31,35 +36,44 @@ import org.junit.jupiter.api.Test;
 
 class PaymentServiceTest {
 
+    private static final String AUTH_HEADER = "Bearer test-token";
+
     private final PaymentRepository paymentRepository = mock(PaymentRepository.class);
     private final PaymentMethodRepository paymentMethodRepository = mock(PaymentMethodRepository.class);
     private final PaymentProviderResolver paymentProviderResolver = mock(PaymentProviderResolver.class);
-    private final PaymentService paymentService =
-            new PaymentService(paymentRepository, paymentMethodRepository, paymentProviderResolver);
+    private final TravelServiceClient travelServiceClient = mock(TravelServiceClient.class);
+    private final PaymentService paymentService = new PaymentService(
+            paymentRepository, paymentMethodRepository, paymentProviderResolver, travelServiceClient);
 
     @Test
-    void createChargesResolvedProviderAndSavesPayment() {
+    void createChargesResolvedProviderUsingPriceFromTravelService() {
+        AuthenticatedUser traveler = traveler();
         UUID methodId = UUID.randomUUID();
+        UUID travelId = UUID.randomUUID();
         PaymentMethod method = PaymentMethod.builder()
                 .id(methodId)
+                .ownerId(traveler.userId())
                 .provider(ProviderType.STRIPE)
                 .type(MethodType.CARD)
                 .providerToken("pm_card_visa")
                 .build();
         PaymentProvider stripeProvider = mock(PaymentProvider.class);
         when(paymentMethodRepository.findById(methodId)).thenReturn(Optional.of(method));
+        when(travelServiceClient.getPricedTravel(travelId, AUTH_HEADER))
+                .thenReturn(new TravelSummary(travelId, new BigDecimal("450.00"), "eur"));
         when(paymentProviderResolver.resolve(ProviderType.STRIPE)).thenReturn(stripeProvider);
         when(stripeProvider.charge(any())).thenReturn(new ChargeResult("pi_123", PaymentStatus.SUCCEEDED));
         when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        PaymentRequest request = new PaymentRequest(
-                UUID.randomUUID(), UUID.randomUUID(), methodId, new BigDecimal("99.90"), "eur");
-        Payment created = paymentService.create(request);
+        PaymentRequest request = new PaymentRequest(travelId, null, methodId);
+        Payment created = paymentService.create(request, traveler, AUTH_HEADER);
 
+        assertThat(created.getOwnerId()).isEqualTo(traveler.userId());
+        assertThat(created.getAmount()).isEqualByComparingTo("450.00");
+        assertThat(created.getCurrency()).isEqualTo("EUR");
         assertThat(created.getProvider()).isEqualTo(ProviderType.STRIPE);
         assertThat(created.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(created.getProviderReference()).isEqualTo("pi_123");
-        assertThat(created.getCurrency()).isEqualTo("EUR");
     }
 
     @Test
@@ -67,11 +81,30 @@ class PaymentServiceTest {
         UUID methodId = UUID.randomUUID();
         when(paymentMethodRepository.findById(methodId)).thenReturn(Optional.empty());
 
-        PaymentRequest request = new PaymentRequest(
-                UUID.randomUUID(), UUID.randomUUID(), methodId, new BigDecimal("10.00"), "EUR");
+        PaymentRequest request = new PaymentRequest(UUID.randomUUID(), null, methodId);
 
-        assertThatThrownBy(() -> paymentService.create(request))
+        assertThatThrownBy(() -> paymentService.create(request, traveler(), AUTH_HEADER))
                 .isInstanceOf(PaymentMethodNotFoundException.class);
+    }
+
+    @Test
+    void createThrowsForbiddenWhenPaymentMethodNotOwnedByCaller() {
+        UUID methodId = UUID.randomUUID();
+        PaymentMethod method = PaymentMethod.builder().id(methodId).ownerId(UUID.randomUUID()).build();
+        when(paymentMethodRepository.findById(methodId)).thenReturn(Optional.of(method));
+
+        PaymentRequest request = new PaymentRequest(UUID.randomUUID(), null, methodId);
+
+        assertThatThrownBy(() -> paymentService.create(request, traveler(), AUTH_HEADER))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void createThrowsWhenAdminOmitsOwnerId() {
+        PaymentRequest request = new PaymentRequest(UUID.randomUUID(), null, UUID.randomUUID());
+
+        assertThatThrownBy(() -> paymentService.create(request, admin(), AUTH_HEADER))
+                .isInstanceOf(InvalidPaymentRequestException.class);
     }
 
     @Test
@@ -79,7 +112,26 @@ class PaymentServiceTest {
         UUID id = UUID.randomUUID();
         when(paymentRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> paymentService.findById(id)).isInstanceOf(PaymentNotFoundException.class);
+        assertThatThrownBy(() -> paymentService.findById(id, admin())).isInstanceOf(PaymentNotFoundException.class);
+    }
+
+    @Test
+    void findByIdThrowsForbiddenWhenNotOwner() {
+        UUID id = UUID.randomUUID();
+        Payment payment = Payment.builder().id(id).ownerId(UUID.randomUUID()).build();
+        when(paymentRepository.findById(id)).thenReturn(Optional.of(payment));
+
+        assertThatThrownBy(() -> paymentService.findById(id, traveler())).isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void findByIdSucceedsForOwner() {
+        AuthenticatedUser traveler = traveler();
+        UUID id = UUID.randomUUID();
+        Payment payment = Payment.builder().id(id).ownerId(traveler.userId()).build();
+        when(paymentRepository.findById(id)).thenReturn(Optional.of(payment));
+
+        assertThat(paymentService.findById(id, traveler)).isEqualTo(payment);
     }
 
     @Test
@@ -136,5 +188,13 @@ class PaymentServiceTest {
         when(paymentRepository.findAll()).thenReturn(List.of(Payment.builder().build()));
 
         assertThat(paymentService.findAll()).hasSize(1);
+    }
+
+    private AuthenticatedUser admin() {
+        return new AuthenticatedUser("admin@travel-plan.com", "ADMIN", null);
+    }
+
+    private AuthenticatedUser traveler() {
+        return new AuthenticatedUser("traveler1", "TRAVELER", UUID.randomUUID());
     }
 }

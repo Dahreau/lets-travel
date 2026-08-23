@@ -18,6 +18,7 @@ import com.travel_plan.payment_service.domain.PaymentMethod;
 import com.travel_plan.payment_service.domain.ProviderType;
 import com.travel_plan.payment_service.exception.ApiExceptionHandler;
 import com.travel_plan.payment_service.exception.PaymentMethodNotFoundException;
+import com.travel_plan.payment_service.security.AuthenticatedUser;
 import com.travel_plan.payment_service.service.PaymentMethodService;
 import java.time.Instant;
 import java.util.List;
@@ -26,6 +27,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -46,9 +50,9 @@ class PaymentMethodControllerTest {
 
     @Test
     void findAllReturnsAllPaymentMethods() throws Exception {
-        when(paymentMethodService.findAll()).thenReturn(List.of(newPaymentMethod()));
+        when(paymentMethodService.findAll(any(AuthenticatedUser.class))).thenReturn(List.of(newPaymentMethod()));
 
-        mockMvc.perform(get("/api/payment-methods"))
+        mockMvc.perform(get("/api/payment-methods").principal(travelerAuth()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].brand").value("visa"))
                 .andExpect(jsonPath("$[0].last4").value("4242"));
@@ -56,9 +60,9 @@ class PaymentMethodControllerTest {
 
     @Test
     void findAllDoesNotExposeProviderToken() throws Exception {
-        when(paymentMethodService.findAll()).thenReturn(List.of(newPaymentMethod()));
+        when(paymentMethodService.findAll(any(AuthenticatedUser.class))).thenReturn(List.of(newPaymentMethod()));
 
-        mockMvc.perform(get("/api/payment-methods"))
+        mockMvc.perform(get("/api/payment-methods").principal(travelerAuth()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].providerToken").doesNotExist());
     }
@@ -66,9 +70,11 @@ class PaymentMethodControllerTest {
     @Test
     void findByIdReturns404WhenMissing() throws Exception {
         UUID id = UUID.randomUUID();
-        when(paymentMethodService.findById(id)).thenThrow(new PaymentMethodNotFoundException(id));
+        when(paymentMethodService.findById(any(UUID.class), any(AuthenticatedUser.class)))
+                .thenThrow(new PaymentMethodNotFoundException(id));
 
-        mockMvc.perform(get("/api/payment-methods/{id}", id)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/payment-methods/{id}", id).principal(travelerAuth()))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -78,9 +84,11 @@ class PaymentMethodControllerTest {
 
     @Test
     void createReturns201ForValidRequest() throws Exception {
-        when(paymentMethodService.create(any(PaymentMethodRequest.class))).thenReturn(newPaymentMethod());
+        when(paymentMethodService.create(any(PaymentMethodRequest.class), any(AuthenticatedUser.class)))
+                .thenReturn(newPaymentMethod());
 
         mockMvc.perform(post("/api/payment-methods")
+                        .principal(travelerAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest())))
                 .andExpect(status().isCreated())
@@ -90,9 +98,10 @@ class PaymentMethodControllerTest {
     @Test
     void createReturns400WhenProviderTokenMissing() throws Exception {
         PaymentMethodRequest request = new PaymentMethodRequest(
-                UUID.randomUUID(), ProviderType.STRIPE, MethodType.CARD, "", "visa", "4242", true);
+                null, ProviderType.STRIPE, MethodType.CARD, "", "visa", "4242", true);
 
         mockMvc.perform(post("/api/payment-methods")
+                        .principal(travelerAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -100,10 +109,11 @@ class PaymentMethodControllerTest {
 
     @Test
     void createReturns409WhenDataIntegrityViolation() throws Exception {
-        when(paymentMethodService.create(any(PaymentMethodRequest.class)))
+        when(paymentMethodService.create(any(PaymentMethodRequest.class), any(AuthenticatedUser.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate"));
 
         mockMvc.perform(post("/api/payment-methods")
+                        .principal(travelerAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest())))
                 .andExpect(status().isConflict());
@@ -112,10 +122,11 @@ class PaymentMethodControllerTest {
     @Test
     void updateReturns200ForValidRequest() throws Exception {
         UUID id = UUID.randomUUID();
-        when(paymentMethodService.update(any(UUID.class), any(PaymentMethodRequest.class)))
+        when(paymentMethodService.update(any(UUID.class), any(PaymentMethodRequest.class), any(AuthenticatedUser.class)))
                 .thenReturn(newPaymentMethod());
 
         mockMvc.perform(put("/api/payment-methods/{id}", id)
+                        .principal(travelerAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest())))
                 .andExpect(status().isOk())
@@ -125,10 +136,11 @@ class PaymentMethodControllerTest {
     @Test
     void updateReturns404WhenMissing() throws Exception {
         UUID id = UUID.randomUUID();
-        when(paymentMethodService.update(any(UUID.class), any(PaymentMethodRequest.class)))
+        when(paymentMethodService.update(any(UUID.class), any(PaymentMethodRequest.class), any(AuthenticatedUser.class)))
                 .thenThrow(new PaymentMethodNotFoundException(id));
 
         mockMvc.perform(put("/api/payment-methods/{id}", id)
+                        .principal(travelerAuth())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest())))
                 .andExpect(status().isNotFound());
@@ -138,15 +150,26 @@ class PaymentMethodControllerTest {
     void deleteRemovesExistingPaymentMethod() throws Exception {
         UUID id = UUID.randomUUID();
 
-        mockMvc.perform(delete("/api/payment-methods/{id}", id)).andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/payment-methods/{id}", id).principal(travelerAuth()))
+                .andExpect(status().isNoContent());
     }
 
     @Test
     void deleteReturns404WhenMissing() throws Exception {
         UUID id = UUID.randomUUID();
-        doThrow(new PaymentMethodNotFoundException(id)).when(paymentMethodService).delete(id);
+        doThrow(new PaymentMethodNotFoundException(id))
+                .when(paymentMethodService)
+                .delete(any(UUID.class), any(AuthenticatedUser.class));
 
-        mockMvc.perform(delete("/api/payment-methods/{id}", id)).andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/payment-methods/{id}", id).principal(travelerAuth()))
+                .andExpect(status().isNotFound());
+    }
+
+    // MockMvc standalone n'a pas la chaine de filtres Spring Security : on simule directement
+    // ce que JwtAuthenticationFilter aurait pose dans le SecurityContext, via .principal(...).
+    private Authentication travelerAuth() {
+        AuthenticatedUser user = new AuthenticatedUser("traveler1", "TRAVELER", UUID.randomUUID());
+        return new UsernamePasswordAuthenticationToken(user, null, List.of(new SimpleGrantedAuthority("ROLE_TRAVELER")));
     }
 
     private PaymentMethod newPaymentMethod() {
@@ -165,6 +188,6 @@ class PaymentMethodControllerTest {
 
     private PaymentMethodRequest validRequest() {
         return new PaymentMethodRequest(
-                UUID.randomUUID(), ProviderType.STRIPE, MethodType.CARD, "pm_card_visa", "visa", "4242", true);
+                null, ProviderType.STRIPE, MethodType.CARD, "pm_card_visa", "visa", "4242", true);
     }
 }

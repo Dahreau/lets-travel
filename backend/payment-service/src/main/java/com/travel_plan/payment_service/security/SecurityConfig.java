@@ -3,6 +3,9 @@ package com.travel_plan.payment_service.security;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -14,16 +17,47 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    private static final String ADMIN_ROLE = "ADMIN";
+    private static final String TRAVEL_MANAGER_ROLE = "TRAVEL_MANAGER";
+    private static final String TRAVELER_ROLE = "TRAVELER";
+
     private final JwtService jwtService;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable()) // NOSONAR java:S4502 - API stateless (JWT en header Authorization, aucun cookie de session), donc pas de surface CSRF
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("ADMIN"))
+                .authorizeHttpRequests(auth -> auth
+                        // Un traveler consulte/paie SES paiements et methodes de paiement (verifie en plus
+                        // dans PaymentService/PaymentMethodService, la HttpSecurity ne sait pas encore
+                        // lequel est "le sien"). Matchers a un seul segment ("/*", pas "/**") pour
+                        // /api/payments/{id} : la liste complete non filtree (GET /api/payments) reste
+                        // ADMIN-only via le anyRequest ci-dessous, PaymentService.findAll() ne filtre pas
+                        // par proprietaire.
+                        .requestMatchers(HttpMethod.GET, "/api/payments/*").hasRole(TRAVELER_ROLE)
+                        .requestMatchers(HttpMethod.POST, "/api/payments").hasRole(TRAVELER_ROLE)
+                        // GET /api/payment-methods (liste) est filtree par proprietaire dans
+                        // PaymentMethodService.findAll(), donc ouvrable au traveler sans risque de fuite.
+                        .requestMatchers(HttpMethod.GET, "/api/payment-methods/**").hasRole(TRAVELER_ROLE)
+                        .requestMatchers(HttpMethod.POST, "/api/payment-methods").hasRole(TRAVELER_ROLE)
+                        .requestMatchers(HttpMethod.PUT, "/api/payment-methods/*").hasRole(TRAVELER_ROLE)
+                        .requestMatchers(HttpMethod.DELETE, "/api/payment-methods/*").hasRole(TRAVELER_ROLE)
+                        // Le reste (liste complete des paiements, remboursement, ...) reste ADMIN-only.
+                        .anyRequest().hasRole(ADMIN_ROLE))
                 .addFilterBefore(
                         new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    // Meme mecanisme que travel-service (voir son SecurityConfig) : ADMIN implies TRAVEL_MANAGER
+    // implies TRAVELER, pour rester coherent avec le modele de roles du projet meme si aucune
+    // route de payment-service ne differencie encore specifiquement TRAVEL_MANAGER.
+    @Bean
+    public RoleHierarchy roleHierarchy() {
+        return RoleHierarchyImpl.withDefaultRolePrefix()
+                .role(ADMIN_ROLE).implies(TRAVEL_MANAGER_ROLE)
+                .role(TRAVEL_MANAGER_ROLE).implies(TRAVELER_ROLE)
+                .build();
     }
 }

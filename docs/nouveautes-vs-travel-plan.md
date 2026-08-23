@@ -98,3 +98,54 @@ l'ordre de déclaration et s'arrête au premier qui correspond. Sans ça, la rè
 `DELETE /api/travels/**` (réservée à ADMIN/TRAVEL_MANAGER) interceptait en premier un
 `DELETE .../subscriptions/{id}` et empêchait un simple Traveler d'annuler son propre
 abonnement.
+
+## `feat/travel-pricing-and-traveler-payment` — prix réel du voyage et premier appel inter-service
+
+### Avant (travel-plan)
+
+`Travel` n'avait pas de prix du tout : `PaymentRequest` demandait directement un `amount` et
+une `currency` au client, et `payment-service` chargeait ce montant tel quel auprès de
+Stripe/PayPal, sans jamais le confronter à quoi que ce soit côté `travel-service`. N'importe
+quel appelant pouvait donc payer le montant de son choix pour n'importe quel voyage — un vrai
+trou de sécurité qu'on a choisi de corriger ici plutôt que de le reproduire.
+
+### Ce que Let's Travel ajoute
+
+**Un vrai prix persisté sur `Travel`.** `price` (`BigDecimal`) et `currency` (`String`,
+migration `V4__add_price_to_travels.sql`) sont désormais des champs réels de `Travel`, fixés
+par le Travel Manager à la création/modification (`TravelRequest.price`/`currency`,
+`@NotNull @Positive`). Volontairement laissés `NULL`-ables en base et en JPA (pas de
+`NOT NULL`/`DEFAULT` dans la migration, pas de `nullable = false` sur l'entité) pour ne pas
+casser les voyages déjà existants sous `spring.jpa.hibernate.ddl-auto=validate` — un voyage créé
+avant cette migration a `price = NULL` jusqu'à ce qu'un manager l'édite.
+
+**Le premier appel HTTP inter-service du projet.** Jusqu'ici, aucun microservice n'appelait
+directement un autre microservice de façon synchrone — seul `api-gateway` savait faire du
+load balancing entre répliques (voir `spring-cloud-starter-loadbalancer` dans son `pom.xml`).
+`payment-service` reproduit exactement ce même mécanisme (2 instances déclarées par service,
+`RestClient.Builder` cloné + `@LoadBalanced`, bundle SSL hérité en profil docker — voir
+`client/TravelServiceClientConfig.java`) pour appeler `GET /api/travels/{id}` sur
+`travel-service` et récupérer le prix réel avant de facturer quoi que ce soit. `amount` et
+`currency` ont été retirés de `PaymentRequest` : le montant vient uniquement de
+`travel-service`, plus jamais du client. Si le voyage n'a pas encore de prix (`price`/`currency`
+nuls), la création du paiement échoue en 409 (`TravelPriceNotSetException`) plutôt que de
+deviner un montant.
+
+**Propagation du JWT plutôt qu'un compte de service.** Le header `Authorization` du traveler
+appelant est transmis tel quel de `payment-service` vers `travel-service`
+(`PaymentController.create` reçoit `@RequestHeader(AUTHORIZATION)` et le fait suivre) — pas de
+mécanisme séparé de JWT technique/service-account. C'est ce même JWT que `travel-service`
+valide déjà pour ses propres routes. Conséquence directe : les routes `GET /api/travels/**` de
+`travel-service`, jusque-là réservées à `ADMIN`, ont dû être ouvertes à `TRAVELER` (déjà
+nécessaire pour la consultation des abonnements, voir section précédente — cette branche
+réutilise la même ouverture).
+
+**RBAC ajouté à `payment-service`, quasi inexistant avant.** `payment-service` n'avait ni
+`userId` dans son JWT, ni `AuthenticatedUser`, ni `RoleHierarchy` : tout était `ADMIN`-only
+(`anyRequest().hasRole("ADMIN")`). Cette branche réplique le mécanisme déjà en place dans
+`travel-service` — `resolveOwnerId()` (`PaymentService`/`PaymentMethodService`, copie de
+`TravelService.resolveManagerId()`) force `ownerId = caller.userId()` pour tout appelant non-ADMIN,
+et exige un `ownerId` explicite pour un ADMIN. `PaymentMethodService.findAll()` filtre
+désormais par propriétaire (`findByOwnerId`) sauf pour un ADMIN. `PaymentService.findAll()`
+(liste complète non filtrée) reste volontairement ADMIN-only — filtrer la liste complète des
+paiements n'était pas nécessaire pour fermer le trou de sécurité visé par cette branche.

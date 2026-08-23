@@ -246,6 +246,8 @@ services:
       VAULT_ROLE_ID: ${PAYMENT_SERVICE_ROLE_ID}
       VAULT_SECRET_ID: ${PAYMENT_SERVICE_SECRET_ID}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      TRAVEL_SERVICE_URI_1: https://lets-travel-app-travel-service-1:8083
+      TRAVEL_SERVICE_URI_2: https://lets-travel-app-travel-service-2:8083
       SPRING_PROFILES_ACTIVE: docker
     volumes:
       - ./infra/internal-tls/certs:/etc/internal-tls:ro

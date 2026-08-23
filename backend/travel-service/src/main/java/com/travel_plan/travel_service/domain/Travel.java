@@ -12,6 +12,7 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -57,6 +58,14 @@ public class Travel {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TravelStatus status;
+
+    // Volontairement nullable : les voyages crees avant l'introduction du prix n'en ont pas
+    // retroactivement (voir migration V4). payment-service refuse de facturer un voyage tant
+    // que price/currency ne sont pas renseignes (TravelPriceNotSetException). TravelRequest,
+    // lui, impose les deux pour toute creation/modification a partir de maintenant.
+    private BigDecimal price;
+
+    private String currency;
 
     @Builder.Default
     @OneToMany(mappedBy = "travel", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)

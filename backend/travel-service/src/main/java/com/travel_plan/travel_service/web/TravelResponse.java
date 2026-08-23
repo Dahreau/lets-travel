@@ -3,6 +3,7 @@ package com.travel_plan.travel_service.web;
 import com.travel_plan.travel_service.domain.Destination;
 import com.travel_plan.travel_service.domain.Travel;
 import com.travel_plan.travel_service.domain.TravelStatus;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -17,6 +18,8 @@ public record TravelResponse(
         LocalDate endDate,
         long durationDays,
         TravelStatus status,
+        BigDecimal price,
+        String currency,
         List<DestinationResponse> destinations,
         List<TransportationResponse> transportations,
         Instant createdAt,
@@ -37,6 +40,8 @@ public record TravelResponse(
                 travel.getEndDate(),
                 travel.getDurationDays(),
                 travel.getStatus(),
+                travel.getPrice(),
+                travel.getCurrency(),
                 destinations,
                 transportations,
                 travel.getCreatedAt(),
