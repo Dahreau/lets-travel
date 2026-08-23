@@ -119,6 +119,45 @@ class UserControllerTest {
                 .andExpect(status().isInternalServerError());
     }
 
+    // feat/traveler-experience : inscription publique, 1ere etape (profil User).
+    @Test
+    void registerReturns201AndForcesTravelerRole() throws Exception {
+        when(userService.register(any(UserRegistrationRequest.class))).thenReturn(newUserResponse("ada@travel-plan.com"));
+
+        UserRegistrationRequest request =
+                new UserRegistrationRequest("Ada", "Lovelace", "ada@travel-plan.com", null, null);
+
+        mockMvc.perform(post("/api/users/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("TRAVELER"));
+    }
+
+    @Test
+    void registerReturns400ForBlankFirstName() throws Exception {
+        UserRegistrationRequest request = new UserRegistrationRequest("", "Lovelace", "ada@travel-plan.com", null, null);
+
+        mockMvc.perform(post("/api/users/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void registerReturns409WhenEmailAlreadyExists() throws Exception {
+        when(userService.register(any(UserRegistrationRequest.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate email"));
+
+        UserRegistrationRequest request =
+                new UserRegistrationRequest("Ada", "Lovelace", "ada@travel-plan.com", null, null);
+
+        mockMvc.perform(post("/api/users/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict());
+    }
+
     @Test
     void updateReplacesUserFields() throws Exception {
         UUID id = UUID.randomUUID();

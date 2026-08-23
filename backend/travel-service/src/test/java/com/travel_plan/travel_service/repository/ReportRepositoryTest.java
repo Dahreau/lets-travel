@@ -1,0 +1,82 @@
+package com.travel_plan.travel_service.repository;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.travel_plan.travel_service.domain.Report;
+import com.travel_plan.travel_service.domain.ReportedType;
+import com.travel_plan.travel_service.domain.Travel;
+import com.travel_plan.travel_service.domain.TravelStatus;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.Month;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.test.context.TestPropertySource;
+
+@DataJpaTest
+@TestPropertySource(properties = {
+        "spring.flyway.enabled=false",
+        "spring.jpa.hibernate.ddl-auto=create-drop"
+})
+class ReportRepositoryTest {
+
+    @Autowired
+    private ReportRepository reportRepository;
+
+    @Autowired
+    private TravelRepository travelRepository;
+
+    @Autowired
+    private TestEntityManager entityManager;
+
+    @Test
+    void listsReportsForATravel() {
+        Travel travel = travelRepository.save(newTravel());
+        reportRepository.save(newReport(travel));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(reportRepository.findByTravel_Id(travel.getId())).hasSize(1);
+    }
+
+    @Test
+    void listsAllReportsNewestFirst() throws InterruptedException {
+        Travel travel = travelRepository.save(newTravel());
+        Report older = reportRepository.save(newReport(travel));
+        // Ecart explicite : created_at n'a pas de precision infinie, on evite un ordre
+        // non deterministe entre les deux inserts.
+        Thread.sleep(5);
+        Report newer = reportRepository.save(newReport(travel));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(reportRepository.findAllByOrderByCreatedAtDesc())
+                .extracting(Report::getId)
+                .containsExactly(newer.getId(), older.getId());
+    }
+
+    private Travel newTravel() {
+        return Travel.builder()
+                .title("Iberian tour")
+                .managerId(UUID.randomUUID())
+                .startDate(LocalDate.of(2026, Month.SEPTEMBER, 1))
+                .endDate(LocalDate.of(2026, Month.SEPTEMBER, 10))
+                .status(TravelStatus.PLANNED)
+                .build();
+    }
+
+    private Report newReport(Travel travel) {
+        return Report.builder()
+                .travel(travel)
+                .reporterId(UUID.randomUUID())
+                .reportedType(ReportedType.MANAGER)
+                .reportedId(travel.getManagerId())
+                .reason("reason")
+                .createdAt(Instant.now(Clock.systemUTC()))
+                .build();
+    }
+}

@@ -54,6 +54,22 @@ public class ApiExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
+    // feat/traveler-experience : feedback sur voyage + signalement.
+    @ExceptionHandler(DuplicateFeedbackException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateFeedback(DuplicateFeedbackException ex) {
+        return build(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidFeedbackRequestException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidFeedbackRequest(InvalidFeedbackRequestException ex) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidReportRequestException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidReportRequest(InvalidReportRequestException ex) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<Map<String, Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());

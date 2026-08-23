@@ -29,6 +29,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login").permitAll()
+                        // feat/traveler-experience : inscription publique, 2e etape (identifiants +
+                        // Account role=TRAVELER force). Voir user-service SecurityConfig pour la 1ere
+                        // etape (profil User).
+                        .requestMatchers("/api/auth/register").permitAll()
                         .anyRequest().hasRole("ADMIN"))
                 .addFilterBefore(
                         new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
