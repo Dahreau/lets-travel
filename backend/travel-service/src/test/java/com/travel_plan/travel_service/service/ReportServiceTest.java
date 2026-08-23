@@ -85,9 +85,9 @@ class ReportServiceTest {
     @Test
     void submitThrowsWhenTravelMissing() {
         when(travelRepository.findById(travelId)).thenReturn(Optional.empty());
+        ReportRequest request = new ReportRequest(ReportedType.MANAGER, managerId, "reason");
 
-        assertThatThrownBy(() -> reportService.submit(
-                        travelId, new ReportRequest(ReportedType.MANAGER, managerId, "reason"), reporter))
+        assertThatThrownBy(() -> reportService.submit(travelId, request, reporter))
                 .isInstanceOf(TravelNotFoundException.class);
     }
 
@@ -96,9 +96,9 @@ class ReportServiceTest {
         Travel travel = travel();
         when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
         when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, reporterId)).thenReturn(false);
+        ReportRequest request = new ReportRequest(ReportedType.MANAGER, managerId, "reason");
 
-        assertThatThrownBy(() -> reportService.submit(
-                        travelId, new ReportRequest(ReportedType.MANAGER, managerId, "reason"), reporter))
+        assertThatThrownBy(() -> reportService.submit(travelId, request, reporter))
                 .isInstanceOf(ForbiddenException.class);
     }
 
@@ -107,9 +107,9 @@ class ReportServiceTest {
         Travel travel = travel();
         when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
         when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, reporterId)).thenReturn(true);
+        ReportRequest request = new ReportRequest(ReportedType.MANAGER, UUID.randomUUID(), "reason");
 
-        assertThatThrownBy(() -> reportService.submit(
-                        travelId, new ReportRequest(ReportedType.MANAGER, UUID.randomUUID(), "reason"), reporter))
+        assertThatThrownBy(() -> reportService.submit(travelId, request, reporter))
                 .isInstanceOf(InvalidReportRequestException.class);
     }
 
@@ -118,9 +118,9 @@ class ReportServiceTest {
         Travel travel = travel();
         when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
         when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, reporterId)).thenReturn(true);
+        ReportRequest request = new ReportRequest(ReportedType.TRAVELER, reporterId, "reason");
 
-        assertThatThrownBy(() -> reportService.submit(
-                        travelId, new ReportRequest(ReportedType.TRAVELER, reporterId, "reason"), reporter))
+        assertThatThrownBy(() -> reportService.submit(travelId, request, reporter))
                 .isInstanceOf(InvalidReportRequestException.class);
     }
 
@@ -130,9 +130,9 @@ class ReportServiceTest {
         when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
         when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, reporterId)).thenReturn(true);
         when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, otherTravelerId)).thenReturn(false);
+        ReportRequest request = new ReportRequest(ReportedType.TRAVELER, otherTravelerId, "reason");
 
-        assertThatThrownBy(() -> reportService.submit(
-                        travelId, new ReportRequest(ReportedType.TRAVELER, otherTravelerId, "reason"), reporter))
+        assertThatThrownBy(() -> reportService.submit(travelId, request, reporter))
                 .isInstanceOf(InvalidReportRequestException.class);
     }
 
@@ -140,9 +140,9 @@ class ReportServiceTest {
     void submitThrowsWhenCallerHasNoLinkedUserId() {
         Travel travel = travel();
         when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
+        ReportRequest request = new ReportRequest(ReportedType.MANAGER, managerId, "reason");
 
-        assertThatThrownBy(() -> reportService.submit(
-                        travelId, new ReportRequest(ReportedType.MANAGER, managerId, "reason"), admin))
+        assertThatThrownBy(() -> reportService.submit(travelId, request, admin))
                 .isInstanceOf(InvalidReportRequestException.class);
     }
 

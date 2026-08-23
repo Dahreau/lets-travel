@@ -44,13 +44,13 @@ class ReportRepositoryTest {
     }
 
     @Test
-    void listsAllReportsNewestFirst() throws InterruptedException {
+    void listsAllReportsNewestFirst() {
         Travel travel = travelRepository.save(newTravel());
-        Report older = reportRepository.save(newReport(travel));
-        // Ecart explicite : created_at n'a pas de precision infinie, on evite un ordre
-        // non deterministe entre les deux inserts.
-        Thread.sleep(5);
-        Report newer = reportRepository.save(newReport(travel));
+        // Deux timestamps explicitement distincts plutot qu'une vraie attente (Thread.sleep) :
+        // ordre deterministe garanti, test instantane. Voir troubleshooting.md.
+        Instant baseInstant = Instant.parse("2026-06-15T10:00:00Z");
+        Report older = reportRepository.save(newReport(travel, baseInstant));
+        Report newer = reportRepository.save(newReport(travel, baseInstant.plusSeconds(1)));
         entityManager.flush();
         entityManager.clear();
 
@@ -70,13 +70,17 @@ class ReportRepositoryTest {
     }
 
     private Report newReport(Travel travel) {
+        return newReport(travel, Instant.now(Clock.systemUTC()));
+    }
+
+    private Report newReport(Travel travel, Instant createdAt) {
         return Report.builder()
                 .travel(travel)
                 .reporterId(UUID.randomUUID())
                 .reportedType(ReportedType.MANAGER)
                 .reportedId(travel.getManagerId())
                 .reason("reason")
-                .createdAt(Instant.now(Clock.systemUTC()))
+                .createdAt(createdAt)
                 .build();
     }
 }

@@ -68,8 +68,9 @@ class FeedbackServiceTest {
     @Test
     void submitThrowsWhenTravelMissing() {
         when(travelRepository.findById(travelId)).thenReturn(Optional.empty());
+        FeedbackRequest request = new FeedbackRequest(4, null);
 
-        assertThatThrownBy(() -> feedbackService.submit(travelId, new FeedbackRequest(4, null), traveler))
+        assertThatThrownBy(() -> feedbackService.submit(travelId, request, traveler))
                 .isInstanceOf(TravelNotFoundException.class);
     }
 
@@ -78,8 +79,9 @@ class FeedbackServiceTest {
         Travel travel = travelEndedDaysAgo(10);
         when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
         when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, travelerId)).thenReturn(false);
+        FeedbackRequest request = new FeedbackRequest(4, null);
 
-        assertThatThrownBy(() -> feedbackService.submit(travelId, new FeedbackRequest(4, null), traveler))
+        assertThatThrownBy(() -> feedbackService.submit(travelId, request, traveler))
                 .isInstanceOf(ForbiddenException.class);
     }
 
@@ -88,8 +90,9 @@ class FeedbackServiceTest {
         Travel travel = travelEndingIn(5);
         when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
         when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, travelerId)).thenReturn(true);
+        FeedbackRequest request = new FeedbackRequest(4, null);
 
-        assertThatThrownBy(() -> feedbackService.submit(travelId, new FeedbackRequest(4, null), traveler))
+        assertThatThrownBy(() -> feedbackService.submit(travelId, request, traveler))
                 .isInstanceOf(InvalidFeedbackRequestException.class);
     }
 
@@ -100,8 +103,9 @@ class FeedbackServiceTest {
         when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, travelerId)).thenReturn(true);
         when(feedbackRepository.findByTravel_IdAndTravelerId(travelId, travelerId))
                 .thenReturn(Optional.of(Feedback.builder().build()));
+        FeedbackRequest request = new FeedbackRequest(4, null);
 
-        assertThatThrownBy(() -> feedbackService.submit(travelId, new FeedbackRequest(4, null), traveler))
+        assertThatThrownBy(() -> feedbackService.submit(travelId, request, traveler))
                 .isInstanceOf(DuplicateFeedbackException.class);
     }
 
@@ -109,8 +113,9 @@ class FeedbackServiceTest {
     void submitThrowsWhenCallerHasNoLinkedUserId() {
         Travel travel = travelEndedDaysAgo(10);
         when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
+        FeedbackRequest request = new FeedbackRequest(4, null);
 
-        assertThatThrownBy(() -> feedbackService.submit(travelId, new FeedbackRequest(4, null), admin))
+        assertThatThrownBy(() -> feedbackService.submit(travelId, request, admin))
                 .isInstanceOf(InvalidFeedbackRequestException.class);
     }
 
