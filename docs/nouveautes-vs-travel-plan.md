@@ -149,3 +149,49 @@ et exige un `ownerId` explicite pour un ADMIN. `PaymentMethodService.findAll()` 
 désormais par propriétaire (`findByOwnerId`) sauf pour un ADMIN. `PaymentService.findAll()`
 (liste complète non filtrée) reste volontairement ADMIN-only — filtrer la liste complète des
 paiements n'était pas nécessaire pour fermer le trou de sécurité visé par cette branche.
+
+## `feat/traveler-experience` — feedback, signalement, inscription publique traveler
+
+### Ce que Let's Travel ajoute
+
+**Feedback sur voyage.** Nouvelle entité `Feedback` (`travel-service`, migration
+`V5__create_feedbacks_and_reports_tables.sql`), même pattern que `Subscription` (vraie relation
+JPA vers `Travel`, `travelerId` en UUID nu vers `user-service`). `POST /api/travels/{id}/feedbacks`
+(TRAVELER) exige une participation prouvée (`SubscriptionRepository.existsByTravel_IdAndTravelerId`,
+n'importe quel statut — actif ou annulé, l'important est d'avoir été inscrit) et que le voyage
+soit terminé (`travel.endDate` déjà passé — l'énoncé parle de "leur expérience de voyage", donc
+après coup), un seul avis par `(travel, traveler)` (contrôle applicatif + index unique en base,
+défense en profondeur). `GET /api/travels/{id}/feedbacks` réservé au Travel Manager propriétaire
++ Admin, pour le contrôle qualité (item audit dédié).
+
+**Signalement (report) d'un manager ou d'un autre traveler.** Nouvelle entité `Report`, même
+service/migration. `POST /api/travels/{id}/reports` (TRAVELER, doit avoir participé au travel)
+accepte `reportedType` (`MANAGER`/`TRAVELER`) + `reportedId`, avec cohérence vérifiée côté
+serveur : pour `MANAGER`, `reportedId` doit être le manager de CE travel ; pour `TRAVELER`,
+`reportedId` doit être un autre abonné du MEME travel (jamais soi-même). `GET /api/reports`
+réservé à l'Admin seul (modération globale, tous travels confondus) — volontairement PAS
+accessible au Travel Manager concerné, sinon le mécanisme de signalement perdrait son sens. Le
+comptage public de signalements par manager (page publique manager, item backlog séparé) n'est
+pas construit ici — ce sera un endpoint dédié quand la branche dashboard manager sera abordée.
+
+**Inscription publique traveler, en 2 appels plutôt qu'un appel inter-service orchestré.**
+Décision de conception à noter : contrairement au flux payment-service → travel-service
+(branche précédente), l'inscription publique N'introduit PAS un 2e appel HTTP inter-service.
+`POST /api/users/register` (`user-service`, `permitAll`, rôle toujours forcé à `TRAVELER` —
+`UserRegistrationRequest` n'a pas de champ `role`) crée d'abord le profil `User` ; l'appelant
+utilise l'`id` renvoyé pour appeler ensuite `POST /api/auth/register` (`auth-service`,
+`permitAll`, `RegisterRequest.userId`) qui crée l'`Account` (rôle forcé `TRAVELER`) et renvoie
+directement un JWT de connexion (même réponse que `/login` — évite un aller-retour de plus).
+Choix délibéré plutôt que de répliquer le pattern `TravelServiceClient` une 3e fois : au moment
+de l'inscription, l'appelant n'a par définition aucun JWT encore émis, donc `auth-service`
+aurait dû s'auto-émettre un token technique `ADMIN` pour appeler l'endpoint `POST /api/users`
+existant (`ADMIN`-only) — mécanisme de compte de service qui n'existe nulle part ailleurs dans
+le projet et qui aurait ajouté un vrai risque (transaction non atomique entre 2 bases, JWT
+technique à sécuriser) pour un gain minime. Le flux en 2 appels publics est strictement le même
+niveau de confiance que l'existant : `POST /api/auth/accounts` (admin-only, préexistant)
+n'a jamais vérifié que le `userId` fourni existe réellement côté `user-service` non plus.
+**Limite connue, assumée** : pas d'atomicité entre les 2 appels — un `User` peut se retrouver
+sans `Account` si le 2e appel échoue (ex : username déjà pris, détecté explicitement côté
+`auth-service` avant l'insertion pour renvoyer 409 plutôt qu'un 500 issu de la contrainte unique
+DB). Acceptable pour ce projet : pas de nettoyage automatique prévu, à traiter manuellement si
+ça arrive en pratique.

@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,8 +12,11 @@ import com.travel_plan.auth_service.domain.Account;
 import com.travel_plan.auth_service.domain.Role;
 import com.travel_plan.auth_service.repository.AccountRepository;
 import com.travel_plan.auth_service.security.JwtService;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -27,6 +31,7 @@ class AuthControllerTest {
     private JwtService jwtService;
     private MockMvc mockMvc;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Clock clock = Clock.fixed(Instant.parse("2026-06-15T00:00:00Z"), ZoneOffset.UTC);
 
     @BeforeEach
     void setUp() {
@@ -34,7 +39,7 @@ class AuthControllerTest {
         passwordEncoder = mock(PasswordEncoder.class);
         jwtService = mock(JwtService.class);
 
-        AuthController controller = new AuthController(accountRepository, passwordEncoder, jwtService);
+        AuthController controller = new AuthController(accountRepository, passwordEncoder, jwtService, clock);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new ApiExceptionHandler())
                 .build();
@@ -85,5 +90,46 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new LoginRequest("admin", "wrong"))))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // feat/traveler-experience : inscription publique, 2e etape (identifiants).
+    @Test
+    void registerCreatesTravelerAccountAndReturnsToken() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(accountRepository.findByUsername("traveler1")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("secret")).thenReturn("hashed");
+        when(jwtService.generateToken("traveler1", "TRAVELER", userId)).thenReturn("a.b.c");
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequest("traveler1", "secret", userId))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.token").value("a.b.c"));
+    }
+
+    @Test
+    void registerReturns409WhenUsernameAlreadyTaken() throws Exception {
+        UUID userId = UUID.randomUUID();
+        Account existing = Account.builder()
+                .username("traveler1")
+                .passwordHash("hashed")
+                .role(Role.TRAVELER)
+                .userId(userId)
+                .createdAt(Instant.now())
+                .build();
+        when(accountRepository.findByUsername("traveler1")).thenReturn(Optional.of(existing));
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequest("traveler1", "secret", userId))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void registerReturns400ForBlankUsername() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequest("", "secret", UUID.randomUUID()))))
+                .andExpect(status().isBadRequest());
     }
 }

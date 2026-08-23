@@ -13,6 +13,7 @@ import com.travel_plan.user_service.domain.User;
 import com.travel_plan.user_service.exception.UserNotFoundException;
 import com.travel_plan.user_service.repository.UserRepository;
 import com.travel_plan.user_service.web.AddressRequest;
+import com.travel_plan.user_service.web.UserRegistrationRequest;
 import com.travel_plan.user_service.web.UserRequest;
 import com.travel_plan.user_service.web.UserResponse;
 import java.util.List;
@@ -77,6 +78,34 @@ class UserServiceTest {
         UserResponse response = userService.create(request);
 
         assertThat(response.address()).isNull();
+    }
+
+    // feat/traveler-experience : inscription publique - role toujours force a TRAVELER, meme
+    // si (hypothetiquement) autre chose etait tente, ce qui n'est de toute facon pas possible
+    // puisque UserRegistrationRequest n'a pas de champ role.
+    @Test
+    void registerForcesTravelerRole() {
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        UserRegistrationRequest request =
+                new UserRegistrationRequest("Ada", "Lovelace", "ada@travel-plan.com", "0102030405", null);
+
+        UserResponse response = userService.register(request);
+
+        assertThat(response.role()).isEqualTo(Role.TRAVELER);
+        assertThat(response.email()).isEqualTo("ada@travel-plan.com");
+    }
+
+    @Test
+    void registerAttachesAddressWhenProvided() {
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        AddressRequest addressRequest = new AddressRequest("10 Downing St", "London", "SW1A 2AA", "UK");
+        UserRegistrationRequest request =
+                new UserRegistrationRequest("Ada", "Lovelace", "ada@travel-plan.com", null, addressRequest);
+
+        UserResponse response = userService.register(request);
+
+        assertThat(response.address()).isNotNull();
+        assertThat(response.address().city()).isEqualTo("London");
     }
 
     @Test

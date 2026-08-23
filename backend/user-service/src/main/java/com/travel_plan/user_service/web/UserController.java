@@ -39,6 +39,14 @@ public class UserController {
         return userService.create(request);
     }
 
+    // Public (voir SecurityConfig) : feat/traveler-experience, 1ere etape de l'inscription
+    // publique traveler. Role force a TRAVELER cote UserService, pas de champ role ici.
+    @PostMapping("/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public UserResponse register(@Valid @RequestBody UserRegistrationRequest request) {
+        return userService.register(request);
+    }
+
     @PutMapping("/{id}")
     public UserResponse update(@PathVariable UUID id, @Valid @RequestBody UserRequest request) {
         return userService.update(id, request);

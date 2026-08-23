@@ -1,10 +1,12 @@
 package com.travel_plan.user_service.service;
 
 import com.travel_plan.user_service.domain.Address;
+import com.travel_plan.user_service.domain.Role;
 import com.travel_plan.user_service.domain.User;
 import com.travel_plan.user_service.exception.UserNotFoundException;
 import com.travel_plan.user_service.repository.UserRepository;
 import com.travel_plan.user_service.web.AddressRequest;
+import com.travel_plan.user_service.web.UserRegistrationRequest;
 import com.travel_plan.user_service.web.UserRequest;
 import com.travel_plan.user_service.web.UserResponse;
 import java.util.List;
@@ -35,6 +37,21 @@ public class UserService {
                 .email(request.email())
                 .phone(request.phone())
                 .role(request.role())
+                .build();
+        attachAddress(user, request.address());
+        return UserResponse.from(userRepository.save(user));
+    }
+
+    // feat/traveler-experience : inscription publique, role toujours force a TRAVELER (pas de
+    // champ role dans UserRegistrationRequest, contrairement a UserRequest utilise par
+    // POST /api/users qui reste admin-only).
+    public UserResponse register(UserRegistrationRequest request) {
+        User user = User.builder()
+                .firstName(request.firstName())
+                .lastName(request.lastName())
+                .email(request.email())
+                .phone(request.phone())
+                .role(Role.TRAVELER)
                 .build();
         attachAddress(user, request.address());
         return UserResponse.from(userRepository.save(user));

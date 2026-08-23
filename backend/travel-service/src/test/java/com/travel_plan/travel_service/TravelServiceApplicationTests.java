@@ -1,6 +1,8 @@
 package com.travel_plan.travel_service;
 
 import com.travel_plan.travel_service.graph.PlaceRepository;
+import com.travel_plan.travel_service.repository.FeedbackRepository;
+import com.travel_plan.travel_service.repository.ReportRepository;
 import com.travel_plan.travel_service.repository.SubscriptionRepository;
 import com.travel_plan.travel_service.repository.TravelRepository;
 import jakarta.persistence.EntityManagerFactory;
@@ -35,6 +37,15 @@ class TravelServiceApplicationTests {
 
 	@MockitoBean
 	private SubscriptionRepository subscriptionRepository;
+
+	// feat/traveler-experience - voir troubleshooting.md #9 : tout nouveau repository Spring
+	// Data JPA doit avoir son @MockitoBean ici, sinon le contexte ne demarre plus (JPA reel
+	// desactive ci-dessus, rien ne peut construire FeedbackRepository/ReportRepository sans ca).
+	@MockitoBean
+	private FeedbackRepository feedbackRepository;
+
+	@MockitoBean
+	private ReportRepository reportRepository;
 
 	@MockitoBean
 	private PlaceRepository placeRepository;

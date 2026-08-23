@@ -13,4 +13,9 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
             UUID travelId, UUID travelerId, SubscriptionStatus status);
 
     List<Subscription> findByTravel_Id(UUID travelId);
+
+    // Preuve de participation (feedback/report, feat/traveler-experience) : n'importe quel
+    // statut compte, y compris CANCELLED - avoir ete inscrit a un moment donne suffit,
+    // contrairement au cutoff de desabonnement qui ne regarde que les abonnements ACTIVE.
+    boolean existsByTravel_IdAndTravelerId(UUID travelId, UUID travelerId);
 }

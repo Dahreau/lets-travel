@@ -42,6 +42,17 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/travels/*/subscriptions/*").hasRole(TRAVELER_ROLE)
                         .requestMatchers(HttpMethod.GET, "/api/travels/*/subscriptions")
                         .hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
+                        // feat/traveler-experience : meme raison que les routes /subscriptions
+                        // ci-dessus, ces regles doivent precéder les regles generiques
+                        // /api/travels/** plus bas (premier match qui gagne). Soumettre un
+                        // feedback/signalement = TRAVELER minimum ; les consulter est reserve
+                        // au Travel Manager proprietaire (feedback) ou a l'Admin seul (reports,
+                        // moderation - un manager ne doit pas voir les signalements le concernant).
+                        .requestMatchers(HttpMethod.POST, "/api/travels/*/feedbacks").hasRole(TRAVELER_ROLE)
+                        .requestMatchers(HttpMethod.GET, "/api/travels/*/feedbacks")
+                        .hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
+                        .requestMatchers(HttpMethod.POST, "/api/travels/*/reports").hasRole(TRAVELER_ROLE)
+                        .requestMatchers(HttpMethod.GET, "/api/reports").hasRole(ADMIN_ROLE)
                         // Un Travel Manager cree/modifie/supprime ses propres voyages (verifie en
                         // plus dans TravelService, la HttpSecurity ne sait pas encore lequel est "le sien").
                         .requestMatchers(HttpMethod.POST, "/api/travels").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
