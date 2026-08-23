@@ -107,3 +107,11 @@ private SubscriptionRepository subscriptionRepository;
 **Solution** : ajout d'un `@ExceptionHandler(MissingRequestHeaderException.class)` explicite dans `ApiExceptionHandler`, renvoyant 400 avec le nom du header manquant dans le message.
 
 **À retenir** : dès qu'un controller de ce projet ajoute un `@RequestHeader` (ou tout autre paramètre de requête) obligatoire, vérifier que l'exception Spring correspondante (`MissingRequestHeaderException`, `MissingServletRequestParameterException`, etc.) a bien un handler dédié dans `ApiExceptionHandler` — le handler générique `Exception.class` présent dans ce projet masque silencieusement le comportement 400 par défaut de Spring pour toute exception non explicitement gérée.
+
+## 13. SonarQube (Quality Gate "New Code") : littéral `"/api/travels/**"` dupliqué 3x dans `SecurityConfig` (règle `S1192`)
+
+**Problème** : le scan SonarQube de la PR `feat/travel-pricing-and-traveler-payment` échoue sur `travel-service` avec *"Define a constant instead of duplicating this literal '/api/travels/**' 3 times."*. Cause : `SecurityConfig` utilisait déjà ce littéral pour les règles `PUT`/`DELETE` (héritées de `feat/travel-manager-role`) ; cette branche a ajouté une 3e occurrence pour la nouvelle règle `GET` (ouverture aux Travelers pour la consultation des prix/abonnements) — ce qui a fait passer le compteur au-dessus du seuil de duplication de Sonar, uniquement détecté sur le "New Code" de cette PR.
+
+**Solution** : extraction d'une constante `TRAVELS_WILDCARD = "/api/travels/**"`, réutilisée pour les 3 `requestMatchers` (`PUT`, `DELETE`, `GET`).
+
+**À retenir** : dès qu'un `requestMatchers(...)` réutilise un pattern d'URL déjà présent ailleurs dans le même `SecurityConfig`, vérifier s'il vaut mieux l'extraire en constante *avant* de pousser — Sonar ne le remontera que si le nouveau code fait franchir le seuil de duplication (donc invisible en relisant seulement le diff de la branche, il faut avoir en tête l'état du fichier dans son ensemble).

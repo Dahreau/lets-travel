@@ -20,6 +20,9 @@ public class SecurityConfig {
     private static final String ADMIN_ROLE = "ADMIN";
     private static final String TRAVEL_MANAGER_ROLE = "TRAVEL_MANAGER";
     private static final String TRAVELER_ROLE = "TRAVELER";
+    // Sonar S1192 (New Code) : ce literal apparaissait 3x (PUT/DELETE/GET) depuis l'ajout de
+    // la regle GET par feat/travel-pricing-and-traveler-payment - voir troubleshooting.md #13.
+    private static final String TRAVELS_WILDCARD = "/api/travels/**";
 
     private final JwtService jwtService;
 
@@ -42,8 +45,8 @@ public class SecurityConfig {
                         // Un Travel Manager cree/modifie/supprime ses propres voyages (verifie en
                         // plus dans TravelService, la HttpSecurity ne sait pas encore lequel est "le sien").
                         .requestMatchers(HttpMethod.POST, "/api/travels").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
-                        .requestMatchers(HttpMethod.PUT, "/api/travels/**").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
-                        .requestMatchers(HttpMethod.DELETE, "/api/travels/**").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
+                        .requestMatchers(HttpMethod.PUT, TRAVELS_WILDCARD).hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
+                        .requestMatchers(HttpMethod.DELETE, TRAVELS_WILDCARD).hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
                         // GET (liste + detail) ouvert a tout appelant authentifie (TRAVELER minimum,
                         // herite par TRAVEL_MANAGER/ADMIN) : un Traveler doit pouvoir consulter/parcourir
                         // les voyages pour s'y abonner (feat/traveler-subscriptions) et payer
@@ -51,7 +54,7 @@ public class SecurityConfig {
                         // GET, appele avec le JWT propage de l'appelant original - voir
                         // payment-service TravelServiceClient). Un "GET mes voyages" filtre pour un
                         // manager reste une fonctionnalite a part (dashboard manager), pas encore construite.
-                        .requestMatchers(HttpMethod.GET, "/api/travels/**").hasRole(TRAVELER_ROLE)
+                        .requestMatchers(HttpMethod.GET, TRAVELS_WILDCARD).hasRole(TRAVELER_ROLE)
                         .anyRequest().hasRole(ADMIN_ROLE))
                 .addFilterBefore(
                         new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);

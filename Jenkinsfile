@@ -6,7 +6,7 @@ def buildService(svc) {
 
 def sonarService(svc) {
     withSonarQubeEnv('sonarqube') {
-        sh "cd backend/${svc} && ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar -Dsonar.projectKey=travel-plan-${svc} -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300"
+        sh "cd backend/${svc} && ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar -Dsonar.projectKey=lets-travel-${svc} -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300"
     }
 }
 
@@ -21,7 +21,7 @@ def buildFrontend() {
 
 def sonarFrontend() {
     withSonarQubeEnv('sonarqube') {
-        sh "cd frontend && npx --yes @sonar/scan -Dsonar.projectKey=travel-plan-frontend -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300"
+        sh "cd frontend && npx --yes @sonar/scan -Dsonar.projectKey=lets-travel-frontend -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300"
     }
 }
 
