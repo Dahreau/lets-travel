@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.travel_plan.travel_service.domain.Feedback;
@@ -13,6 +15,7 @@ import com.travel_plan.travel_service.exception.DuplicateFeedbackException;
 import com.travel_plan.travel_service.exception.ForbiddenException;
 import com.travel_plan.travel_service.exception.InvalidFeedbackRequestException;
 import com.travel_plan.travel_service.exception.TravelNotFoundException;
+import com.travel_plan.travel_service.graph.RecommendationSyncService;
 import com.travel_plan.travel_service.repository.FeedbackRepository;
 import com.travel_plan.travel_service.repository.SubscriptionRepository;
 import com.travel_plan.travel_service.repository.TravelRepository;
@@ -34,8 +37,9 @@ class FeedbackServiceTest {
     private final SubscriptionRepository subscriptionRepository = mock(SubscriptionRepository.class);
     private final TravelRepository travelRepository = mock(TravelRepository.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-06-15T00:00:00Z"), ZoneOffset.UTC);
-    private final FeedbackService feedbackService =
-            new FeedbackService(feedbackRepository, subscriptionRepository, travelRepository, clock);
+    private final RecommendationSyncService recommendationSyncService = mock(RecommendationSyncService.class);
+    private final FeedbackService feedbackService = new FeedbackService(
+            feedbackRepository, subscriptionRepository, travelRepository, clock, recommendationSyncService);
 
     private final UUID travelId = UUID.randomUUID();
     private final UUID managerId = UUID.randomUUID();
@@ -65,6 +69,24 @@ class FeedbackServiceTest {
         assertThat(response.rating()).isEqualTo(4);
     }
 
+    // feat/search-and-recommendations : une note est un signal pour le moteur de recommandations.
+    @Test
+    void submitRecordsFeedbackForRecommendations() {
+        Travel travel = travelEndedDaysAgo(10);
+        when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
+        when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, travelerId)).thenReturn(true);
+        when(feedbackRepository.findByTravel_IdAndTravelerId(travelId, travelerId)).thenReturn(Optional.empty());
+        when(feedbackRepository.save(any(Feedback.class))).thenAnswer(invocation -> {
+            Feedback feedback = invocation.getArgument(0);
+            feedback.setId(UUID.randomUUID());
+            return feedback;
+        });
+
+        feedbackService.submit(travelId, new FeedbackRequest(4, "Great trip"), traveler);
+
+        verify(recommendationSyncService).recordFeedback(travelerId, travelId, 4);
+    }
+
     @Test
     void submitThrowsWhenTravelMissing() {
         when(travelRepository.findById(travelId)).thenReturn(Optional.empty());
@@ -83,6 +105,7 @@ class FeedbackServiceTest {
 
         assertThatThrownBy(() -> feedbackService.submit(travelId, request, traveler))
                 .isInstanceOf(ForbiddenException.class);
+        verify(recommendationSyncService, never()).recordFeedback(any(), any(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     @Test

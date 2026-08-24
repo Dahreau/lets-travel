@@ -9,6 +9,7 @@ import com.travel_plan.travel_service.exception.InvalidSubscriptionRequestExcept
 import com.travel_plan.travel_service.exception.SubscriptionCutoffException;
 import com.travel_plan.travel_service.exception.SubscriptionNotFoundException;
 import com.travel_plan.travel_service.exception.TravelNotFoundException;
+import com.travel_plan.travel_service.graph.RecommendationSyncService;
 import com.travel_plan.travel_service.repository.SubscriptionRepository;
 import com.travel_plan.travel_service.repository.TravelRepository;
 import com.travel_plan.travel_service.security.AuthenticatedUser;
@@ -34,6 +35,7 @@ public class SubscriptionService {
     private final SubscriptionRepository subscriptionRepository;
     private final TravelRepository travelRepository;
     private final Clock clock;
+    private final RecommendationSyncService recommendationSyncService;
 
     public SubscriptionResponse subscribe(UUID travelId, AuthenticatedUser caller) {
         Travel travel = getTravelOrThrow(travelId);
@@ -52,7 +54,11 @@ public class SubscriptionService {
                 .subscribedAt(Instant.now(clock))
                 .build();
 
-        return SubscriptionResponse.from(subscriptionRepository.save(subscription));
+        Subscription saved = subscriptionRepository.save(subscription);
+        // feat/search-and-recommendations : un abonnement = un signal "voyage aime" pour le
+        // moteur de recommandations base sur le contenu (voir RecommendationRepository).
+        recommendationSyncService.recordParticipation(travelerId, travelId);
+        return SubscriptionResponse.from(saved);
     }
 
     public void unsubscribe(UUID travelId, UUID subscriptionId, AuthenticatedUser caller) {
@@ -77,6 +83,7 @@ public class SubscriptionService {
         subscription.setStatus(SubscriptionStatus.CANCELLED);
         subscription.setCancelledAt(Instant.now(clock));
         subscriptionRepository.save(subscription);
+        recommendationSyncService.removeParticipation(subscription.getTravelerId(), travelId);
     }
 
     public List<SubscriptionResponse> listSubscribers(UUID travelId, AuthenticatedUser caller) {
@@ -98,9 +105,7 @@ public class SubscriptionService {
         return caller.userId();
     }
 
-    // Le traveler peut annuler son propre abonnement ; le Travel Manager proprietaire
-    // du travel ou un Admin peut desabonner n'importe quel abonne (demande explicitement
-    // par l'enonce pour la gestion de la liste d'abonnes).
+    // Le traveler annule son propre abonnement ; le manager proprietaire ou un Admin peut desabonner n'importe qui.
     private void requireCancellationRights(Travel travel, Subscription subscription, AuthenticatedUser caller) {
         if (ADMIN_ROLE.equals(caller.role())) {
             return;

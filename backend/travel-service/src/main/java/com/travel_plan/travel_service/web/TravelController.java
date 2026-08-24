@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,6 +29,23 @@ public class TravelController {
     @GetMapping
     public List<TravelResponse> findAll() {
         return travelService.findAll();
+    }
+
+    // "/search" placee avant "/{id}" par lisibilite ; Spring distingue les deux correctement quel que soit l'ordre.
+    @GetMapping("/search")
+    public List<TravelResponse> search(@RequestParam("q") String query) {
+        return travelService.search(query);
+    }
+
+    @GetMapping("/autocomplete")
+    public List<TravelResponse> autocomplete(@RequestParam("q") String query) {
+        return travelService.autocomplete(query);
+    }
+
+    // Toujours "pour le Traveler connecte", pas d'id en parametre (voir RecommendationRepository).
+    @GetMapping("/recommendations")
+    public List<TravelResponse> recommendations(Authentication authentication) {
+        return travelService.recommendations(principal(authentication));
     }
 
     @GetMapping("/{id}")

@@ -8,8 +8,10 @@ import com.travel_plan.travel_service.domain.Travel;
 import com.travel_plan.travel_service.exception.ForbiddenException;
 import com.travel_plan.travel_service.exception.InvalidTravelRequestException;
 import com.travel_plan.travel_service.exception.TravelNotFoundException;
+import com.travel_plan.travel_service.graph.RecommendationSyncService;
 import com.travel_plan.travel_service.graph.TravelGraphSyncService;
 import com.travel_plan.travel_service.repository.TravelRepository;
+import com.travel_plan.travel_service.search.TravelSearchService;
 import com.travel_plan.travel_service.security.AuthenticatedUser;
 import com.travel_plan.travel_service.web.AccommodationRequest;
 import com.travel_plan.travel_service.web.ActivityRequest;
@@ -34,6 +36,8 @@ public class TravelService {
 
     private final TravelRepository travelRepository;
     private final TravelGraphSyncService graphSyncService;
+    private final TravelSearchService searchService;
+    private final RecommendationSyncService recommendationSyncService;
 
     public List<TravelResponse> findAll() {
         return travelRepository.findAll().stream().map(TravelResponse::from).toList();
@@ -59,6 +63,8 @@ public class TravelService {
 
         Travel saved = travelRepository.save(travel);
         graphSyncService.recordRoute(orderedDestinations(saved));
+        searchService.index(saved);
+        recommendationSyncService.upsertTravel(saved);
         return TravelResponse.from(saved);
     }
 
@@ -83,6 +89,8 @@ public class TravelService {
 
         graphSyncService.removeRoute(oldRoute);
         graphSyncService.recordRoute(orderedDestinations(saved));
+        searchService.index(saved);
+        recommendationSyncService.upsertTravel(saved);
         return TravelResponse.from(saved);
     }
 
@@ -90,12 +98,30 @@ public class TravelService {
         Travel travel = getOrThrow(id);
         requireOwnershipOrAdmin(travel, caller);
         graphSyncService.removeRoute(orderedDestinations(travel));
+        searchService.delete(id);
+        recommendationSyncService.deleteTravel(id);
         travelRepository.delete(travel);
     }
 
-    // TRAVEL_MANAGER : force a son propre userId, toute valeur envoyee dans la requete est
-    // ignoree (un manager ne peut pas s'attribuer/attribuer a un autre manager un voyage).
-    // ADMIN : doit fournir explicitement managerId, puisque son propre JWT n'en porte pas.
+    // Ids Elasticsearch resolus contre Postgres (donnees a jour) en preservant l'ordre de pertinence.
+    public List<TravelResponse> search(String query) {
+        return resolveInSearchOrder(searchService.search(query));
+    }
+
+    public List<TravelResponse> autocomplete(String query) {
+        return resolveInSearchOrder(searchService.autocomplete(query));
+    }
+
+    // Toujours "pour le Traveler connecte" ; un ADMIN sans userId lie recoit une liste vide.
+    public List<TravelResponse> recommendations(AuthenticatedUser caller) {
+        if (caller.userId() == null) {
+            return List.of();
+        }
+        List<UUID> recommendedIds = recommendationSyncService.recommend(caller.userId());
+        return resolveById(recommendedIds);
+    }
+
+    // TRAVEL_MANAGER : force a son propre userId. ADMIN : doit fournir explicitement managerId.
     private UUID resolveManagerId(UUID requestedManagerId, AuthenticatedUser caller) {
         if (TRAVEL_MANAGER_ROLE.equals(caller.role())) {
             return caller.userId();
@@ -123,6 +149,23 @@ public class TravelService {
     private List<Destination> orderedDestinations(Travel travel) {
         return travel.getDestinations().stream()
                 .sorted(Comparator.comparing(Destination::getOrderIndex))
+                .toList();
+    }
+
+    // Resout une liste d'ids (Elasticsearch ou Neo4j) contre Postgres en preservant l'ordre
+    // d'entree - findAllById ne garantit pas l'ordre, donc on reindexe le resultat.
+    private List<TravelResponse> resolveInSearchOrder(List<UUID> orderedIds) {
+        return resolveById(orderedIds);
+    }
+
+    private List<TravelResponse> resolveById(List<UUID> orderedIds) {
+        if (orderedIds.isEmpty()) {
+            return List.of();
+        }
+        List<Travel> found = travelRepository.findAllById(orderedIds);
+        return orderedIds.stream()
+                .flatMap(id -> found.stream().filter(travel -> travel.getId().equals(id)))
+                .map(TravelResponse::from)
                 .toList();
     }
 

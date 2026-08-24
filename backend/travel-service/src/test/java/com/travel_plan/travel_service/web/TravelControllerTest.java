@@ -69,6 +69,39 @@ class TravelControllerTest {
     }
 
     @Test
+    void searchReturnsMatchingTravels() throws Exception {
+        when(travelService.search("lisbon")).thenReturn(List.of(TravelResponse.from(newTravel("Iberian tour"))));
+
+        mockMvc.perform(get("/api/travels/search").param("q", "lisbon"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("Iberian tour"));
+    }
+
+    @Test
+    void autocompleteReturnsSuggestions() throws Exception {
+        when(travelService.autocomplete("lis")).thenReturn(List.of(TravelResponse.from(newTravel("Iberian tour"))));
+
+        mockMvc.perform(get("/api/travels/autocomplete").param("q", "lis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("Iberian tour"));
+    }
+
+    @Test
+    void recommendationsReturnsPersonalizedTravelsForCaller() throws Exception {
+        when(travelService.recommendations(new AuthenticatedUser("traveler1", "TRAVELER", null)))
+                .thenReturn(List.of(TravelResponse.from(newTravel("Iberian tour"))));
+
+        Authentication travelerAuth = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedUser("traveler1", "TRAVELER", null),
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_TRAVELER")));
+
+        mockMvc.perform(get("/api/travels/recommendations").principal(travelerAuth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("Iberian tour"));
+    }
+
+    @Test
     void findByIdReturns404WhenMissing() throws Exception {
         UUID id = UUID.randomUUID();
         when(travelService.findById(id)).thenThrow(new TravelNotFoundException(id));
@@ -295,11 +328,8 @@ class TravelControllerTest {
         mockMvc.perform(delete("/api/travels/{id}", id).principal(adminAuth())).andExpect(status().isNotFound());
     }
 
-    // MockMvc standalone n'a pas la chaine de filtres Spring Security : on simule directement
-    // ce que JwtAuthenticationFilter aurait pose dans le SecurityContext, via .principal(...).
-    // Doit etre une vraie Authentication (pas juste un Principal) pour que le resolveur
-    // d'argument Spring MVC accepte de la lier au parametre "Authentication authentication"
-    // du controller.
+    // MockMvc standalone n'a pas la chaine de filtres Spring Security : on simule via .principal(...)
+    // ce que JwtAuthenticationFilter aurait pose dans le SecurityContext.
     private Authentication adminAuth() {
         AuthenticatedUser user = new AuthenticatedUser("admin", "ADMIN", null);
         return new UsernamePasswordAuthenticationToken(user, null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
