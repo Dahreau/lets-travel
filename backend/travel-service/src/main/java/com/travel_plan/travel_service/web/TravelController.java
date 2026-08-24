@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,6 +29,28 @@ public class TravelController {
     @GetMapping
     public List<TravelResponse> findAll() {
         return travelService.findAll();
+    }
+
+    // feat/search-and-recommendations : "Elasticsearch-based travel search ... across all
+    // travel details" - voir TravelSearchService. Route litterale "/search" declaree avant
+    // "/{id}" par lisibilite, mais Spring (PathPatternParser) les distingue de toute facon
+    // correctement quel que soit l'ordre (les deux coexistaient deja avec ManagerStatsController).
+    @GetMapping("/search")
+    public List<TravelResponse> search(@RequestParam("q") String query) {
+        return travelService.search(query);
+    }
+
+    // "with autocomplete for smooth, dynamic querying".
+    @GetMapping("/autocomplete")
+    public List<TravelResponse> autocomplete(@RequestParam("q") String query) {
+        return travelService.autocomplete(query);
+    }
+
+    // Recommandations personnalisees du Traveler connecte (voir RecommendationRepository) -
+    // toujours "moi", pas d'id en parametre.
+    @GetMapping("/recommendations")
+    public List<TravelResponse> recommendations(Authentication authentication) {
+        return travelService.recommendations(principal(authentication));
     }
 
     @GetMapping("/{id}")

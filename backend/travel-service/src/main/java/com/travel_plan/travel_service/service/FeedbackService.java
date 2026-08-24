@@ -6,6 +6,7 @@ import com.travel_plan.travel_service.exception.DuplicateFeedbackException;
 import com.travel_plan.travel_service.exception.ForbiddenException;
 import com.travel_plan.travel_service.exception.InvalidFeedbackRequestException;
 import com.travel_plan.travel_service.exception.TravelNotFoundException;
+import com.travel_plan.travel_service.graph.RecommendationSyncService;
 import com.travel_plan.travel_service.repository.FeedbackRepository;
 import com.travel_plan.travel_service.repository.SubscriptionRepository;
 import com.travel_plan.travel_service.repository.TravelRepository;
@@ -33,6 +34,7 @@ public class FeedbackService {
     private final SubscriptionRepository subscriptionRepository;
     private final TravelRepository travelRepository;
     private final Clock clock;
+    private final RecommendationSyncService recommendationSyncService;
 
     public FeedbackResponse submit(UUID travelId, FeedbackRequest request, AuthenticatedUser caller) {
         Travel travel = getTravelOrThrow(travelId);
@@ -58,7 +60,11 @@ public class FeedbackService {
                 .createdAt(Instant.now(clock))
                 .build();
 
-        return FeedbackResponse.from(feedbackRepository.save(feedback));
+        Feedback saved = feedbackRepository.save(feedback);
+        // feat/search-and-recommendations : une note est un signal plus fort qu'une simple
+        // participation pour le moteur de recommandations (voir RecommendationRepository).
+        recommendationSyncService.recordFeedback(travelerId, travelId, request.rating());
+        return FeedbackResponse.from(saved);
     }
 
     // Reserve au Travel Manager proprietaire + Admin, pour le controle qualite - voir

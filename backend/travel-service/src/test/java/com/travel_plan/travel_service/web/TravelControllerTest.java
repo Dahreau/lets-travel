@@ -68,6 +68,40 @@ class TravelControllerTest {
                 .andExpect(jsonPath("$[0].transportations[0].provider").value("TAP"));
     }
 
+    // feat/search-and-recommendations
+    @Test
+    void searchReturnsMatchingTravels() throws Exception {
+        when(travelService.search("lisbon")).thenReturn(List.of(TravelResponse.from(newTravel("Iberian tour"))));
+
+        mockMvc.perform(get("/api/travels/search").param("q", "lisbon"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("Iberian tour"));
+    }
+
+    @Test
+    void autocompleteReturnsSuggestions() throws Exception {
+        when(travelService.autocomplete("lis")).thenReturn(List.of(TravelResponse.from(newTravel("Iberian tour"))));
+
+        mockMvc.perform(get("/api/travels/autocomplete").param("q", "lis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("Iberian tour"));
+    }
+
+    @Test
+    void recommendationsReturnsPersonalizedTravelsForCaller() throws Exception {
+        when(travelService.recommendations(new AuthenticatedUser("traveler1", "TRAVELER", null)))
+                .thenReturn(List.of(TravelResponse.from(newTravel("Iberian tour"))));
+
+        Authentication travelerAuth = new UsernamePasswordAuthenticationToken(
+                new AuthenticatedUser("traveler1", "TRAVELER", null),
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_TRAVELER")));
+
+        mockMvc.perform(get("/api/travels/recommendations").principal(travelerAuth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("Iberian tour"));
+    }
+
     @Test
     void findByIdReturns404WhenMissing() throws Exception {
         UUID id = UUID.randomUUID();

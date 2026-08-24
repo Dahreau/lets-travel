@@ -151,3 +151,38 @@ private SubscriptionRepository subscriptionRepository;
 **Solution** : pour les deux Blocker, fusion du test sans assertion avec le test voisin qui vérifie déjà un état par `expect(...)` (même `beforeEach`, même scénario) — le `httpMock.expectNone(...)` devient une vérification supplémentaire dans un test qui contient déjà un `expect()` réel, au lieu de vivre seul dans son propre `it(...)`. Pour les 9 Low, remplacement mécanique de `expect(x.length).toBe(N)` par `expect(x).toHaveLength(N)`, sans changement de logique.
 
 **À retenir** : sur ce projet, un test qui ne fait *que* du `httpMock.expectOne/expectNone(...)` sans aucun `expect(...)` littéral déclenche un Blocker Sonar, même si le test est fonctionnellement valide — toujours regrouper ce genre de vérification HTTP avec un test voisin qui a déjà une assertion d'état, plutôt que de lui laisser son propre `it(...)` isolé. Et préférer systématiquement les matchers Vitest spécifiques (`toHaveLength`, `toContain`, `toBeNull`, etc.) à leur équivalent générique (`.length).toBe(...)`, `.toBe(null)`...) dès l'écriture du test, pas seulement en correction après coup.
+
+## 18. Stage Deploy Jenkins : `vault operator unseal` échoue avec une clé périmée, ET le dossier de sauvegarde des secrets CI (`infra/ci/persistent-state`) n'existe nulle part sur le disque
+
+**Problème** : le stage Deploy plante dès la 1ère tâche utile (`vault-unseal.yml`, "Unseal Vault using the stored key") avec `FAILED! => {"censored": true, ...}` — le message réel est caché par `no_log: true` (pour ne jamais logguer la clé). En creusant : `vault status` renvoie `initialized: true` sur le volume Docker `vault_data` du stack CI (`infra/ci/deploy-workspace`), une clé de descellement a bien été retrouvée, mais elle est rejetée par Vault — clé sur disque qui ne correspond plus aux données réelles du volume (même famille que l'incident Vault local dev, mais un Vault CI totalement distinct, avec sa propre clé stockée ailleurs).
+
+En voulant vérifier/nettoyer cette clé, découverte d'un 2e problème, plus profond : le `Jenkinsfile` (stage Deploy) sauvegarde les secrets gitignorés (`.env`, clés Vault, certs TLS) dans `$HOST_REPO_PATH/infra/ci/persistent-state` avant de vider/recréer `deploy-workspace` à chaque build (pour survivre au `rm -rf` + réextraction d'un tar frais depuis le checkout Git). Mais `infra/ci/docker-compose.yml` (service `jenkins`, bloc `volumes`) ne monte QUE `${HOST_REPO_PATH}/infra/ci/deploy-workspace` dans le conteneur Jenkins — pas son dossier frère `persistent-state`. Résultat : `persistent-state` n'a jamais existé sur le vrai disque D: (confirmé indépendamment via `device_list_dir` et `device_bash`, et par l'utilisateur lui-même en natif) — il ne vit que dans la couche interne éphémère du conteneur `lets-travel-jenkins`, malgré un chemin affiché dans les logs qui ressemble à un vrai chemin `/mnt/d/...`.
+
+**Solution appliquée (déblocage immédiat, pas de changement de code)** : suppression de la clé périmée aux DEUX endroits où elle existe — la copie réelle sur disque (`infra/ci/deploy-workspace/infra/vault/.unseal-key.txt`) ET la copie cachée dans le conteneur Jenkins (`infra/ci/persistent-state/infra/vault/.unseal-key.txt`, atteignable uniquement via `docker exec`) — en une seule commande lancée par l'utilisateur (pas moi, pas d'accès Docker depuis l'agent) :
+```
+docker exec lets-travel-jenkins sh -c 'rm -f "$HOST_REPO_PATH/infra/ci/deploy-workspace/infra/vault/.unseal-key.txt" "$HOST_REPO_PATH/infra/ci/persistent-state/infra/vault/.unseal-key.txt"'
+```
+Supprimer seulement l'une des deux copies ne suffit pas : le manège `mv` (avant le wipe) puis `cp` (après) à chaque build ne fait que déplacer temporairement le fichier qui est déjà là — si l'une des deux copies survit, elle revient à l'identique au build suivant. Une fois les deux effacées, le self-heal déjà écrit dans `vault-unseal.yml` (bloc "Vault initialized but unseal key missing") détecte "initialisé + clé absente" et réinitialise proprement le volume tout seul.
+
+**À retenir** :
+1. Le Vault CI (`infra/ci/deploy-workspace`) et le Vault dev local (racine du repo) sont deux instances distinctes, avec des clés stockées à des endroits différents — ne jamais confondre les deux en diagnostiquant un souci de scellement.
+2. Quand un fichier "persisté" par un script Jenkins semble introuvable sur le disque, vérifier D'ABORD le mapping `volumes:` du service Jenkins dans `infra/ci/docker-compose.yml` avant de soupçonner un souci de cache WSL2/DrvFs — un chemin qui ressemble à `/mnt/d/...` dans un log Jenkins n'est pas forcément monté sur le vrai disque si le `docker-compose.yml` du conteneur Jenkins ne le liste pas explicitement dans ses `volumes`.
+3. Reste un défaut de conception à corriger un jour (pas urgent) : monter aussi `infra/ci/persistent-state` (ou tout `infra/ci`) dans le conteneur Jenkins, pour que cette sauvegarde soit une vraie persistance sur disque et pas seulement une survie tant que le conteneur `lets-travel-jenkins` n'est pas recréé.
+
+## 19. `mvn test` sur `travel-service` échoue à résoudre `org.testcontainers:elasticsearch` — l'artifact a changé de nom en Testcontainers 2.x
+
+**Problème** : en ajoutant le module Testcontainers Elasticsearch (pour `RecommendationRepositoryTest`/`TravelSearchServiceTest` de `feat/search-and-recommendations`), deux échecs successifs de `mvn test`, chacun révélant une couche du même problème :
+1. **1er run** : `'dependencies.dependency.version' for org.testcontainers:elasticsearch:jar is missing` — corrigé en ajoutant `<version>${testcontainers.version}</version>` (propriété exposée par `spring-boot-starter-parent` pour importer le `testcontainers-bom`), sur le modèle habituel.
+2. **2e run** (après le fix ci-dessus) : `Could not find artifact org.testcontainers:elasticsearch:jar:2.0.5 in central` — la version `2.0.5` existe bien (résolue via `${testcontainers.version}`, gérée par `spring-boot-starter-parent` 4.1.0), mais PAS sous cet artifactId : recherche sur Maven Central, l'artifactId `elasticsearch` nu s'arrête à la série `1.x` (dernière version `1.21.4`) — Testcontainers a renommé ce module `testcontainers-elasticsearch` (avec le préfixe `testcontainers-`) à partir de la série `2.x`, la même convention que `testcontainers-neo4j`/`testcontainers-junit-jupiter` déjà présents dans ce `pom.xml` juste au-dessus. L'ancien nom `elasticsearch` n'a simplement jamais été republié en `2.0.x`.
+
+**Solution** : artifactId corrigé en `testcontainers-elasticsearch` (version `${testcontainers.version}` conservée) :
+```xml
+<dependency>
+    <groupId>org.testcontainers</groupId>
+    <artifactId>testcontainers-elasticsearch</artifactId>
+    <version>${testcontainers.version}</version>
+    <scope>test</scope>
+</dependency>
+```
+
+**À retenir** : sur ce projet (Testcontainers 2.x via `spring-boot-starter-parent` 4.1.0), tous les artifactId de modules Testcontainers suivent la convention `testcontainers-<module>` (`testcontainers-neo4j`, `testcontainers-junit-jupiter`, `testcontainers-elasticsearch`...) — un ancien nom nu (`elasticsearch`, `neo4j`, `postgresql`...) sans le préfixe appartient à la série `1.x` et ne résout plus rien en `2.x`. En cas de "version manquante" sur un module Testcontainers, vérifier `${testcontainers.version}` d'abord ; en cas d'échec de résolution APRÈS avoir ajouté la version (artifact introuvable dans central malgré une version qui existe bel et bien pour ce groupId), vérifier que l'artifactId suit bien la convention `testcontainers-<module>` de la série 2.x plutôt que l'ancien nom nu de la série 1.x.

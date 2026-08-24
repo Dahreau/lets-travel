@@ -1,6 +1,8 @@
 package com.travel_plan.travel_service;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import com.travel_plan.travel_service.graph.PlaceRepository;
+import com.travel_plan.travel_service.graph.RecommendationRepository;
 import com.travel_plan.travel_service.repository.FeedbackRepository;
 import com.travel_plan.travel_service.repository.ReportRepository;
 import com.travel_plan.travel_service.repository.SubscriptionRepository;
@@ -49,6 +51,18 @@ class TravelServiceApplicationTests {
 
 	@MockitoBean
 	private PlaceRepository placeRepository;
+
+	// feat/search-and-recommendations - meme regle : nouveau repository Spring Data Neo4j.
+	@MockitoBean
+	private RecommendationRepository recommendationRepository;
+
+	// feat/search-and-recommendations - ElasticsearchClient est un @Bean construit a la main
+	// (voir ElasticsearchClientConfig) : sans mock, le contexte tente une vraie connexion TCP
+	// vers app.elasticsearch.uri au demarrage (RestClient.builder(...).build() ne se connecte
+	// pas vraiment, mais le premier appel echouerait) - voir troubleshooting.md #16 (meme lecon
+	// pour Neo4jTransactionManager/Driver plus haut).
+	@MockitoBean
+	private ElasticsearchClient elasticsearchClient;
 
 	@MockitoBean
 	private SecretKey jwtSigningKey;

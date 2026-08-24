@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,8 +16,10 @@ import com.travel_plan.travel_service.domain.TransportationType;
 import com.travel_plan.travel_service.exception.ForbiddenException;
 import com.travel_plan.travel_service.exception.InvalidTravelRequestException;
 import com.travel_plan.travel_service.exception.TravelNotFoundException;
+import com.travel_plan.travel_service.graph.RecommendationSyncService;
 import com.travel_plan.travel_service.graph.TravelGraphSyncService;
 import com.travel_plan.travel_service.repository.TravelRepository;
+import com.travel_plan.travel_service.search.TravelSearchService;
 import com.travel_plan.travel_service.security.AuthenticatedUser;
 import com.travel_plan.travel_service.web.AccommodationRequest;
 import com.travel_plan.travel_service.web.ActivityRequest;
@@ -39,7 +42,10 @@ class TravelServiceTest {
 
     private final TravelRepository travelRepository = mock(TravelRepository.class);
     private final TravelGraphSyncService graphSyncService = mock(TravelGraphSyncService.class);
-    private final TravelService travelService = new TravelService(travelRepository, graphSyncService);
+    private final TravelSearchService searchService = mock(TravelSearchService.class);
+    private final RecommendationSyncService recommendationSyncService = mock(RecommendationSyncService.class);
+    private final TravelService travelService =
+            new TravelService(travelRepository, graphSyncService, searchService, recommendationSyncService);
 
     private final AuthenticatedUser admin = new AuthenticatedUser("admin", "ADMIN", null);
 
@@ -59,6 +65,19 @@ class TravelServiceTest {
         ArgumentCaptor<List<Destination>> captor = ArgumentCaptor.forClass(List.class);
         verify(graphSyncService).recordRoute(captor.capture());
         assertThat(captor.getValue()).extracting(Destination::getCity).containsExactly("Lisbon", "Porto");
+    }
+
+    // feat/search-and-recommendations : create() doit aussi indexer le voyage sur Elasticsearch
+    // et l'inserer dans le graphe de recommandations - verifie separement de l'assertion metier
+    // ci-dessus pour rester lisible.
+    @Test
+    void createIndexesTravelForSearchAndRecommendations() {
+        when(travelRepository.save(any(Travel.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        travelService.create(fullRequest(UUID.randomUUID()), admin);
+
+        verify(searchService).index(any(Travel.class));
+        verify(recommendationSyncService).upsertTravel(any(Travel.class));
     }
 
     @Test
@@ -132,6 +151,8 @@ class TravelServiceTest {
         assertThat(updated.title()).isEqualTo("Iberian tour");
         assertThat(updated.destinations()).hasSize(2);
         verify(graphSyncService).removeRoute(List.of(oldDestination));
+        verify(searchService).index(any(Travel.class));
+        verify(recommendationSyncService).upsertTravel(any(Travel.class));
     }
 
     @Test
@@ -193,6 +214,8 @@ class TravelServiceTest {
         travelService.delete(id, admin);
 
         verify(graphSyncService).removeRoute(List.of(destination));
+        verify(searchService).delete(id);
+        verify(recommendationSyncService).deleteTravel(id);
         verify(travelRepository).delete(existing);
     }
 
@@ -216,6 +239,85 @@ class TravelServiceTest {
                 .build()));
 
         assertThat(travelService.findAll()).hasSize(1);
+    }
+
+    // feat/search-and-recommendations : search()/autocomplete() resolvent les ids Elasticsearch
+    // contre Postgres en preservant l'ordre de pertinence renvoye par l'index (pas l'ordre
+    // findAllById, qui n'est pas garanti).
+    @Test
+    void searchResolvesIdsAgainstPostgresPreservingRelevanceOrder() {
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        Travel first = minimalTravel(firstId, "A");
+        Travel second = minimalTravel(secondId, "B");
+        when(searchService.search("lisbon")).thenReturn(List.of(secondId, firstId));
+        // findAllById renvoie dans un ordre non garanti (ici volontairement "inverse" de la
+        // pertinence) pour prouver que le service reordonne bien selon searchService.
+        when(travelRepository.findAllById(List.of(secondId, firstId))).thenReturn(List.of(first, second));
+
+        List<TravelResponse> results = travelService.search("lisbon");
+
+        assertThat(results).extracting(TravelResponse::id).containsExactly(secondId, firstId);
+    }
+
+    @Test
+    void searchReturnsEmptyWhenNoHits() {
+        when(searchService.search("nowhere")).thenReturn(List.of());
+
+        assertThat(travelService.search("nowhere")).isEmpty();
+        verify(travelRepository, never()).findAllById(any());
+    }
+
+    @Test
+    void autocompleteDelegatesToSearchServiceAutocomplete() {
+        UUID id = UUID.randomUUID();
+        Travel travel = minimalTravel(id, "Lisbon tour");
+        when(searchService.autocomplete("lis")).thenReturn(List.of(id));
+        when(travelRepository.findAllById(List.of(id))).thenReturn(List.of(travel));
+
+        List<TravelResponse> results = travelService.autocomplete("lis");
+
+        assertThat(results).extracting(TravelResponse::id).containsExactly(id);
+    }
+
+    // feat/search-and-recommendations : recommendations() est toujours "pour l'utilisateur
+    // connecte" - un ADMIN sans userId lie recoit une liste vide plutot qu'une erreur.
+    @Test
+    void recommendationsReturnsEmptyForCallerWithoutLinkedUserId() {
+        List<TravelResponse> results = travelService.recommendations(admin);
+
+        assertThat(results).isEmpty();
+        verify(recommendationSyncService, never()).recommend(any());
+    }
+
+    @Test
+    void recommendationsResolvesRecommendedIdsPreservingOrder() {
+        UUID travelerId = UUID.randomUUID();
+        AuthenticatedUser traveler = new AuthenticatedUser("traveler1", "TRAVELER", travelerId);
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        Travel first = minimalTravel(firstId, "A");
+        Travel second = minimalTravel(secondId, "B");
+        when(recommendationSyncService.recommend(travelerId)).thenReturn(List.of(firstId, secondId));
+        when(travelRepository.findAllById(List.of(firstId, secondId))).thenReturn(List.of(second, first));
+
+        List<TravelResponse> results = travelService.recommendations(traveler);
+
+        assertThat(results).extracting(TravelResponse::id).containsExactly(firstId, secondId);
+    }
+
+    // Travel minimal pour les tests search/autocomplete/recommendations : startDate/endDate
+    // doivent toujours etre renseignes des qu'un Travel passe par TravelResponse.from(...),
+    // qui calcule la duree du voyage (Travel.getDurationDays(), ChronoUnit.DAYS.between(...))
+    // - sans les deux dates, NullPointerException ("temporal1Inclusive" null). Meme exigence que
+    // le Travel construit par findAllDelegatesToRepository plus haut dans ce fichier.
+    private Travel minimalTravel(UUID id, String title) {
+        return Travel.builder()
+                .id(id)
+                .title(title)
+                .startDate(LocalDate.of(2026, Month.SEPTEMBER, 1))
+                .endDate(LocalDate.of(2026, Month.SEPTEMBER, 8))
+                .build();
     }
 
     private TravelRequest fullRequest(UUID managerId) {

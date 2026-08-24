@@ -258,3 +258,69 @@ en cas de remboursement (voir plus haut), pas de pagination sur la liste d'abonn
 (hors scope audit), et pas de lien de navigation traveler → profil manager en dehors du tableau
 `/travels` — ce sera ajouté naturellement par `feat/traveler-frontend` quand le parcours de
 navigation/abonnement du Traveler sera construit.
+
+## `feat/search-and-recommendations` — recherche Elasticsearch, recommandations personnalisées Neo4j
+
+### Avant (travel-plan)
+
+Cette fonctionnalité n'existait pas du tout : ni Elasticsearch ni notion de recommandation
+n'étaient présents dans travel-plan. La seule recherche possible était `GET /api/travels`
+(liste complète) filtrée côté client.
+
+### Ce que Let's Travel ajoute
+
+**Recherche et autocomplete Elasticsearch (`GET /api/travels/search?q=`,
+`GET /api/travels/autocomplete?q=`).** Nouveau module `search` dans `travel-service` :
+`TravelDocument` (dénormalisation d'un `Travel` + ses `Destination` — titre, villes, pays,
+statut, prix, devise, dates), indexé/désindexé automatiquement dans `TravelService.create()`/
+`update()`/`delete()` (voir `TravelSearchService`). `search()` utilise un `multi_match` sur
+`title`/`cities`/`countries` ("across all travel details", demandé par l'énoncé) ;
+`autocomplete()` utilise `match_bool_prefix` (disponible nativement depuis Elasticsearch 7.2)
+sur `title`/`cities`, sans mapping ni analyzer dédié — le mapping dynamique par défaut
+d'Elasticsearch suffit pour des champs simples comme ceux de `TravelDocument`.
+
+**Client Elasticsearch construit à la main.** Comme pour `TravelServiceClientConfig` côté
+`payment-service` (voir `troubleshooting.md` #11), `ElasticsearchClientConfig` construit le
+bean `ElasticsearchClient` explicitement (`RestClient` → `RestClientTransport` →
+`ElasticsearchClient`) plutôt que d'utiliser le starter Spring Data Elasticsearch — même
+raison : éviter de devoir deviner le nom exact des classes d'auto-configuration éclatées en
+modules dans Spring Boot 4.1 sans pouvoir compiler localement pour vérifier.
+
+**Recommandations personnalisées basées sur le contenu (`GET /api/travels/recommendations`).**
+Nouveau graphe Neo4j `Traveler`/`Travel` (`RecommendationRepository`/`RecommendationSyncService`
+dans `graph`), **distinct** du graphe `Place`/`ROUTE_TO` déjà existant (suggestions de
+prochaine destination, hérité de travel-plan) — deux graphes, deux finalités, dans la même
+instance Neo4j. Chaque `Travel` est résumé par 3 champs (`country`, `priceRange`,
+`durationRange` — l'énoncé demande explicitement "au moins 3 champs du voyage"), recalculés à
+partir du `Travel` réel (Postgres) à chaque `create`/`update`. Un abonnement
+(`SubscriptionService.subscribe`) ou une note (`FeedbackService.submit`) enregistrent un signal
+"voyage aimé" (relations `PARTICIPATED_IN`/`RATED`). La recommandation elle-même (requête
+Cypher `recommendTravelIds`) cherche les voyages partageant au moins un des 3 champs avec les
+voyages déjà aimés du Traveler connecté, exclut ceux déjà suivis, et classe par nombre de
+voyages aimés en commun — une approximation volontairement simple d'un score de pertinence,
+suffisante pour l'audit qui vérifie surtout que la recommandation change selon l'historique
+(section "Verify the precision of travel recommendations... switch to a different account").
+Toujours "pour moi" (comme `GET /managers/me/stats`) : pas de paramètre d'id, un ADMIN sans
+`userId` lié reçoit une liste vide plutôt qu'une erreur.
+
+**Cohérence des données entre Postgres, Neo4j et Elasticsearch.** Même pattern que
+`TravelGraphSyncService` (déjà en place pour le graphe `Place`/`ROUTE_TO`) : pas de saga ni
+d'outbox. Les écritures Neo4j/Elasticsearch dans `TravelService.create()`/`update()`/`delete()`
+se font dans la même transaction JPA (`@Transactional`) que l'écriture Postgres — si l'une
+d'elles lève une exception, la transaction Postgres est annulée elle aussi. Ce n'est pas une
+atomicité réelle entre 3 bases (Neo4j/Elasticsearch n'ont pas de rollback transactionnel
+partagé avec Postgres), mais ça évite une dérive silencieuse : soit tout réussit, soit
+l'appelant voit une erreur et rien n'est retenu côté Postgres.
+
+**Elasticsearch, dernier service à rejoindre le réseau Docker interne uniquement.** Comme
+Vault et Zipkin : pas de port publié sur l'host, uniquement joignable par `travel-service` sur
+le réseau `app`. `vm.max_map_count >= 262144` (exigence noyau connue d'Elasticsearch 8.x) est
+fixé via `sysctls:` dans `docker-compose.yml` ; si le healthcheck échoue malgré ça, c'est
+probablement le noyau hôte (WSL2) qu'il faut ajuster une fois manuellement (documenté en
+commentaire dans `docker-compose.yml`).
+
+**Ce qui reste volontairement absent de cette branche.** Backend uniquement — la consultation
+de la recherche/autocomplete/recommandations côté Angular (page Traveler) est laissée à
+`feat/traveler-frontend`, qui construira le vrai parcours de navigation. Pas de synonymes, de
+correction orthographique (fuzzy search) ni de filtre à facettes sur la recherche : hors scope
+de l'énoncé, qui demande une recherche "smooth" et "dynamic", pas exhaustive.

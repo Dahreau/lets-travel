@@ -18,6 +18,7 @@ import com.travel_plan.travel_service.exception.InvalidSubscriptionRequestExcept
 import com.travel_plan.travel_service.exception.SubscriptionCutoffException;
 import com.travel_plan.travel_service.exception.SubscriptionNotFoundException;
 import com.travel_plan.travel_service.exception.TravelNotFoundException;
+import com.travel_plan.travel_service.graph.RecommendationSyncService;
 import com.travel_plan.travel_service.repository.SubscriptionRepository;
 import com.travel_plan.travel_service.repository.TravelRepository;
 import com.travel_plan.travel_service.security.AuthenticatedUser;
@@ -38,8 +39,9 @@ class SubscriptionServiceTest {
     // Horloge fixe plutot que Clock.systemUTC() : les tests de cutoff (a J-3 pile) ne dependent plus
     // de l'instant reel d'execution, ce qui evite un flake theorique si le test tourne pile a minuit.
     private final Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
+    private final RecommendationSyncService recommendationSyncService = mock(RecommendationSyncService.class);
     private final SubscriptionService subscriptionService =
-            new SubscriptionService(subscriptionRepository, travelRepository, clock);
+            new SubscriptionService(subscriptionRepository, travelRepository, clock, recommendationSyncService);
 
     private final UUID travelId = UUID.randomUUID();
     private final UUID managerId = UUID.randomUUID();
@@ -68,6 +70,26 @@ class SubscriptionServiceTest {
         assertThat(response.travelId()).isEqualTo(travelId);
         assertThat(response.travelerId()).isEqualTo(travelerId);
         assertThat(response.status()).isEqualTo(SubscriptionStatus.ACTIVE);
+    }
+
+    // feat/search-and-recommendations : un abonnement est un signal "voyage aime" pour le
+    // moteur de recommandations.
+    @Test
+    void subscribeRecordsParticipationForRecommendations() {
+        Travel travel = travelDepartingIn(10);
+        when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
+        when(subscriptionRepository.findByTravel_IdAndTravelerIdAndStatus(
+                        travelId, travelerId, SubscriptionStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+        when(subscriptionRepository.save(any(Subscription.class))).thenAnswer(invocation -> {
+            Subscription subscription = invocation.getArgument(0);
+            subscription.setId(UUID.randomUUID());
+            return subscription;
+        });
+
+        subscriptionService.subscribe(travelId, traveler);
+
+        verify(recommendationSyncService).recordParticipation(travelerId, travelId);
     }
 
     @Test
@@ -111,6 +133,7 @@ class SubscriptionServiceTest {
         assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.CANCELLED);
         assertThat(subscription.getCancelledAt()).isNotNull();
         verify(subscriptionRepository).save(subscription);
+        verify(recommendationSyncService).removeParticipation(travelerId, travelId);
     }
 
     @Test
@@ -173,6 +196,7 @@ class SubscriptionServiceTest {
         assertThatThrownBy(() -> subscriptionService.unsubscribe(travelId, subscriptionId, traveler))
                 .isInstanceOf(SubscriptionCutoffException.class);
         verify(subscriptionRepository, never()).save(any(Subscription.class));
+        verify(recommendationSyncService, never()).removeParticipation(any(), any());
     }
 
     @Test
@@ -198,6 +222,7 @@ class SubscriptionServiceTest {
         subscriptionService.unsubscribe(travelId, subscription.getId(), traveler);
 
         verify(subscriptionRepository, never()).save(any(Subscription.class));
+        verify(recommendationSyncService, never()).removeParticipation(any(), any());
     }
 
     @Test
