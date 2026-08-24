@@ -38,25 +38,25 @@ describe('TravelForm (as ADMIN)', () => {
   afterEach(() => httpMock.verify());
 
   it('starts with one empty destination in create mode', () => {
-    expect(component['destinationsArray'].length).toBe(1);
+    expect(component['destinationsArray']).toHaveLength(1);
   });
 
   it('adds and removes destinations', () => {
     component['addDestination']();
-    expect(component['destinationsArray'].length).toBe(2);
+    expect(component['destinationsArray']).toHaveLength(2);
 
     component['removeDestination'](0);
-    expect(component['destinationsArray'].length).toBe(1);
+    expect(component['destinationsArray']).toHaveLength(1);
   });
 
   it('adds and removes activities within a destination', () => {
-    expect(component['destinationActivities'](0).length).toBe(0);
+    expect(component['destinationActivities'](0)).toHaveLength(0);
 
     component['addActivity'](0);
-    expect(component['destinationActivities'](0).length).toBe(1);
+    expect(component['destinationActivities'](0)).toHaveLength(1);
 
     component['removeActivity'](0, 0);
-    expect(component['destinationActivities'](0).length).toBe(0);
+    expect(component['destinationActivities'](0)).toHaveLength(0);
   });
 
   it('accommodation group starts disabled and toggles on', () => {
@@ -71,13 +71,13 @@ describe('TravelForm (as ADMIN)', () => {
   });
 
   it('adds and removes transportations', () => {
-    expect(component['transportationsArray'].length).toBe(0);
+    expect(component['transportationsArray']).toHaveLength(0);
 
     component['addTransportation']();
-    expect(component['transportationsArray'].length).toBe(1);
+    expect(component['transportationsArray']).toHaveLength(1);
 
     component['removeTransportation'](0);
-    expect(component['transportationsArray'].length).toBe(0);
+    expect(component['transportationsArray']).toHaveLength(0);
   });
 
   it('exposes the manager dropdown control, enabled, for an admin', () => {
@@ -150,12 +150,10 @@ describe('TravelForm (as TRAVEL_MANAGER)', () => {
 
   afterEach(() => httpMock.verify());
 
-  it('does not call GET /api/users (reserved to admins)', () => {
-    httpMock.expectNone('/api/users');
-  });
-
-  it('forces the managerId control to the connected manager and disables it', () => {
+  it('forces the managerId control to the connected manager, disables it, and never calls GET /api/users', () => {
     expect(component['form'].controls.managerId.disabled).toBe(true);
     expect(component['form'].getRawValue().managerId).toBe('manager-1');
+
+    httpMock.expectNone('/api/users');
   });
 });

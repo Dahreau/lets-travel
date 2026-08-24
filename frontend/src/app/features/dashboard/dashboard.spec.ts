@@ -78,20 +78,15 @@ describe('Dashboard (as TRAVEL_MANAGER)', () => {
 
   afterEach(() => httpMock.verify());
 
-  it('never calls the admin-only endpoints (users, payments, payment-methods)', () => {
-    httpMock.expectOne('/api/travels/managers/me/stats').flush({ travelCount: 2, travelerCount: 3, estimatedRevenue: 900 });
-    httpMock.expectOne('/api/travels').flush([TRAVEL('t1', 'm1'), TRAVEL('t2', 'other-manager')]);
-
-    httpMock.expectNone('/api/users');
-    httpMock.expectNone('/api/payments');
-    httpMock.expectNone('/api/payment-methods');
-  });
-
-  it('shows the manager stats and only the manager own travels', () => {
+  it('shows the manager stats and only the manager own travels, never calling the admin-only endpoints', () => {
     httpMock.expectOne('/api/travels/managers/me/stats').flush({ travelCount: 2, travelerCount: 3, estimatedRevenue: 900 });
     httpMock.expectOne('/api/travels').flush([TRAVEL('t1', 'm1'), TRAVEL('t2', 'other-manager')]);
 
     expect(component['managerStats']()).toEqual({ travelCount: 2, travelerCount: 3, estimatedRevenue: 900 });
     expect(component['myTravels']().map((t) => t.id)).toEqual(['t1']);
+
+    httpMock.expectNone('/api/users');
+    httpMock.expectNone('/api/payments');
+    httpMock.expectNone('/api/payment-methods');
   });
 });
