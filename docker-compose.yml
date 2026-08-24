@@ -114,16 +114,14 @@ services:
       - app
 
   elasticsearch:
-    # Version figee sur le client Java (pom.xml). Jamais expose a l'host, reseau Docker interne only.
+    # Version figee sur le client Java (pom.xml), jamais expose a l'host (reseau interne only).
+    # discovery.type=single-node -> ES en dev mode, vm.max_map_count devient un warning, pas un echec (troubleshooting.md #22).
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
     restart: unless-stopped
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: -Xms512m -Xmx512m
-    # Si le healthcheck echoue malgre ce sysctl : "wsl -d docker-desktop sysctl -w vm.max_map_count=262144".
-    sysctls:
-      - vm.max_map_count=262144
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
