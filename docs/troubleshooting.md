@@ -186,3 +186,31 @@ Supprimer seulement l'une des deux copies ne suffit pas : le manège `mv` (avant
 ```
 
 **À retenir** : sur ce projet (Testcontainers 2.x via `spring-boot-starter-parent` 4.1.0), tous les artifactId de modules Testcontainers suivent la convention `testcontainers-<module>` (`testcontainers-neo4j`, `testcontainers-junit-jupiter`, `testcontainers-elasticsearch`...) — un ancien nom nu (`elasticsearch`, `neo4j`, `postgresql`...) sans le préfixe appartient à la série `1.x` et ne résout plus rien en `2.x`. En cas de "version manquante" sur un module Testcontainers, vérifier `${testcontainers.version}` d'abord ; en cas d'échec de résolution APRÈS avoir ajouté la version (artifact introuvable dans central malgré une version qui existe bel et bien pour ce groupId), vérifier que l'artifactId suit bien la convention `testcontainers-<module>` de la série 2.x plutôt que l'ancien nom nu de la série 1.x.
+
+## 20. `TravelSearchServiceTest` : `UnfinishedStubbingException` en essayant de mocker `Hit`/`HitsMetadata`/`SearchResponse` du client `elasticsearch-java`
+
+**Problème** : les tests `searchReturnsIdsFromHitsInOrder` et `autocompleteReturnsIdsFromHits` de `feat/search-and-recommendations` échouaient avec `org.mockito.exceptions.misusing.UnfinishedStubbingException` sur `when(hit.id()).thenReturn(...)`, quelle que soit la façon d'écrire la construction des mocks (`.stream().map(...)` puis boucle `for` imperative testées, même résultat les deux fois). Le message Mockito ("Unfinished stubbing detected... E.g. thenReturn() may be missing") est trompeur : il pointe normalement vers un stub mal formé, pas vers la vraie cause ici.
+
+**Comment la vraie cause a été trouvée** : en lisant directement le rapport Surefire complet sur disque (`target/surefire-reports/....TravelSearchServiceTest.txt`, plus complet que la sortie console tronquée collée dans le terminal), la stack trace montrait `at co.elastic.clients.elasticsearch.core.search.Hit.id(Hit.java:154)` — c'est-à-dire que le VRAI corps de la méthode `Hit.id()` s'exécutait au lieu d'être intercepté par Mockito, et levait une exception que Mockito rapportait ensuite comme un stubbing non terminé. `Hit`, `HitsMetadata` et `SearchResponse` sont des classes concrètes "record-like" (générées, avec constructeur privé et validation `ApiTypeHelper.requireNonNull` sur leurs champs obligatoires) du client bas niveau `co.elastic.clients:elasticsearch-java` — contrairement à `ElasticsearchClient`, qui est une interface et se mock sans aucun souci dans les autres tests de ce même fichier.
+
+**Solution** : ne plus mocker `Hit`/`HitsMetadata`/`SearchResponse`, construire de vraies instances via leurs Builders publics. Champs obligatoires vérifiés directement sur le code source du client (dépôt GitHub `elastic/elasticsearch-java`, tag `v8.11.1` — celui utilisé par ce `pom.xml` — pas devinés) :
+```java
+private SearchResponse<TravelDocument> searchResponseWithIds(UUID... ids) {
+    List<Hit<TravelDocument>> hits = java.util.Arrays.stream(ids)
+            .map(id -> new Hit.Builder<TravelDocument>()
+                    .index("travels")
+                    .id(id.toString())
+                    .build())
+            .toList();
+
+    return new SearchResponse.Builder<TravelDocument>()
+            .took(1)
+            .timedOut(false)
+            .shards(s -> s.total(1).successful(1).failed(0))
+            .hits(h -> h.hits(hits))
+            .build();
+}
+```
+`Hit.Builder` exige `index`+`id` ; `HitsMetadata.Builder` exige `hits` (liste non vide) ; `SearchResponse.Builder` (via sa classe mère `ResponseBody.AbstractBuilder`) exige `took`+`timedOut`+`shards`+`hits` ; `ShardStatistics.Builder` exige `total`+`successful`+`failed`.
+
+**À retenir** : sur ce projet, un client externe fortement typé comme `elasticsearch-java` mélange des interfaces (mockables sans souci, ex. `ElasticsearchClient`) et des classes concrètes générées avec constructeur privé (non mockables proprement, ex. `Hit`/`HitsMetadata`/`SearchResponse`) — pour ces dernières, construire de vraies instances via leurs Builders publics plutôt que de les mocker. Plus généralement : face à un échec de test qui persiste après un premier correctif non vérifié par une preuve concrète, ne pas tenter un 2e correctif à l'aveugle — lire le rapport Surefire complet sur disque (la sortie console collée dans un terminal peut être tronquée) avant de reformuler une hypothèse.
