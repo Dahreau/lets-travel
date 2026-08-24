@@ -64,10 +64,7 @@
 			<artifactId>jackson-datatype-jsr310</artifactId>
 		</dependency>
 
-		<!-- feat/search-and-recommendations : client bas niveau (pas le starter Spring Data
-		     Elasticsearch), voir ElasticsearchClientConfig pour la justification. Version figee
-		     sur 8.11.1 pour matcher exactement le tag de l'image Docker du service elasticsearch
-		     (docker-compose.yml) et reduire le risque de compatibilite client/serveur. -->
+		<!-- Client bas niveau (voir ElasticsearchClientConfig) ; version alignee sur l'image Docker. -->
 		<dependency>
 			<groupId>co.elastic.clients</groupId>
 			<artifactId>elasticsearch-java</artifactId>
@@ -150,13 +147,7 @@
 			<artifactId>testcontainers-junit-jupiter</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<!-- Depuis Testcontainers 2.x (utilise par spring-boot-starter-parent 4.1.0), ce module a
-		     ete renomme "elasticsearch" -> "testcontainers-elasticsearch" (meme convention de
-		     prefixe que testcontainers-neo4j/testcontainers-junit-jupiter juste au-dessus,
-		     l'ancien nom "elasticsearch" nu appartient a la serie 1.x, non publiee en 2.x). Version
-		     explicite via ${testcontainers.version} conservee par prudence (memes proprietes que
-		     les deux dependances precedentes, mais non verifiee par compilation que le parent la
-		     gere nommement pour cet artifact precis). -->
+		<!-- Renomme "elasticsearch" -> "testcontainers-elasticsearch" depuis Testcontainers 2.x (voir troubleshooting.md #19). -->
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-elasticsearch</artifactId>

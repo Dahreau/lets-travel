@@ -67,9 +67,7 @@ class TravelServiceTest {
         assertThat(captor.getValue()).extracting(Destination::getCity).containsExactly("Lisbon", "Porto");
     }
 
-    // feat/search-and-recommendations : create() doit aussi indexer le voyage sur Elasticsearch
-    // et l'inserer dans le graphe de recommandations - verifie separement de l'assertion metier
-    // ci-dessus pour rester lisible.
+    // create() doit aussi indexer sur Elasticsearch et inserer dans le graphe de recommandations.
     @Test
     void createIndexesTravelForSearchAndRecommendations() {
         when(travelRepository.save(any(Travel.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -241,9 +239,7 @@ class TravelServiceTest {
         assertThat(travelService.findAll()).hasSize(1);
     }
 
-    // feat/search-and-recommendations : search()/autocomplete() resolvent les ids Elasticsearch
-    // contre Postgres en preservant l'ordre de pertinence renvoye par l'index (pas l'ordre
-    // findAllById, qui n'est pas garanti).
+    // Les ids Elasticsearch doivent primer sur l'ordre (non garanti) de findAllById.
     @Test
     void searchResolvesIdsAgainstPostgresPreservingRelevanceOrder() {
         UUID firstId = UUID.randomUUID();
@@ -251,8 +247,7 @@ class TravelServiceTest {
         Travel first = minimalTravel(firstId, "A");
         Travel second = minimalTravel(secondId, "B");
         when(searchService.search("lisbon")).thenReturn(List.of(secondId, firstId));
-        // findAllById renvoie dans un ordre non garanti (ici volontairement "inverse" de la
-        // pertinence) pour prouver que le service reordonne bien selon searchService.
+        // Ordre volontairement "inverse" de la pertinence pour prouver le reordonnancement.
         when(travelRepository.findAllById(List.of(secondId, firstId))).thenReturn(List.of(first, second));
 
         List<TravelResponse> results = travelService.search("lisbon");
@@ -306,11 +301,7 @@ class TravelServiceTest {
         assertThat(results).extracting(TravelResponse::id).containsExactly(firstId, secondId);
     }
 
-    // Travel minimal pour les tests search/autocomplete/recommendations : startDate/endDate
-    // doivent toujours etre renseignes des qu'un Travel passe par TravelResponse.from(...),
-    // qui calcule la duree du voyage (Travel.getDurationDays(), ChronoUnit.DAYS.between(...))
-    // - sans les deux dates, NullPointerException ("temporal1Inclusive" null). Meme exigence que
-    // le Travel construit par findAllDelegatesToRepository plus haut dans ce fichier.
+    // startDate/endDate obligatoires : TravelResponse.from() calcule getDurationDays() et NPE sinon.
     private Travel minimalTravel(UUID id, String title) {
         return Travel.builder()
                 .id(id)

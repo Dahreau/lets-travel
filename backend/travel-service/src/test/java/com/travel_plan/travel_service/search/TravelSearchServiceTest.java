@@ -12,7 +12,6 @@ import co.elastic.clients.elasticsearch.core.DeleteResponse;
 import co.elastic.clients.elasticsearch.core.IndexResponse;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
-import co.elastic.clients.elasticsearch.core.search.HitsMetadata;
 import com.travel_plan.travel_service.domain.Destination;
 import com.travel_plan.travel_service.domain.Travel;
 import com.travel_plan.travel_service.domain.TravelStatus;
@@ -25,11 +24,8 @@ import java.util.UUID;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
-// Le client bas niveau ElasticsearchClient est mocke plutot que reconstruit via ses builders
-// (Hit/SearchResponse imposent des champs obligatoires non verifiables sans compiler) - on
-// verifie ici le comportement de TravelSearchService (mapping requete/reponse, propagation des
-// erreurs), pas le client Elasticsearch lui-meme (couvert par un test d'integration manuel,
-// voir troubleshooting.md si un ecart est constate au premier build).
+// ElasticsearchClient (interface) est mocke ; Hit/HitsMetadata/SearchResponse sont construits
+// via leurs vrais Builders car non mockables proprement (voir troubleshooting.md #20).
 @SuppressWarnings("unchecked")
 class TravelSearchServiceTest {
 
@@ -103,17 +99,8 @@ class TravelSearchServiceTest {
         assertThat(ids).containsExactly(id);
     }
 
-    // Cause racine confirmee via le vrai rapport Surefire (stack trace montrant
-    // Hit.id(Hit.java:154) execute reellement) : Hit/HitsMetadata/SearchResponse sont des classes
-    // de donnees "record-like" du client elasticsearch-java dont Mockito ne peut pas intercepter
-    // les methodes - le mock() ci-dessus (client bas niveau, interface) fonctionne, mais mock()
-    // sur ces classes concretes ne remplace pas leur corps reel, d'ou l'UnfinishedStubbingException
-    // (le when(...) tombe sur l'exception levee par le vrai code avant de pouvoir s'enregistrer).
-    // Solution : construire de VRAIS objets via leurs Builders publics plutot que de les mocker.
-    // Champs obligatoires verifies sur le code source du client (tag v8.11.1) :
-    // Hit.Builder -> index, id ; HitsMetadata.Builder -> hits (liste non vide) ;
-    // SearchResponse.Builder (via ResponseBody.AbstractBuilder) -> took, timedOut, shards, hits ;
-    // ShardStatistics.Builder -> total, successful, failed.
+    // Champs Builder obligatoires verifies sur le code source du client (tag v8.11.1) : Hit
+    // (index, id), HitsMetadata (hits), SearchResponse (took, timedOut, shards, hits).
     private SearchResponse<TravelDocument> searchResponseWithIds(UUID... ids) {
         List<Hit<TravelDocument>> hits = java.util.Arrays.stream(ids)
                 .map(id -> new Hit.Builder<TravelDocument>()

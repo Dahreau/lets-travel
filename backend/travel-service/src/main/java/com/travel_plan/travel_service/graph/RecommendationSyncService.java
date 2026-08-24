@@ -10,14 +10,8 @@ import org.springframework.data.neo4j.core.transaction.Neo4jTransactionManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
-// Graphe distinct de TravelGraphSyncService (Place/Route, suggestions de prochaine
-// destination) : celui-ci alimente les recommandations personnalisees
-// (feat/search-and-recommendations). Meme pattern de transaction Neo4j dediee que
-// TravelGraphSyncService - voir cette classe pour le detail de pourquoi (independante de la
-// transaction JPA de l'appelant, donc pas d'atomicite reelle entre Postgres et Neo4j : si
-// l'ecriture Neo4j echoue, l'exception remonte et la transaction JPA appelante est annulee,
-// ce qui evite une derive silencieuse entre les deux bases - voir lets-travel_audit.md,
-// "methods used to ensure data consistency between PostgreSQL, Neo4j, and Elasticsearch").
+// Graphe distinct de TravelGraphSyncService (Place/Route). Transaction Neo4j independante de
+// celle de l'appelant : si elle echoue, la transaction JPA appelante est annulee (voir cette classe).
 @Service
 public class RecommendationSyncService {
 
@@ -70,9 +64,7 @@ public class RecommendationSyncService {
         return ids == null ? List.of() : ids.stream().map(UUID::fromString).toList();
     }
 
-    // Premiere destination (ordre du voyage) : simplification assumee pour un voyage
-    // multi-destinations, sous contrainte de delai - defendable a l'oral comme "pays
-    // principal du voyage".
+    // Premiere destination par ordre : simplification assumee pour un voyage multi-destinations.
     private String primaryCountry(Travel travel) {
         return travel.getDestinations().stream()
                 .min(Comparator.comparing(Destination::getOrderIndex))

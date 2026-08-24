@@ -6,11 +6,8 @@ import lombok.Setter;
 import org.springframework.data.neo4j.core.schema.Id;
 import org.springframework.data.neo4j.core.schema.Node;
 
-// Noeud distinct de PlaceNode (graphe Place/Route, feature "suggestions de prochaine
-// destination" heritee de travel-plan) : celui-ci alimente les recommandations
-// personnalisees Let's Travel (feat/search-and-recommendations), basees sur ce qu'un
-// Traveler a deja suivi/note - pas sur les trajets entre villes. Deux graphes distincts,
-// deux finalites, dans la meme instance Neo4j - voir RecommendationRepository.
+// Noeud distinct de PlaceNode (graphe Place/Route) : alimente les recommandations basees sur
+// l'historique du Traveler, pas les trajets entre villes (voir RecommendationRepository).
 @Node("Travel")
 @Getter
 @Setter
@@ -20,10 +17,7 @@ public class TravelNode {
     @Id
     private String id;
 
-    // Les 3 champs du voyage utilises pour la similarite (enonce Let's Travel : "use at
-    // least 3 fields of the travel") - voir RecommendationSyncService pour le calcul de ces
-    // tranches a partir du Travel reel (Postgres), et RecommendationRepository.recommendTravelIds
-    // pour la requete qui les compare.
+    // Les 3 champs utilises pour la similarite (calcul dans RecommendationSyncService).
     private String country;
     private String priceRange;
     private String durationRange;

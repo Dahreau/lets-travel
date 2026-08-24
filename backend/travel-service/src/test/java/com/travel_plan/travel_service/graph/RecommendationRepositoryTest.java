@@ -52,9 +52,7 @@ class RecommendationRepositoryTest {
         assertThat(recommendationRepository.recommendTravelIds("traveler1", 10)).isEmpty();
     }
 
-    // Recommandation basee sur le contenu : "traveler1" a participe a t1 (Portugal/BUDGET/SHORT).
-    // t2 partage le pays -> recommande. t3 ne partage aucun des 3 champs -> pas recommande.
-    // t1 lui-meme est exclu (deja participe).
+    // t1 (Portugal/BUDGET/SHORT) participe : t2 partage le pays -> recommande, t3 aucun champ commun.
     @Test
     void recommendTravelIdsExcludesParticipatedAndUnrelatedTravelsButIncludesSimilarOnes() {
         recommendationRepository.upsertTravel("t1", "Portugal", "BUDGET", "SHORT");

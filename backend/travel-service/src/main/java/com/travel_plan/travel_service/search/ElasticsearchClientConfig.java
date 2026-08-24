@@ -13,14 +13,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-// Client Elasticsearch bas niveau construit a la main (co.elastic.clients:elasticsearch-java),
-// plutot que le starter Spring Data Elasticsearch : evite de devoir deviner les noms de
-// classes d'auto-configuration eclatees en modules dans Spring Boot 4.1, sans pouvoir compiler
-// localement pour verifier - meme lecon que TravelServiceClientConfig sur payment-service, voir
-// troubleshooting.md #11 ("en cas de doute [...] preferer construire le bean explicitement").
-// Pas de TLS/authentification ici : Elasticsearch tourne uniquement sur le reseau Docker
-// interne (jamais expose a l'host ni a internet, comme Vault/Zipkin actuellement) - compromis
-// assume pour tenir le delai, voir docker-compose.yml pour le detail et sa justification.
+// Client bas niveau construit a la main plutot que le starter Spring Data Elasticsearch (voir
+// troubleshooting.md #11). Pas de TLS : Elasticsearch reste interne au reseau Docker.
 @Configuration
 public class ElasticsearchClientConfig {
 

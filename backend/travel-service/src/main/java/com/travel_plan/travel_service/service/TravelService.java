@@ -103,10 +103,7 @@ public class TravelService {
         travelRepository.delete(travel);
     }
 
-    // feat/search-and-recommendations : recherche Elasticsearch "a travers tous les details
-    // du voyage" - les ids retournes par l'index sont resolus contre Postgres pour garantir des
-    // donnees toujours a jour (l'index peut avoir une seconde de retard), en preservant l'ordre
-    // de pertinence renvoye par Elasticsearch.
+    // Ids Elasticsearch resolus contre Postgres (donnees a jour) en preservant l'ordre de pertinence.
     public List<TravelResponse> search(String query) {
         return resolveInSearchOrder(searchService.search(query));
     }
@@ -115,10 +112,7 @@ public class TravelService {
         return resolveInSearchOrder(searchService.autocomplete(query));
     }
 
-    // Recommandations personnalisees du Traveler connecte (voir RecommendationRepository) -
-    // toujours "moi", pas de parametre d'id, meme pattern que GET /managers/me/stats. Un ADMIN
-    // (sans userId lie) recoit simplement une liste vide plutot qu'une erreur : lire ses propres
-    // recommandations n'est pas une action destructive qui justifie de bloquer l'appel.
+    // Toujours "pour le Traveler connecte" ; un ADMIN sans userId lie recoit une liste vide.
     public List<TravelResponse> recommendations(AuthenticatedUser caller) {
         if (caller.userId() == null) {
             return List.of();
@@ -127,9 +121,7 @@ public class TravelService {
         return resolveById(recommendedIds);
     }
 
-    // TRAVEL_MANAGER : force a son propre userId, toute valeur envoyee dans la requete est
-    // ignoree (un manager ne peut pas s'attribuer/attribuer a un autre manager un voyage).
-    // ADMIN : doit fournir explicitement managerId, puisque son propre JWT n'en porte pas.
+    // TRAVEL_MANAGER : force a son propre userId. ADMIN : doit fournir explicitement managerId.
     private UUID resolveManagerId(UUID requestedManagerId, AuthenticatedUser caller) {
         if (TRAVEL_MANAGER_ROLE.equals(caller.role())) {
             return caller.userId();

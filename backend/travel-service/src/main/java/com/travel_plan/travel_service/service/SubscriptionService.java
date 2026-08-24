@@ -105,9 +105,7 @@ public class SubscriptionService {
         return caller.userId();
     }
 
-    // Le traveler peut annuler son propre abonnement ; le Travel Manager proprietaire
-    // du travel ou un Admin peut desabonner n'importe quel abonne (demande explicitement
-    // par l'enonce pour la gestion de la liste d'abonnes).
+    // Le traveler annule son propre abonnement ; le manager proprietaire ou un Admin peut desabonner n'importe qui.
     private void requireCancellationRights(Travel travel, Subscription subscription, AuthenticatedUser caller) {
         if (ADMIN_ROLE.equals(caller.role())) {
             return;

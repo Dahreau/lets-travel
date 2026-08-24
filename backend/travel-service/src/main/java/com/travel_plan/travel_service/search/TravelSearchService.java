@@ -10,11 +10,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
-// Recherche + autocomplete Elasticsearch (enonce : "Elasticsearch-based travel search with
-// autocomplete for smooth, dynamic querying across all travel details"). Un seul index
-// ("travels"), mapping dynamique par defaut d'Elasticsearch (les champs de TravelDocument sont
-// simples - text/keyword/numeric/date - la detection automatique suffit, pas besoin de definir
-// un mapping explicite pour tenir le delai).
+// Recherche + autocomplete sur un seul index "travels", mapping dynamique par defaut.
 @Service
 public class TravelSearchService {
 

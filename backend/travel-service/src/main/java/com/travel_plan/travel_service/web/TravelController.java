@@ -31,23 +31,18 @@ public class TravelController {
         return travelService.findAll();
     }
 
-    // feat/search-and-recommendations : "Elasticsearch-based travel search ... across all
-    // travel details" - voir TravelSearchService. Route litterale "/search" declaree avant
-    // "/{id}" par lisibilite, mais Spring (PathPatternParser) les distingue de toute facon
-    // correctement quel que soit l'ordre (les deux coexistaient deja avec ManagerStatsController).
+    // "/search" placee avant "/{id}" par lisibilite ; Spring distingue les deux correctement quel que soit l'ordre.
     @GetMapping("/search")
     public List<TravelResponse> search(@RequestParam("q") String query) {
         return travelService.search(query);
     }
 
-    // "with autocomplete for smooth, dynamic querying".
     @GetMapping("/autocomplete")
     public List<TravelResponse> autocomplete(@RequestParam("q") String query) {
         return travelService.autocomplete(query);
     }
 
-    // Recommandations personnalisees du Traveler connecte (voir RecommendationRepository) -
-    // toujours "moi", pas d'id en parametre.
+    // Toujours "pour le Traveler connecte", pas d'id en parametre (voir RecommendationRepository).
     @GetMapping("/recommendations")
     public List<TravelResponse> recommendations(Authentication authentication) {
         return travelService.recommendations(principal(authentication));

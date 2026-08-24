@@ -38,13 +38,8 @@ public interface RecommendationRepository extends Neo4jRepository<TravelNode, St
             """)
     void recordFeedback(String travelerId, String travelId, int rating);
 
-    // Recommandation basee sur le contenu : voyages similaires (pays / tranche de prix /
-    // tranche de duree - au moins 1 des 3 champs en commun) a ceux deja suivis ou notes par
-    // ce Traveler, en excluant ceux auxquels il participe deja. Score = nombre de voyages
-    // "aimes" avec lesquels le candidat partage au moins un champ (approximation simple d'un
-    // score de pertinence, suffisante pour l'audit qui verifie surtout que la recommandation
-    // change bien selon l'historique de l'utilisateur connecte - voir lets-travel_audit.md,
-    // section "Verify the precision of travel recommendations... switch to a different account").
+    // Voyages partageant >=1 des 3 champs avec l'historique du Traveler, exclut deja-participes,
+    // score = nombre de voyages "aimes" en commun.
     @Query("""
             MATCH (me:Traveler {id: $travelerId})-[:PARTICIPATED_IN|RATED]->(liked:Travel)
             WITH me, collect(DISTINCT liked) AS likedTravels

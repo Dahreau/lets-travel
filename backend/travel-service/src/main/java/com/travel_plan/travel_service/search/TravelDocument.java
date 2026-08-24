@@ -7,10 +7,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-// Document Elasticsearch indexe pour la recherche/autocomplete (enonce : "dynamic querying
-// across all travel details"). Denormalise a partir de Travel + ses Destination - pas de lien
-// vivant vers Postgres, juste un instantane resynchronise a chaque create/update/delete
-// (voir TravelService).
+// Instantane denormalise de Travel, resynchronise a chaque create/update/delete (voir TravelService).
 public record TravelDocument(
         String id,
         String title,
