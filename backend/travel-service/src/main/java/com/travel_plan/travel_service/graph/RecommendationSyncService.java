@@ -58,10 +58,11 @@ public class RecommendationSyncService {
                 recommendationRepository.recordFeedback(travelerId.toString(), travelId.toString(), rating));
     }
 
+    // Spring Data garantit qu'une methode retournant une List ne renvoie jamais null.
     public List<UUID> recommend(UUID travelerId) {
         List<String> ids = neo4jTransactionTemplate.execute(status ->
                 recommendationRepository.recommendTravelIds(travelerId.toString(), DEFAULT_RECOMMENDATION_LIMIT));
-        return ids == null ? List.of() : ids.stream().map(UUID::fromString).toList();
+        return ids.stream().map(UUID::fromString).toList();
     }
 
     // Premiere destination par ordre : simplification assumee pour un voyage multi-destinations.

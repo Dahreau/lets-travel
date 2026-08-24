@@ -214,3 +214,20 @@ private SearchResponse<TravelDocument> searchResponseWithIds(UUID... ids) {
 `Hit.Builder` exige `index`+`id` ; `HitsMetadata.Builder` exige `hits` (liste non vide) ; `SearchResponse.Builder` (via sa classe mère `ResponseBody.AbstractBuilder`) exige `took`+`timedOut`+`shards`+`hits` ; `ShardStatistics.Builder` exige `total`+`successful`+`failed`.
 
 **À retenir** : sur ce projet, un client externe fortement typé comme `elasticsearch-java` mélange des interfaces (mockables sans souci, ex. `ElasticsearchClient`) et des classes concrètes générées avec constructeur privé (non mockables proprement, ex. `Hit`/`HitsMetadata`/`SearchResponse`) — pour ces dernières, construire de vraies instances via leurs Builders publics plutôt que de les mocker. Plus généralement : face à un échec de test qui persiste après un premier correctif non vérifié par une preuve concrète, ne pas tenter un 2e correctif à l'aveugle — lire le rapport Surefire complet sur disque (la sortie console collée dans un terminal peut être tronquée) avant de reformuler une hypothèse.
+
+## 21. SonarQube signale `RecommendationSyncService.recommend()` : "Change this condition so that it does not always evaluate to 'false'"
+
+**Problème** : Quality Gate en échec sur `lets-travel-travel-service`, un seul New Code issue restant après la correction des round précédents : `ids == null` dans `recommend()` jugé toujours faux par l'analyse symbolique de Sonar.
+
+**Cause** : `recommendationRepository.recommendTravelIds(...)` est une méthode Spring Data qui retourne une `List` — Spring Data garantit qu'une telle méthode ne renvoie jamais `null` (liste vide sinon), une convention documentée que Sonar connaît via les annotations de null-safety Spring (package `org.springframework.transaction.support`). Le check défensif `ids == null ? List.of() : ...` était donc du code mort, provable comme tel par Sonar.
+
+**Solution** : suppression du check et du test associé (`recommendReturnsEmptyListWhenRepositoryReturnsNull`, qui mockait un cas que Spring Data ne peut pas produire) :
+```java
+public List<UUID> recommend(UUID travelerId) {
+    List<String> ids = neo4jTransactionTemplate.execute(status ->
+            recommendationRepository.recommendTravelIds(travelerId.toString(), DEFAULT_RECOMMENDATION_LIMIT));
+    return ids.stream().map(UUID::fromString).toList();
+}
+```
+
+**À retenir** : sur ce projet, ne pas ajouter de garde `== null` par réflexe autour d'un retour de méthode Spring Data de type collection — c'est à la fois inutile (contrat jamais violé) et repéré comme code mort par Sonar. Confirmé par un `mvn test` vert (158/158) après suppression.

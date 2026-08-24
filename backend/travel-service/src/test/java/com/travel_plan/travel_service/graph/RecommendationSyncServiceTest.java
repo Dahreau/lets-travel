@@ -121,12 +121,4 @@ class RecommendationSyncServiceTest {
 
         assertThat(results).containsExactly(recommendedId);
     }
-
-    @Test
-    void recommendReturnsEmptyListWhenRepositoryReturnsNull() {
-        UUID travelerId = UUID.randomUUID();
-        when(recommendationRepository.recommendTravelIds(travelerId.toString(), 10)).thenReturn(null);
-
-        assertThat(service.recommend(travelerId)).isEmpty();
-    }
 }
