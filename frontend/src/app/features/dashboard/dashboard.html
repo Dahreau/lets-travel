@@ -1,7 +1,60 @@
-<app-page-header title="dashboard" subtitle="system status" />
+<app-page-header title="dashboard" [subtitle]="isManager() ? 'mes voyages' : 'system status'" />
 
 @if (loading()) {
   <app-spinner />
+} @else if (isManager()) {
+  @if (managerStats(); as s) {
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">voyages</div>
+        <div class="stat-value">{{ s.travelCount }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">voyageurs</div>
+        <div class="stat-value">{{ s.travelerCount }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">revenu estimé</div>
+        <div class="stat-value">{{ s.estimatedRevenue }}</div>
+      </div>
+    </div>
+  }
+
+  <h2 class="section-title">mes voyages</h2>
+
+  @if (myTravels().length === 0) {
+    <div class="empty-state">Aucun voyage créé pour l'instant</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Titre</th>
+            <th>Dates</th>
+            <th>Prix</th>
+            <th>Statut</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (travel of myTravels(); track travel.id) {
+            <tr>
+              <td>{{ travel.title }}</td>
+              <td>{{ travel.startDate }} → {{ travel.endDate }}</td>
+              <td>{{ travel.price !== null ? travel.price + ' ' + travel.currency : '—' }}</td>
+              <td><app-badge [value]="travel.status" /></td>
+              <td class="actions">
+                <a [routerLink]="['/manager/travels', travel.id]" class="btn btn-ghost btn-sm">
+                  abonnés & feedback
+                </a>
+                <a [routerLink]="['/travels', travel.id, 'edit']" class="btn btn-ghost btn-sm">edit</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
 } @else if (stats(); as s) {
   <div class="stat-grid">
     <div class="stat-card">

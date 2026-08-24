@@ -53,18 +53,25 @@ public class SecurityConfig {
                         .hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
                         .requestMatchers(HttpMethod.POST, "/api/travels/*/reports").hasRole(TRAVELER_ROLE)
                         .requestMatchers(HttpMethod.GET, "/api/reports").hasRole(ADMIN_ROLE)
+                        // feat/manager-frontend : dashboard prive du manager - meme raison que les
+                        // blocs ci-dessus (doit precéder la regle generique GET /api/travels/**, qui
+                        // matcherait sinon ce chemin avec le role TRAVELER, trop permissif ici). La
+                        // page publique manager (GET /{managerId}/public-stats) n'a pas besoin d'une
+                        // regle dediee : elle est volontairement couverte par la regle generique
+                        // ci-dessous (TRAVELER minimum), ouverte a tout utilisateur authentifie.
+                        .requestMatchers(HttpMethod.GET, "/api/travels/managers/me/stats")
+                        .hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
                         // Un Travel Manager cree/modifie/supprime ses propres voyages (verifie en
                         // plus dans TravelService, la HttpSecurity ne sait pas encore lequel est "le sien").
                         .requestMatchers(HttpMethod.POST, "/api/travels").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
                         .requestMatchers(HttpMethod.PUT, TRAVELS_WILDCARD).hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
                         .requestMatchers(HttpMethod.DELETE, TRAVELS_WILDCARD).hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
-                        // GET (liste + detail) ouvert a tout appelant authentifie (TRAVELER minimum,
-                        // herite par TRAVEL_MANAGER/ADMIN) : un Traveler doit pouvoir consulter/parcourir
-                        // les voyages pour s'y abonner (feat/traveler-subscriptions) et payer
-                        // (feat/travel-pricing-and-traveler-payment, qui recupere le prix via ce meme
-                        // GET, appele avec le JWT propage de l'appelant original - voir
-                        // payment-service TravelServiceClient). Un "GET mes voyages" filtre pour un
-                        // manager reste une fonctionnalite a part (dashboard manager), pas encore construite.
+                        // GET (liste + detail, + le sous-arbre /managers/** ci-dessus) ouvert a tout
+                        // appelant authentifie (TRAVELER minimum, herite par TRAVEL_MANAGER/ADMIN) :
+                        // un Traveler doit pouvoir consulter/parcourir les voyages pour s'y abonner
+                        // (feat/traveler-subscriptions) et payer (feat/travel-pricing-and-traveler-payment,
+                        // qui recupere le prix via ce meme GET, appele avec le JWT propage de
+                        // l'appelant original - voir payment-service TravelServiceClient).
                         .requestMatchers(HttpMethod.GET, TRAVELS_WILDCARD).hasRole(TRAVELER_ROLE)
                         .anyRequest().hasRole(ADMIN_ROLE))
                 .addFilterBefore(

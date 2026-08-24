@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface SubscriptionRepository extends JpaRepository<Subscription, UUID> {
 
@@ -18,4 +20,16 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
     // statut compte, y compris CANCELLED - avoir ete inscrit a un moment donne suffit,
     // contrairement au cutoff de desabonnement qui ne regarde que les abonnements ACTIVE.
     boolean existsByTravel_IdAndTravelerId(UUID travelId, UUID travelerId);
+
+    // feat/manager-frontend : nombre d'abonnes actifs d'UN voyage donne, utilise pour estimer
+    // le revenu (prix x abonnes) dans ManagerStatsService.myStats.
+    long countByTravel_IdAndStatus(UUID travelId, SubscriptionStatus status);
+
+    // feat/manager-frontend : nombre de voyageurs DISTINCTS sur l'ensemble des voyages d'un
+    // manager - un derived query name ne sait pas exprimer "count distinct sur une propriete",
+    // d'ou le @Query explicite (seul cas du repository qui en a besoin).
+    @Query("SELECT COUNT(DISTINCT s.travelerId) FROM Subscription s "
+            + "WHERE s.travel.managerId = :managerId AND s.status = :status")
+    long countDistinctTravelersByManagerIdAndStatus(
+            @Param("managerId") UUID managerId, @Param("status") SubscriptionStatus status);
 }

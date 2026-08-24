@@ -28,16 +28,19 @@ describe('TravelsService', () => {
     service
       .create({
         title: 'Trip',
-        ownerId: 'u1',
+        managerId: 'u1',
         startDate: '2026-01-01',
         endDate: '2026-01-05',
         status: 'PLANNED',
+        price: 500,
+        currency: 'EUR',
         destinations: [],
         transportations: [],
       })
       .subscribe();
     const req = httpMock.expectOne('/api/travels');
     expect(req.request.method).toBe('POST');
+    expect(req.request.body.managerId).toBe('u1');
     req.flush({});
   });
 

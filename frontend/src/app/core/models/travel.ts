@@ -43,11 +43,18 @@ export interface Transportation {
 export interface Travel {
   id: string;
   title: string;
-  ownerId: string;
+  // Anciennement "ownerId" cote frontend (stale depuis feat/travel-manager-role, qui a renomme
+  // le champ backend) : un voyage est une offre creee et geree par un Travel Manager, pas la
+  // propriete d'un traveler (qui s'y abonne via Subscription - voir docs/nouveautes-vs-travel-plan.md).
+  managerId: string;
   startDate: string;
   endDate: string;
   durationDays: number;
   status: TravelStatus;
+  // Nullable : les voyages crees avant feat/travel-pricing-and-traveler-payment n'en ont pas
+  // retroactivement. TravelRequest, lui, les impose desormais pour toute creation/modification.
+  price: number | null;
+  currency: string | null;
   destinations: Destination[];
   transportations: Transportation[];
   createdAt: string;
@@ -56,10 +63,12 @@ export interface Travel {
 
 export interface TravelRequest {
   title: string;
-  ownerId: string;
+  managerId: string;
   startDate: string;
   endDate: string;
   status: TravelStatus;
+  price: number;
+  currency: string;
   destinations: Destination[];
   transportations: Transportation[];
 }

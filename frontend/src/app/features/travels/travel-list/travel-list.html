@@ -12,9 +12,10 @@
       <thead>
         <tr>
           <th>Titre</th>
-          <th>Owner</th>
+          <th>Manager</th>
           <th>Dates</th>
           <th>Durée</th>
+          <th>Prix</th>
           <th>Destinations</th>
           <th>Statut</th>
           <th></th>
@@ -24,9 +25,12 @@
         @for (travel of travels(); track travel.id) {
           <tr>
             <td>{{ travel.title }}</td>
-            <td>{{ travel.ownerId | slice: 0 : 8 }}…</td>
+            <td>
+              <a [routerLink]="['/manager', travel.managerId]">{{ travel.managerId | slice: 0 : 8 }}…</a>
+            </td>
             <td>{{ travel.startDate }} → {{ travel.endDate }}</td>
             <td>{{ travel.durationDays }}j</td>
+            <td>{{ travel.price !== null ? travel.price + ' ' + travel.currency : '—' }}</td>
             <td>{{ travel.destinations.length }}</td>
             <td><app-badge [value]="travel.status" /></td>
             <td class="actions">

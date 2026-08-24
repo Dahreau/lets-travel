@@ -1,0 +1,91 @@
+<app-page-header [title]="travel() ? travel()!.title : 'voyage'" subtitle="abonnés & feedback">
+  <a routerLink="/dashboard" class="btn btn-ghost">← retour au dashboard</a>
+</app-page-header>
+
+@if (loading()) {
+  <app-spinner />
+} @else {
+  <h2 class="section-title">abonnés</h2>
+
+  @if (subscribers().length === 0) {
+    <div class="empty-state">Aucun abonné pour ce voyage</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Voyageur</th>
+            <th>Email</th>
+            <th>Statut</th>
+            <th>Abonné le</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of subscribers(); track row.subscription.id) {
+            <tr>
+              <td>
+                @if (row.traveler) {
+                  {{ row.traveler.firstName }} {{ row.traveler.lastName }}
+                } @else {
+                  {{ row.subscription.travelerId | slice: 0 : 8 }}…
+                }
+              </td>
+              <td>{{ row.traveler?.email ?? '—' }}</td>
+              <td><app-badge [value]="row.subscription.status" /></td>
+              <td>{{ row.subscription.subscribedAt }}</td>
+              <td class="actions">
+                @if (row.subscription.status === 'ACTIVE') {
+                  <button
+                    type="button"
+                    class="btn btn-danger btn-sm"
+                    (click)="unsubscribeTarget.set(row.subscription)"
+                  >
+                    désabonner
+                  </button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <h2 class="section-title">feedback</h2>
+
+  @if (feedbacks().length === 0) {
+    <div class="empty-state">Aucun feedback pour ce voyage</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Note</th>
+            <th>Commentaire</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (feedback of feedbacks(); track feedback.id) {
+            <tr>
+              <td>{{ feedback.rating }}/5</td>
+              <td>{{ feedback.comment || '—' }}</td>
+              <td>{{ feedback.createdAt }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}
+
+@if (unsubscribeTarget(); as target) {
+  <app-confirm-dialog
+    title="Désabonner ce voyageur"
+    message="Le voyageur sera désabonné de ce voyage (sauf si la période de 3 jours avant le départ est déjà passée). Cette action est irréversible."
+    confirmLabel="Désabonner"
+    (confirmed)="confirmUnsubscribe()"
+    (cancelled)="unsubscribeTarget.set(null)"
+  />
+}

@@ -1,0 +1,22 @@
+<app-page-header title="travel manager" subtitle="statistiques publiques">
+  <a routerLink="/travels" class="btn btn-ghost">← retour aux voyages</a>
+</app-page-header>
+
+@if (loading()) {
+  <app-spinner />
+} @else if (stats(); as s) {
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">voyages organisés</div>
+      <div class="stat-value">{{ s.travelCount }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">note moyenne</div>
+      <div class="stat-value">{{ s.averageRating !== null ? (s.averageRating | number: '1.1-1') : '—' }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">signalements</div>
+      <div class="stat-value">{{ s.reportCount }}</div>
+    </div>
+  </div>
+}

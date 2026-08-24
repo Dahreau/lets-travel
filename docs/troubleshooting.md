@@ -115,3 +115,39 @@ private SubscriptionRepository subscriptionRepository;
 **Solution** : extraction d'une constante `TRAVELS_WILDCARD = "/api/travels/**"`, réutilisée pour les 3 `requestMatchers` (`PUT`, `DELETE`, `GET`).
 
 **À retenir** : dès qu'un `requestMatchers(...)` réutilise un pattern d'URL déjà présent ailleurs dans le même `SecurityConfig`, vérifier s'il vaut mieux l'extraire en constante *avant* de pousser — Sonar ne le remontera que si le nouveau code fait franchir le seuil de duplication (donc invisible en relisant seulement le diff de la branche, il faut avoir en tête l'état du fichier dans son ensemble).
+
+## 14. Le formulaire de voyage frontend n'aurait plus jamais pu créer/modifier un voyage (`ownerId`/`managerId`, `price`/`currency`)
+
+**Problème** : en implémentant `feat/manager-frontend`, la lecture de `TravelRequest.java` a révélé que le frontend Angular (`core/models/travel.ts`, `travel-form.ts`/`.html`, `travel-list.html`) n'avait jamais été mis à jour après deux changements de contrat antérieurs sur `travel-service` : (1) `feat/travel-manager-role` a renommé `Travel.ownerId` en `managerId` (voir section dédiée de `nouveautes-vs-travel-plan.md`) — le frontend envoyait toujours `ownerId` ; (2) `feat/travel-pricing-and-traveler-payment` a rendu `price`/`currency` obligatoires sur `TravelRequest` (`@NotNull @Positive` / `@NotBlank`) — le formulaire ne les proposait pas du tout. Conséquence : toute création ou modification de voyage depuis l'UI admin échouait silencieusement en 400 Bean Validation depuis l'introduction de ces deux branches, sans que personne ne l'ait remarqué (le formulaire n'avait apparemment pas été retesté depuis).
+
+**Comment on l'a détecté** : pas via un plantage observé en cours de session, mais en relisant `TravelRequest.java`/`Travel.java` par prudence avant de brancher `feat/manager-frontend` dessus (le dashboard manager dépend du prix des voyages pour son estimation de revenu) — la faille aurait été invisible tant que personne n'essayait de créer un voyage depuis l'UI.
+
+**Solution** : renommage `ownerId` → `managerId` dans le modèle et partout où il est utilisé, ajout des champs `price`/`currency` au formulaire (même pattern que `payment-form` : champ texte 3 lettres pour la devise, défaut `EUR`), et rôle-conditionnalité du champ manager — un ADMIN choisit explicitement un `TRAVEL_MANAGER` dans une liste déroulante, un `TRAVEL_MANAGER` a le contrôle désactivé et forcé à son propre `userId` (le backend l'ignore de toute façon pour cet appelant, voir `TravelService.resolveManagerId`).
+
+**À retenir** : un renommage ou un changement de contrat backend (`TravelRequest`, `TravelResponse`) n'est pas terminé tant que le frontend qui l'appelle n'a pas été vérifié — même si la branche qui l'a introduit ne touchait "que" le backend. Rien dans la CI actuelle (pas de test e2e frontend↔backend) n'aurait rattrapé cette dérive.
+
+## 15. Impossible de créer un compte Travel Manager depuis l'UI admin
+
+**Problème** : `user-service`'s `Role` enum a trois valeurs depuis `feat/travel-manager-role` (`TRAVELER`, `TRAVEL_MANAGER`, `ADMIN`), mais le frontend (`core/models/user.ts` → `UserRole`, et le tableau `UserForm.roles`) était resté bloqué sur `['TRAVELER', 'ADMIN']`. Aucun formulaire ne permettait donc de créer ou promouvoir un compte manager : `feat/manager-frontend` (dashboard + profil public manager) n'avait littéralement aucun compte à connecter pour être testé de bout en bout.
+
+**Solution** : ajout de `'TRAVEL_MANAGER'` à `UserRole` et au tableau `roles` de `UserForm`, plus une variante de badge dédiée (`warning`) pour le distinguer visuellement d'`ADMIN`/`TRAVELER` dans les tableaux (`shared/ui/badge.ts`).
+
+**À retenir** : même symptôme que le point 14 — un rôle ajouté côté backend (`feat/travel-manager-role`) doit aussi être propagé à tous les formulaires frontend qui énumèrent des rôles en dur, pas seulement aux règles d'autorisation `SecurityConfig`.
+
+## 16. `GET /api/users/{id}` interdit à un Travel Manager — impossible d'afficher le profil d'un abonné
+
+**Problème** : `user-service`'s `SecurityConfig` réservait toute route (sauf l'inscription publique) à `ADMIN` (`anyRequest().hasRole("ADMIN")`), sans exception. L'énoncé (`docs/lets-travel_project.md`, section Travel Manager) demande explicitement de pouvoir "view profiles" des abonnés à ses voyages — impossible avec cette règle telle quelle : un appel `GET /api/users/{id}` avec un JWT `TRAVEL_MANAGER` recevait un 403.
+
+**Solution** : ajout d'une règle dédiée `GET /api/users/*` (lookup par id — pas `GET /api/users` sans suffixe, qui reste la liste complète) ouverte à `ADMIN` et `TRAVEL_MANAGER`, placée avant le `anyRequest().hasRole("ADMIN")` catch-all. Le contrôle fin ("seulement les abonnés de SES voyages à lui") reste fait côté `travel-service` (`SubscriptionService.requireManagerOwnershipOrAdmin`) : `user-service` n'a aucun moyen de savoir de quel voyage provient l'appel, il ne peut trancher que grossièrement par rôle.
+
+**À retenir** : `user-service` n'a pas de `RoleHierarchy` (contrairement à `travel-service`) — un `hasAnyRole(...)` doit donc lister explicitement chaque rôle autorisé (`ADMIN`, `TRAVEL_MANAGER`), un `hasRole(TRAVEL_MANAGER_ROLE)` seul n'aurait pas laissé passer un `ADMIN`.
+
+## 17. SonarQube (frontend, `lets-travel-frontend`) : tests sans assertion "reconnue" et assertions génériques (`.length`/`.toBe` au lieu de `.toHaveLength`)
+
+**Problème** : le scan Sonar de `feat/manager-frontend` (frais, "Last analysis" à quelques minutes) fait échouer le Quality Gate avec deux règles orientées qualité de tests TypeScript/Vitest, jamais vues avant sur ce projet :
+- **Blocker** *"Add at least one assertion to this test case"* sur deux tests qui ne contenaient que des `httpMock.expectOne(...)`/`httpMock.expectNone(...)` (`dashboard.spec.ts` L81, `travel-form.spec.ts` L153) — fonctionnellement ces appels *sont* des assertions (ils font échouer le test si l'appel HTTP attendu n'a pas/a eu lieu), mais Sonar ne reconnaît que les `expect(...)` littéraux de Vitest/Chai, pas les appels d'assertion propres à `HttpTestingController`.
+- **Low** *"Prefer a more specific assertion instead of this generic one"* sur 9 occurrences du pattern `expect(x.length).toBe(N)` dans `travel-form.spec.ts` (L41/46/49/53/56/59/74/77/80) — Sonar préfère `expect(x).toHaveLength(N)`, qui produit un message d'échec plus lisible (affiche le contenu du tableau, pas juste les deux longueurs).
+
+**Solution** : pour les deux Blocker, fusion du test sans assertion avec le test voisin qui vérifie déjà un état par `expect(...)` (même `beforeEach`, même scénario) — le `httpMock.expectNone(...)` devient une vérification supplémentaire dans un test qui contient déjà un `expect()` réel, au lieu de vivre seul dans son propre `it(...)`. Pour les 9 Low, remplacement mécanique de `expect(x.length).toBe(N)` par `expect(x).toHaveLength(N)`, sans changement de logique.
+
+**À retenir** : sur ce projet, un test qui ne fait *que* du `httpMock.expectOne/expectNone(...)` sans aucun `expect(...)` littéral déclenche un Blocker Sonar, même si le test est fonctionnellement valide — toujours regrouper ce genre de vérification HTTP avec un test voisin qui a déjà une assertion d'état, plutôt que de lui laisser son propre `it(...)` isolé. Et préférer systématiquement les matchers Vitest spécifiques (`toHaveLength`, `toContain`, `toBeNull`, etc.) à leur équivalent générique (`.length).toBe(...)`, `.toBe(null)`...) dès l'écriture du test, pas seulement en correction après coup.
