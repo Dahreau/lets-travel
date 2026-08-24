@@ -4,6 +4,7 @@ export type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 
 const VARIANT_BY_VALUE: Record<string, BadgeVariant> = {
   ADMIN: 'info',
+  TRAVEL_MANAGER: 'warning',
   TRAVELER: 'neutral',
   PLANNED: 'info',
   CONFIRMED: 'success',

@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { toDatetimeLocalValue, toIsoInstant } from '../../../core/util/datetime';
 import { extractErrorMessage } from '../../../core/http/api-error';
+import { AuthService } from '../../../core/auth/auth';
 import { ToastService } from '../../../core/notifications/toast';
 import { PageHeader } from '../../../shared/ui/page-header';
 import { Spinner } from '../../../shared/ui/spinner';
@@ -30,6 +31,7 @@ export class TravelForm implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly travelsService = inject(TravelsService);
   private readonly usersService = inject(UsersService);
+  private readonly authService = inject(AuthService);
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -42,7 +44,11 @@ export class TravelForm implements OnInit {
   protected readonly isEdit = computed(() => this.travelId() !== null);
   protected readonly loading = signal(false);
   protected readonly saving = signal(false);
-  protected readonly users = signal<User[]>([]);
+  // Uniquement les comptes TRAVEL_MANAGER : un Travel Manager gère ses propres voyages (le
+  // backend force managerId à son propre userId, cf. TravelService.resolveManagerId), seul un
+  // Admin doit choisir explicitement pour qui il crée/modifie un voyage.
+  protected readonly managers = signal<User[]>([]);
+  protected readonly isAdmin = computed(() => this.authService.currentUser()?.role === 'ADMIN');
 
   private createActivityGroup(activity?: Activity) {
     return this.fb.nonNullable.group({
@@ -103,19 +109,28 @@ export class TravelForm implements OnInit {
 
   protected readonly form = this.fb.nonNullable.group({
     title: ['', Validators.required],
-    ownerId: ['', Validators.required],
+    managerId: ['', Validators.required],
     startDate: ['', Validators.required],
     endDate: ['', Validators.required],
     status: ['PLANNED', Validators.required],
+    price: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
+    currency: ['EUR', Validators.required],
     destinations: this.destinationsArray,
     transportations: this.transportationsArray,
   });
 
   ngOnInit(): void {
-    this.usersService.findAll().subscribe({
-      next: (users) => this.users.set(users),
-      error: (error: unknown) => this.toastService.error(extractErrorMessage(error)),
-    });
+    if (this.isAdmin()) {
+      this.usersService.findAll().subscribe({
+        next: (users) => this.managers.set(users.filter((u) => u.role === 'TRAVEL_MANAGER')),
+        error: (error: unknown) => this.toastService.error(extractErrorMessage(error)),
+      });
+    } else {
+      // GET /api/users est réservé à l'Admin (sauf lookup par id) : un Travel Manager n'a de
+      // toute façon rien à choisir ici, pas besoin de l'appeler.
+      this.form.controls.managerId.setValue(this.authService.userId() ?? '');
+      this.form.controls.managerId.disable();
+    }
 
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) {
@@ -132,10 +147,12 @@ export class TravelForm implements OnInit {
         next: (travel) => {
           this.form.patchValue({
             title: travel.title,
-            ownerId: travel.ownerId,
+            managerId: travel.managerId,
             startDate: travel.startDate,
             endDate: travel.endDate,
             status: travel.status,
+            price: travel.price,
+            currency: travel.currency ?? 'EUR',
           });
           this.destinationsArray.clear();
           travel.destinations.forEach((d) => this.destinationsArray.push(this.createDestinationGroup(d)));
@@ -240,10 +257,12 @@ export class TravelForm implements OnInit {
     const raw = this.form.getRawValue();
     const request: TravelRequest = {
       title: raw.title,
-      ownerId: raw.ownerId,
+      managerId: raw.managerId,
       startDate: raw.startDate,
       endDate: raw.endDate,
       status: raw.status as TravelRequest['status'],
+      price: raw.price as number,
+      currency: raw.currency.toUpperCase(),
       destinations: this.destinationsArray.controls.map((c, i) => this.buildDestinationPayload(i, c)),
       transportations: this.transportationsArray.controls.map((c) => this.buildTransportationPayload(c)),
     };

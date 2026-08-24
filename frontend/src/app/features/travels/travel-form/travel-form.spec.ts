@@ -2,9 +2,11 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { vi } from 'vitest';
+import { AuthService } from '../../../core/auth/auth';
 import { TravelForm } from './travel-form';
 
-describe('TravelForm', () => {
+describe('TravelForm (as ADMIN)', () => {
   let fixture: ReturnType<typeof TestBed.createComponent<TravelForm>>;
   let component: TravelForm;
   let httpMock: HttpTestingController;
@@ -22,6 +24,9 @@ describe('TravelForm', () => {
         },
       ],
     }).compileComponents();
+
+    const authService = TestBed.inject(AuthService);
+    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'admin', role: 'ADMIN' });
 
     httpMock = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(TravelForm);
@@ -73,5 +78,84 @@ describe('TravelForm', () => {
 
     component['removeTransportation'](0);
     expect(component['transportationsArray'].length).toBe(0);
+  });
+
+  it('exposes the manager dropdown control, enabled, for an admin', () => {
+    expect(component['form'].controls.managerId.disabled).toBe(false);
+  });
+});
+
+describe('TravelForm (as ADMIN) — manager dropdown filtering', () => {
+  it('only lists TRAVEL_MANAGER users as candidate managers', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TravelForm],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({}) } },
+        },
+      ],
+    }).compileComponents();
+
+    const authService = TestBed.inject(AuthService);
+    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'admin', role: 'ADMIN' });
+
+    const httpMock = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(TravelForm);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    httpMock.expectOne('/api/users').flush([
+      { id: 'm1', firstName: 'Ada', lastName: 'M', email: 'ada@t.com', phone: null, role: 'TRAVEL_MANAGER', address: null, createdAt: '', updatedAt: '' },
+      { id: 'u1', firstName: 'Bob', lastName: 'T', email: 'bob@t.com', phone: null, role: 'TRAVELER', address: null, createdAt: '', updatedAt: '' },
+      { id: 'a1', firstName: 'Zoe', lastName: 'A', email: 'zoe@t.com', phone: null, role: 'ADMIN', address: null, createdAt: '', updatedAt: '' },
+    ]);
+
+    expect(component['managers']().map((m) => m.id)).toEqual(['m1']);
+    httpMock.verify();
+  });
+});
+
+describe('TravelForm (as TRAVEL_MANAGER)', () => {
+  let fixture: ReturnType<typeof TestBed.createComponent<TravelForm>>;
+  let component: TravelForm;
+  let httpMock: HttpTestingController;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [TravelForm],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({}) } },
+        },
+      ],
+    }).compileComponents();
+
+    const authService = TestBed.inject(AuthService);
+    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
+    vi.spyOn(authService, 'userId').mockReturnValue('manager-1');
+
+    httpMock = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(TravelForm);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  afterEach(() => httpMock.verify());
+
+  it('does not call GET /api/users (reserved to admins)', () => {
+    httpMock.expectNone('/api/users');
+  });
+
+  it('forces the managerId control to the connected manager and disables it', () => {
+    expect(component['form'].controls.managerId.disabled).toBe(true);
+    expect(component['form'].getRawValue().managerId).toBe('manager-1');
   });
 });

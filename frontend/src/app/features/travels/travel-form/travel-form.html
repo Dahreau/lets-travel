@@ -10,15 +10,17 @@
         <input id="title" class="input" formControlName="title" />
       </div>
 
-      <div class="field">
-        <label class="label" for="ownerId">Owner<span class="req">*</span></label>
-        <select id="ownerId" class="select" formControlName="ownerId">
-          <option value="" disabled>— sélectionner —</option>
-          @for (user of users(); track user.id) {
-            <option [value]="user.id">{{ user.firstName }} {{ user.lastName }} — {{ user.email }}</option>
-          }
-        </select>
-      </div>
+      @if (isAdmin()) {
+        <div class="field">
+          <label class="label" for="managerId">Travel Manager<span class="req">*</span></label>
+          <select id="managerId" class="select" formControlName="managerId">
+            <option value="" disabled>— sélectionner —</option>
+            @for (manager of managers(); track manager.id) {
+              <option [value]="manager.id">{{ manager.firstName }} {{ manager.lastName }} — {{ manager.email }}</option>
+            }
+          </select>
+        </div>
+      }
 
       <div class="field">
         <label class="label" for="startDate">Date de début<span class="req">*</span></label>
@@ -37,6 +39,16 @@
             <option [value]="status">{{ status }}</option>
           }
         </select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="price">Prix<span class="req">*</span></label>
+        <input id="price" class="input" type="number" step="0.01" min="0.01" formControlName="price" />
+      </div>
+
+      <div class="field">
+        <label class="label" for="currency">Devise<span class="req">*</span></label>
+        <input id="currency" class="input" formControlName="currency" maxlength="3" />
       </div>
     </div>
 

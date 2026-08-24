@@ -6,7 +6,7 @@
     </div>
     <div class="nav-path">~/admin</div>
     <nav class="nav">
-      @for (item of navItems; track item.path) {
+      @for (item of navItems(); track item.path) {
         <a
           [routerLink]="item.path"
           routerLinkActive="active"
@@ -31,7 +31,7 @@
       <div class="topbar-spacer"></div>
       <div class="topbar-user">
         <span class="user-name">{{ username() ?? '...' }}</span>
-        <span class="badge badge-info">admin</span>
+        <app-badge [value]="role()" />
         <button type="button" class="btn btn-ghost btn-sm" (click)="logout()">logout</button>
       </div>
     </header>

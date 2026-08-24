@@ -55,10 +55,31 @@ describe('AuthService', () => {
     expect(service.currentUser()).toBeNull();
     expect(service.isAuthenticated()).toBe(false);
   });
+
+  it('userId() returns null when there is no token', () => {
+    expect(service.userId()).toBeNull();
+  });
+
+  it('userId() reads the userId claim embedded in the JWT', () => {
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const managerId = '11111111-1111-1111-1111-111111111111';
+    service.login({ username: 'manager', password: 'secret' }).subscribe();
+    httpMock.expectOne('/api/auth/login').flush({ token: fakeToken(futureExp, managerId) });
+
+    expect(service.userId()).toBe(managerId);
+  });
+
+  it('userId() returns null for the default admin account (no userId claim)', () => {
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    service.login({ username: 'admin', password: 'secret' }).subscribe();
+    httpMock.expectOne('/api/auth/login').flush({ token: fakeToken(futureExp) });
+
+    expect(service.userId()).toBeNull();
+  });
 });
 
-function fakeToken(exp: number): string {
+function fakeToken(exp: number, userId?: string): string {
   const header = btoa(JSON.stringify({ alg: 'HS256' }));
-  const body = btoa(JSON.stringify({ sub: 'admin', exp }));
+  const body = btoa(JSON.stringify({ sub: 'admin', exp, ...(userId ? { userId } : {}) }));
   return `${header}.${body}.sig`;
 }

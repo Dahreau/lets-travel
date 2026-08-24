@@ -1,4 +1,4 @@
-export type UserRole = 'TRAVELER' | 'ADMIN';
+export type UserRole = 'TRAVELER' | 'TRAVEL_MANAGER' | 'ADMIN';
 
 export interface Address {
   street: string;

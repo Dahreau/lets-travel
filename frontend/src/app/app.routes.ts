@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth-guard';
+import { managerGuard } from './core/auth/manager-guard';
 
 export const routes: Routes = [
   {
@@ -42,6 +43,24 @@ export const routes: Routes = [
         path: 'travels/:id/edit',
         loadComponent: () =>
           import('./features/travels/travel-form/travel-form').then((m) => m.TravelForm),
+      },
+      {
+        // Gestion des abonnés/feedback d'un voyage - réservé au Travel Manager propriétaire
+        // (ou Admin), cf. managerGuard. Doit précéder aucune autre route travels/* : segment
+        // "manager" distinct, pas d'ambiguïté de matching avec /travels/:id/edit ci-dessus.
+        path: 'manager/travels/:id',
+        canActivate: [managerGuard],
+        loadComponent: () =>
+          import('./features/manager/manager-travel-detail/manager-travel-detail').then(
+            (m) => m.ManagerTravelDetail,
+          ),
+      },
+      {
+        // Page publique (enoncé, section Traveler) : ouverte à tout utilisateur authentifié,
+        // pas de guard dédié au-delà de authGuard (déjà appliqué au Shell parent).
+        path: 'manager/:managerId',
+        loadComponent: () =>
+          import('./features/manager/manager-public/manager-public').then((m) => m.ManagerPublic),
       },
       {
         path: 'payments',

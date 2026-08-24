@@ -21,7 +21,9 @@ export class UserForm implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
-  protected readonly roles: UserRole[] = ['TRAVELER', 'ADMIN'];
+  // TRAVEL_MANAGER ajouté par feat/manager-frontend : c'était le seul moyen de créer un
+  // compte manager depuis l'UI (pas d'endpoint de "promotion" séparé, cf. UserService).
+  protected readonly roles: UserRole[] = ['TRAVELER', 'TRAVEL_MANAGER', 'ADMIN'];
   protected readonly userId = signal<string | null>(null);
   protected readonly isEdit = computed(() => this.userId() !== null);
   protected readonly loading = signal(false);
