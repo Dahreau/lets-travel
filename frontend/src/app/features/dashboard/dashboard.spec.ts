@@ -55,14 +55,28 @@ describe('Dashboard (as ADMIN)', () => {
     httpMock.expectOne('/api/travels/admin/travel-rankings').flush([
       { travelId: 't1', title: 'Trip', managerId: 'm1', activeSubscriberCount: 3, revenue: 300, averageRating: 4.5 },
     ]);
+    httpMock.expectOne('/api/travels/admin/monthly-revenue').flush([{ month: '2026-08', revenue: 500 }]);
     httpMock
       .expectOne('/api/reports')
       .flush([{ id: 'r1', travelId: 't1', reporterId: 'u1', reportedType: 'MANAGER', reportedId: 'm1', reason: 'No show', createdAt: '2026-01-01' }]);
+    httpMock.expectOne('/api/users/m1').flush({
+      id: 'm1',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      email: '',
+      phone: null,
+      role: 'TRAVEL_MANAGER',
+      address: null,
+      createdAt: '',
+      updatedAt: '',
+    });
 
     expect(component['stats']()).toEqual({ users: 1, travels: 2, payments: 3, paymentMethods: 0 });
     expect(component['managerRankings']().map((m) => m.managerId)).toEqual(['m1']);
     expect(component['travelRankings']().map((t) => t.travelId)).toEqual(['t1']);
+    expect(component['monthlyRevenue']().map((m) => m.month)).toEqual(['2026-08']);
     expect(component['reports']().map((r) => r.id)).toEqual(['r1']);
+    expect(component['reportedNames']().get('m1')).toBe('Jane Doe');
     expect(component['loading']()).toBe(false);
   });
 });
@@ -102,6 +116,7 @@ describe('Dashboard (as TRAVEL_MANAGER)', () => {
     httpMock.expectNone('/api/payment-methods');
     httpMock.expectNone('/api/travels/admin/manager-rankings');
     httpMock.expectNone('/api/travels/admin/travel-rankings');
+    httpMock.expectNone('/api/travels/admin/monthly-revenue');
     httpMock.expectNone('/api/reports');
   });
 });
@@ -165,6 +180,7 @@ describe('Dashboard (as TRAVELER)', () => {
     httpMock.expectNone('/api/payments');
     httpMock.expectNone('/api/travels/admin/manager-rankings');
     httpMock.expectNone('/api/travels/admin/travel-rankings');
+    httpMock.expectNone('/api/travels/admin/monthly-revenue');
     httpMock.expectNone('/api/reports');
   });
 });

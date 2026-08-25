@@ -30,4 +30,11 @@ describe('AdminStatsService', () => {
     expect(req.request.method).toBe('GET');
     req.flush([]);
   });
+
+  it('GETs the monthly revenue', () => {
+    service.monthlyRevenue().subscribe();
+    const req = httpMock.expectOne('/api/travels/admin/monthly-revenue');
+    expect(req.request.method).toBe('GET');
+    req.flush([]);
+  });
 });

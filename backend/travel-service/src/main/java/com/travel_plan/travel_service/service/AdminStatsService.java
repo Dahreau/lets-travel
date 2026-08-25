@@ -2,6 +2,7 @@ package com.travel_plan.travel_service.service;
 
 import com.travel_plan.travel_service.domain.Feedback;
 import com.travel_plan.travel_service.domain.ReportedType;
+import com.travel_plan.travel_service.domain.Subscription;
 import com.travel_plan.travel_service.domain.SubscriptionStatus;
 import com.travel_plan.travel_service.domain.Travel;
 import com.travel_plan.travel_service.repository.FeedbackRepository;
@@ -9,14 +10,19 @@ import com.travel_plan.travel_service.repository.ReportRepository;
 import com.travel_plan.travel_service.repository.SubscriptionRepository;
 import com.travel_plan.travel_service.repository.TravelRepository;
 import com.travel_plan.travel_service.web.AdminManagerRankingResponse;
+import com.travel_plan.travel_service.web.AdminMonthlyRevenueResponse;
 import com.travel_plan.travel_service.web.AdminTravelRankingResponse;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,10 +34,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class AdminStatsService {
 
+    private static final int REVENUE_MONTHS = 6;
+
     private final TravelRepository travelRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final FeedbackRepository feedbackRepository;
     private final ReportRepository reportRepository;
+    private final Clock clock;
 
     public List<AdminManagerRankingResponse> managerRankings() {
         Map<UUID, List<Travel>> travelsByManager =
@@ -42,6 +51,29 @@ public class AdminStatsService {
                 .sorted(Comparator.comparingDouble(AdminManagerRankingResponse::performanceScore)
                         .reversed())
                 .toList();
+    }
+
+    // 6 derniers mois glissants, abonnements ACTIVE uniquement - meme convention "estimee"
+    // (prix x abonnes) que managerRankings/travelRankings, pas reconcilie avec payment-service.
+    public List<AdminMonthlyRevenueResponse> monthlyRevenue() {
+        YearMonth currentMonth = YearMonth.now(clock);
+        Map<YearMonth, BigDecimal> revenueByMonth = subscriptionRepository.findByStatus(SubscriptionStatus.ACTIVE)
+                .stream()
+                .filter(subscription -> subscription.getTravel().getPrice() != null)
+                .collect(Collectors.groupingBy(
+                        this::subscribedMonth,
+                        Collectors.reducing(
+                                BigDecimal.ZERO, subscription -> subscription.getTravel().getPrice(), BigDecimal::add)));
+
+        return IntStream.rangeClosed(0, REVENUE_MONTHS - 1)
+                .mapToObj(i -> currentMonth.minusMonths((long) REVENUE_MONTHS - 1 - i))
+                .map(month -> new AdminMonthlyRevenueResponse(
+                        month.toString(), revenueByMonth.getOrDefault(month, BigDecimal.ZERO)))
+                .toList();
+    }
+
+    private YearMonth subscribedMonth(Subscription subscription) {
+        return YearMonth.from(subscription.getSubscribedAt().atZone(ZoneOffset.UTC));
     }
 
     public List<AdminTravelRankingResponse> travelRankings() {

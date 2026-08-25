@@ -21,9 +21,13 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { path: '/payment-methods', label: 'payment-methods' },
 ];
 
-// feat/admin-dashboard-overview : /browse manquait alors que le backend l'autorise deja
-// (RoleHierarchy). users/payments/payment-methods restent Admin-only cote backend.
-const MANAGER_NAV_ITEMS: NavItem[] = [DASHBOARD_NAV_ITEM, BROWSE_NAV_ITEM];
+// fix/audit-gaps : /payment-methods manquait alors que le backend l'autorise deja (scope
+// au caller, cf. PaymentMethodController.findAll) - users/payments restent Admin-only.
+const MANAGER_NAV_ITEMS: NavItem[] = [
+  DASHBOARD_NAV_ITEM,
+  BROWSE_NAV_ITEM,
+  { path: '/payment-methods', label: 'payment-methods' },
+];
 
 // feat/traveler-frontend : parcourir/s'abonner (browse) et gerer ses moyens de paiement
 // (deja scopes au caller cote backend, cf. PaymentMethodController.findAll) - pas d'acces

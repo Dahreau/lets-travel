@@ -37,12 +37,12 @@ export interface Payment {
   updatedAt: string;
 }
 
+// fix/audit-gaps : amount/currency retires (PaymentRequest backend, payment-service, les a
+// deja retires - le montant vient de travel-service, jamais du client, voir TravelServiceClient).
 export interface PaymentRequest {
   travelId: string;
   ownerId: string;
   paymentMethodId: string;
-  amount: number;
-  currency: string;
 }
 
 export const PROVIDER_TYPES: ProviderType[] = ['STRIPE', 'PAYPAL'];

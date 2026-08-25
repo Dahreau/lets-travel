@@ -1,10 +1,14 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 import { AuthService } from '../../../core/auth/auth';
 import { TravelForm } from './travel-form';
+
+@Component({ template: '' })
+class DummyComponent {}
 
 describe('TravelForm (as ADMIN)', () => {
   let fixture: ReturnType<typeof TestBed.createComponent<TravelForm>>;
@@ -155,5 +159,62 @@ describe('TravelForm (as TRAVEL_MANAGER)', () => {
     expect(component['form'].getRawValue().managerId).toBe('manager-1');
 
     httpMock.expectNone('/api/users');
+  });
+});
+
+describe('TravelForm (edit mode) — delete', () => {
+  let fixture: ReturnType<typeof TestBed.createComponent<TravelForm>>;
+  let component: TravelForm;
+  let httpMock: HttpTestingController;
+
+  const TRAVEL = {
+    id: 't1',
+    title: 'Trip',
+    managerId: 'manager-1',
+    startDate: '2026-01-01',
+    endDate: '2026-01-05',
+    status: 'PLANNED',
+    price: 500,
+    currency: 'EUR',
+    destinations: [],
+    transportations: [],
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [TravelForm],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([{ path: 'travels', component: DummyComponent }]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: 't1' }) } },
+        },
+      ],
+    }).compileComponents();
+
+    const authService = TestBed.inject(AuthService);
+    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
+    vi.spyOn(authService, 'userId').mockReturnValue('manager-1');
+
+    httpMock = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(TravelForm);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    httpMock.expectOne('/api/travels/t1').flush(TRAVEL);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  // Le controle "c'est bien SON voyage" reste fait par le backend (requireOwnershipOrAdmin) :
+  // le bouton delete n'est qu'un raccourci UI, pas un second controle d'autorisation.
+  it('deletes the travel and navigates away on confirm', () => {
+    component['confirmDelete']();
+    const req = httpMock.expectOne('/api/travels/t1');
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null);
+
+    expect(component['confirmingDelete']()).toBe(false);
   });
 });

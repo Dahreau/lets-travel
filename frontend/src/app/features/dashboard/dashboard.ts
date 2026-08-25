@@ -1,10 +1,10 @@
 import { DecimalPipe, SlicePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { finalize, forkJoin } from 'rxjs';
+import { catchError, finalize, forkJoin, of } from 'rxjs';
 import { AuthService } from '../../core/auth/auth';
 import { extractErrorMessage } from '../../core/http/api-error';
-import { AdminManagerRanking, AdminTravelRanking } from '../../core/models/admin-stats';
+import { AdminManagerRanking, AdminMonthlyRevenue, AdminTravelRanking } from '../../core/models/admin-stats';
 import { ManagerStats } from '../../core/models/manager-stats';
 import { PaymentMethod } from '../../core/models/payment';
 import { ReportResponse } from '../../core/models/report';
@@ -22,6 +22,7 @@ import { PaymentsService } from '../payments/payments';
 import { ReportsService } from '../travels/reports';
 import { TravelerStatsService } from '../travelers/traveler-stats';
 import { TravelsService } from '../travels/travels';
+import { User } from '../../core/models/user';
 import { UsersService } from '../users/users';
 
 interface Stats {
@@ -57,7 +58,9 @@ export class Dashboard implements OnInit {
   protected readonly stats = signal<Stats | null>(null);
   protected readonly managerRankings = signal<AdminManagerRanking[]>([]);
   protected readonly travelRankings = signal<AdminTravelRanking[]>([]);
+  protected readonly monthlyRevenue = signal<AdminMonthlyRevenue[]>([]);
   protected readonly reports = signal<ReportResponse[]>([]);
+  protected readonly reportedNames = signal<Map<string, string>>(new Map());
   protected readonly managerStats = signal<ManagerStats | null>(null);
   protected readonly myTravels = signal<Travel[]>([]);
   protected readonly travelerStats = signal<TravelerStats | null>(null);
@@ -122,11 +125,12 @@ export class Dashboard implements OnInit {
       paymentMethods: this.paymentMethodsService.findAll(),
       managerRankings: this.adminStatsService.managerRankings(),
       travelRankings: this.adminStatsService.travelRankings(),
+      monthlyRevenue: this.adminStatsService.monthlyRevenue(),
       reports: this.reportsService.listAll(),
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
-        next: ({ users, travels, payments, paymentMethods, managerRankings, travelRankings, reports }) => {
+        next: ({ users, travels, payments, paymentMethods, managerRankings, travelRankings, monthlyRevenue, reports }) => {
           this.stats.set({
             users: users.length,
             travels: travels.length,
@@ -135,9 +139,32 @@ export class Dashboard implements OnInit {
           });
           this.managerRankings.set(managerRankings);
           this.travelRankings.set(travelRankings);
+          this.monthlyRevenue.set(monthlyRevenue);
           this.reports.set(reports);
+          this.resolveReportedNames(reports);
         },
         error: (error: unknown) => this.toastService.error(extractErrorMessage(error)),
       });
+  }
+
+  // Meme pattern que TravelDetail.loadCoTravelers : reportedId (manager OU traveler, les deux
+  // sont des User) reste un UUID nu cote travel-service (pas de FK cross-service possible).
+  private resolveReportedNames(reports: ReportResponse[]): void {
+    const ids = [...new Set(reports.map((r) => r.reportedId))];
+    if (ids.length === 0) {
+      return;
+    }
+
+    forkJoin(ids.map((id) => this.usersService.findById(id).pipe(catchError(() => of(null))))).subscribe(
+      (users) => {
+        const map = new Map<string, string>();
+        users.forEach((user: User | null, i) => {
+          if (user) {
+            map.set(ids[i], `${user.firstName} ${user.lastName}`);
+          }
+        });
+        this.reportedNames.set(map);
+      },
+    );
   }
 }

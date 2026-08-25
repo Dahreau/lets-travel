@@ -55,4 +55,15 @@ class AdminStatsControllerTest {
                 .andExpect(jsonPath("$[0].travelId").value(travelId.toString()))
                 .andExpect(jsonPath("$[0].revenue").value(300));
     }
+
+    @Test
+    void monthlyRevenueReturnsServiceResult() throws Exception {
+        when(adminStatsService.monthlyRevenue())
+                .thenReturn(List.of(new AdminMonthlyRevenueResponse("2026-08", BigDecimal.valueOf(500))));
+
+        mockMvc.perform(get("/api/travels/admin/monthly-revenue"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].month").value("2026-08"))
+                .andExpect(jsonPath("$[0].revenue").value(500));
+    }
 }

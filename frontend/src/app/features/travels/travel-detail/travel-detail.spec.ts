@@ -81,8 +81,6 @@ describe('TravelDetail', () => {
 
     expect(component['hasParticipated']()).toBe(true);
     expect(component['activeSubscription']()).toBeNull();
-    expect(component['paymentForm'].getRawValue().amount).toBe(500);
-    expect(component['paymentForm'].getRawValue().currency).toBe('EUR');
   });
 
   it('subscribing posts and stores the new active subscription', () => {
@@ -122,8 +120,6 @@ describe('TravelDetail', () => {
       travelId: 't1',
       ownerId: 'u1',
       paymentMethodId: 'pm1',
-      amount: 500,
-      currency: 'EUR',
     });
     req.flush({});
   });

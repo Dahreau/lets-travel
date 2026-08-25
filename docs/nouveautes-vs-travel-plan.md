@@ -383,3 +383,45 @@ la case "adresse renseignée" n'était pas cochée ET remplie, sans message d'er
 **Ce qui reste volontairement absent de cette branche.** Rien côté scope Traveler : dashboard,
 navigation, paiement, avis et signalement (manager ou autre traveler) couvrent l'ensemble des
 parcours demandés par l'audit pour ce rôle.
+
+
+## `fix/audit-gaps` — clôture des écarts identifiés lors de l'audit final
+
+Avant de merger cette branche, un audit exhaustif du projet contre `docs/lets-travel_audit.md`
+et `docs/lets-travel_project.md` (5 agents en parallèle, un par rôle + un transverse) a fait
+remonter plusieurs écarts réels entre ce que le backend autorisait déjà et ce que le frontend
+exposait réellement. Cette branche les corrige tous, sans changement de permission backend
+(déjà correctes dans tous les cas) :
+
+- **Travel Manager ne pouvait ni créer ni supprimer un voyage depuis l'UI** (écart le plus
+  critique) alors que `TravelForm` gérait déjà le cas Manager et que `TravelService.delete`
+  vérifiait déjà `requireOwnershipOrAdmin` — juste aucun bouton n'y menait. Ajout d'un bouton
+  "+ nouveau voyage" sur le dashboard Manager et d'un bouton delete (avec confirmation) dans
+  `TravelForm` en mode édition.
+- **Admin ne pouvait pas atteindre le feedback d'un voyage** (`/manager/travels/:id`, déjà
+  autorisé pour l'Admin par `managerGuard` et le backend) : lien ajouté dans le tableau "top
+  voyages" du dashboard Admin.
+- **Revenu mensuel absent** ("reports on income for the last months", énoncé) : nouvelle méthode
+  `AdminStatsService.monthlyRevenue()` (6 derniers mois, abonnements ACTIFS, même convention
+  "estimée" que le reste), exposée via `GET /api/travels/admin/monthly-revenue`.
+- **Autocomplete Elasticsearch jamais consommé** (`TravelController.autocomplete`, présent
+  depuis `feat/search-and-recommendations`, jamais appelé côté UI) : branché sur le champ de
+  recherche de `TravelBrowse` avec un debounce de 250ms.
+- **Signalements affichés en UUID brut** dans le tableau de modération Admin : résolution en
+  nom via `GET /api/users/{id}`, même patron que les co-travelers.
+- **Formulaire de paiement trompeur, découvert en creusant ce point** : le DTO backend
+  `PaymentRequest` (payment-service) avait déjà retiré `amount`/`currency` (le montant vient de
+  `travel-service`, jamais du client) mais DEUX formulaires frontend (`TravelDetail` côté
+  Traveler ET `PaymentForm` côté Admin) envoyaient encore ces champs en les laissant modifiables
+  — sans aucun effet réel puisque le backend les ignorait déjà. Les deux formulaires affichent
+  désormais le prix réel du voyage en lecture seule à la place.
+- `/payment-methods` ajouté à la navigation Manager (`Shell`), manquant alors que
+  `PaymentMethodController.findAll` l'autorisait déjà (scope au caller).
+
+**Tests e2e et tests de charge k6 : gaps assumés, pas comblés.** L'énoncé demande des tests
+e2e et un dimensionnement pour la haute charge ; l'audit ne cite `end-to-end`/`e2e` nulle part
+et sa question de charge ("actions ... en moins de 5 secondes") reste vague. Décision prise
+consciemment de ne pas construire de suite Playwright/Cypress ni de scénario k6 (effort jugé
+disproportionné pour la suite du projet) — remplacés par un unique script `scripts/load-test.sh`
+(login réel + `ab` sur `GET /api/travels/search`) pour avoir un chiffre concret à citer à
+l'oral. À assumer clairement si la question est posée plutôt que de bluffer.

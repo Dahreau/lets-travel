@@ -1,4 +1,5 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
@@ -34,13 +35,18 @@ export class PaymentForm implements OnInit {
   protected readonly users = signal<User[]>([]);
   protected readonly paymentMethods = signal<PaymentMethod[]>([]);
 
+  // amount/currency retires (fix/audit-gaps) : le backend les ignore desormais (le montant vient
+  // de travel-service, voir PaymentRequest) - le prix reel du voyage choisi est affiche a la place.
   protected readonly form = this.fb.nonNullable.group({
     travelId: ['', Validators.required],
     ownerId: ['', Validators.required],
     paymentMethodId: ['', Validators.required],
-    amount: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
-    currency: ['EUR', Validators.required],
   });
+
+  private readonly selectedTravelId = toSignal(this.form.controls.travelId.valueChanges, { initialValue: '' });
+  protected readonly selectedTravel = computed(() =>
+    this.travels().find((t) => t.id === this.selectedTravelId()),
+  );
 
   ngOnInit(): void {
     forkJoin({
@@ -71,8 +77,6 @@ export class PaymentForm implements OnInit {
       travelId: raw.travelId,
       ownerId: raw.ownerId,
       paymentMethodId: raw.paymentMethodId,
-      amount: raw.amount ?? 0,
-      currency: raw.currency,
     };
 
     this.saving.set(true);

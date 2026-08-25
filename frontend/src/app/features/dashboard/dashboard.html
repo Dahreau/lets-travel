@@ -4,6 +4,8 @@
 >
   @if (isTraveler()) {
     <a routerLink="/browse" class="btn btn-primary">parcourir les voyages</a>
+  } @else if (isManager()) {
+    <a routerLink="/travels/new" class="btn btn-primary">+ nouveau voyage</a>
   }
 </app-page-header>
 
@@ -204,6 +206,27 @@
     </p>
   </div>
 
+  <h2 class="section-title">revenu des derniers mois</h2>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          @for (m of monthlyRevenue(); track m.month) {
+            <th>{{ m.month }}</th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          @for (m of monthlyRevenue(); track m.month) {
+            <td>{{ m.revenue }}</td>
+          }
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
   <h2 class="section-title">top managers</h2>
 
   @if (managerRankings().length === 0) {
@@ -265,7 +288,10 @@
               <td>{{ travel.revenue }}</td>
               <td>{{ travel.averageRating !== null ? (travel.averageRating | number: '1.0-1') : '—' }}</td>
               <td class="actions">
-                <a [routerLink]="['/travels', travel.travelId, 'edit']" class="btn btn-ghost btn-sm">voir</a>
+                <a [routerLink]="['/manager/travels', travel.travelId]" class="btn btn-ghost btn-sm">
+                  abonnés & feedback
+                </a>
+                <a [routerLink]="['/travels', travel.travelId, 'edit']" class="btn btn-ghost btn-sm">edit</a>
               </td>
             </tr>
           }
@@ -292,7 +318,10 @@
         <tbody>
           @for (report of reports(); track report.id) {
             <tr>
-              <td><app-badge [value]="report.reportedType" /> {{ report.reportedId | slice: 0 : 8 }}…</td>
+              <td>
+                <app-badge [value]="report.reportedType" />
+                {{ reportedNames().get(report.reportedId) ?? (report.reportedId | slice: 0 : 8) + '…' }}
+              </td>
               <td>{{ report.reason }}</td>
               <td>{{ report.createdAt }}</td>
               <td class="actions">

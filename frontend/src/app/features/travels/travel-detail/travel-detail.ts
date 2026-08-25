@@ -70,10 +70,10 @@ export class TravelDetail implements OnInit {
   });
 
   protected readonly paymentSubmitting = signal(false);
+  // amount/currency ne sont plus dans le formulaire : le montant reel vient de t.price/t.currency
+  // (affiche en lecture seule), le backend l'ignorerait de toute facon (voir PaymentRequest).
   protected readonly paymentForm = this.fb.nonNullable.group({
     paymentMethodId: ['', Validators.required],
-    amount: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
-    currency: ['EUR', Validators.required],
   });
 
   ngOnInit(): void {
@@ -91,10 +91,6 @@ export class TravelDetail implements OnInit {
           const mine = subscriptions.filter((s) => s.travelId === this.travelId);
           this.hasParticipated.set(mine.length > 0);
           this.activeSubscription.set(mine.find((s) => s.status === 'ACTIVE') ?? null);
-
-          if (travel.price !== null) {
-            this.paymentForm.patchValue({ amount: travel.price, currency: travel.currency ?? 'EUR' });
-          }
 
           if (this.hasParticipated()) {
             this.loadCoTravelers();
@@ -213,8 +209,6 @@ export class TravelDetail implements OnInit {
       travelId: this.travelId,
       ownerId: myUserId,
       paymentMethodId: raw.paymentMethodId,
-      amount: raw.amount ?? 0,
-      currency: raw.currency,
     };
 
     this.paymentSubmitting.set(true);

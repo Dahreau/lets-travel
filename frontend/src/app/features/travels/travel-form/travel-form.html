@@ -206,6 +206,26 @@
         {{ saving() ? 'saving...' : '$ save' }}
       </button>
       <a routerLink="/travels" class="btn btn-ghost">cancel</a>
+      @if (isEdit()) {
+        <button
+          type="button"
+          class="btn btn-danger"
+          [disabled]="deleting()"
+          (click)="confirmingDelete.set(true)"
+        >
+          $ delete
+        </button>
+      }
     </div>
   </form>
+}
+
+@if (confirmingDelete()) {
+  <app-confirm-dialog
+    title="Supprimer ce voyage"
+    message="Cette action est irréversible : le voyage, ses abonnements et son historique seront supprimés."
+    confirmLabel="Supprimer"
+    (confirmed)="confirmDelete()"
+    (cancelled)="confirmingDelete.set(false)"
+  />
 }

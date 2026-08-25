@@ -275,3 +275,34 @@ done
 Solution portable (dans le `Jenkinsfile` versionné, pas une bidouille locale). Le dossier `target/` bloquant a aussi été signalé à l'utilisateur pour suppression manuelle ponctuelle, la boucle de retry ne pouvant pas garantir qu'un verrou déjà posé au moment du run se libère en quelques secondes.
 
 **À retenir** : sur ce projet, tout `rm -rf` sur un chemin Windows monté via WSL2/DrvFs dans un script CI doit être encapsulé dans une boucle de retry courte plutôt que de faire échouer tout le stage sur un premier échec — cohérent avec les autres soucis de verrous transitoires déjà rencontrés sur ce repo (nginx, `internal.crt`). Éviter d'ouvrir un IDE ou de lancer une commande directement dans `infra/ci/deploy-workspace` (entièrement gitignored, reconstruit à chaque run) — un projet Maven importé là par erreur peut laisser un `target/` verrouillé. **Confirmé résolu** : stage Deploy passé au round CI suivant, pipeline entièrement vert.
+
+
+## 25. Formulaires de paiement frontend restés désynchronisés d'un changement de contrat backend déjà ancien (`amount`/`currency`)
+
+**Problème** : en creusant le point "amount/currency ignorés côté backend" pendant l'audit `fix/audit-gaps`, découverte que `payment-service`'s `PaymentRequest` avait déjà retiré `amount`/`currency` (le montant vient de `travel-service`, jamais du client — commentaire explicite dans le fichier) il y a plusieurs branches, mais DEUX formulaires Angular (`TravelDetail` côté Traveler et `PaymentForm` côté Admin) envoyaient encore ces deux champs en les laissant modifiables par l'utilisateur, sans le moindre effet réel (Spring ignore silencieusement les champs JSON inconnus d'un DTO, il ne les rejette pas).
+
+**Cause** : même famille que les points 14/15 — un changement de contrat backend non propagé au frontend, invisible faute de test e2e frontend↔backend et parce qu'aucune erreur ne se produit (le champ en trop est juste ignoré, pas rejeté en 400).
+
+**Solution** : retrait de `amount`/`currency` du modèle `PaymentRequest` frontend et des deux formulaires, remplacés par un affichage en lecture seule du prix réel du voyage sélectionné (`travel.price`/`travel.currency`).
+
+**À retenir** : un champ de DTO retiré côté backend doit être recherché explicitement côté frontend (`grep` du nom du champ) — contrairement à un champ ajouté et devenu obligatoire (qui casse bruyamment en 400, cas des points 14/15), un champ retiré ne casse jamais rien silencieusement, il reste juste inutile et trompeur pour l'utilisateur jusqu'à ce que quelqu'un le remarque en lisant le code des deux côtés.
+
+## 26. `NG0203` : `takeUntilDestroyed()` appelé hors contexte d'injection depuis une méthode invoquée par `ngOnInit`
+
+**Problème** : en branchant l'autocomplete Elasticsearch sur `TravelBrowse` (`fix/audit-gaps`), `ng test` échoue avec `NG0203: takeUntilDestroyed() can only be used within an injection context` — l'appel se trouvait dans une méthode privée (`watchAutocomplete()`) elle-même appelée depuis `ngOnInit()`, pas directement dans le constructeur/field initializer du composant.
+
+**Cause** : `takeUntilDestroyed()` sans argument résout son `DestroyRef` via `inject()` en interne, qui exige d'être appelé de façon synchrone pendant la construction du composant (constructeur, field initializer, ou une fonction factory) — un appel depuis `ngOnInit()`, même synchrone à l'exécution, n'est plus dans cette fenêtre d'injection implicite dès qu'il passe par une méthode intermédiaire.
+
+**Solution** : injecter `DestroyRef` explicitement en field initializer (`private readonly destroyRef = inject(DestroyRef);`) et le passer en argument : `takeUntilDestroyed(this.destroyRef)`.
+
+**À retenir** : sur ce projet, tout usage de `takeUntilDestroyed()` en dehors d'un appel direct dans le corps du constructeur ou d'un field initializer doit passer un `DestroyRef` injecté explicitement — ne jamais compter sur la résolution implicite dès que l'appel est fait depuis `ngOnInit()` ou toute méthode appelée après la construction.
+
+## 27. Un `router.navigate()` réellement déclenché dans un test avec `provideRouter([])` fait échouer des fichiers de test sans rapport
+
+**Problème** : en ajoutant un test qui va jusqu'au bout d'un flux delete (`TravelForm`, `fix/audit-gaps`) — flush de la requête HTTP puis `router.navigate(['/travels'])` réellement exécuté — `ng test` faisait échouer en cascade plusieurs fichiers de test sans rapport (`app.spec.ts`, `manager-public.spec.ts`, `manager-travel-detail.spec.ts`) avec `Cannot configure the test module when the test module has already been instantiated`, en plus d'un `NG04002: Cannot match any routes` listé séparément comme "Unhandled Rejection".
+
+**Cause** : les tests existants du projet ne laissaient jamais un flux `submit()`/`delete()` aller jusqu'au `router.navigate(...)` final avec `provideRouter([])` (aucune route enregistrée) — la navigation levait `NG04002` de façon asynchrone, après la fin du test lui-même, sous forme de rejet de promesse non intercepté qui pouvait corrompre l'exécution d'un fichier de test suivant dans le même worker Vitest.
+
+**Solution** : enregistrer une route factice pour la cible de la navigation (`provideRouter([{ path: 'travels', component: DummyComponent }])`, `DummyComponent` étant un composant vide déclaré dans le fichier de test) — pattern déjà utilisé par `login.spec.ts` pour le même besoin.
+
+**À retenir** : dès qu'un test de composant sur ce projet laisse un flux aller jusqu'à un `router.navigate(...)` réel (pas juste vérifié par un spy), `provideRouter([])` ne suffit pas — il faut enregistrer au moins une route factice pour la cible, sous peine d'un rejet de promesse non intercepté qui peut faire échouer des fichiers de test totalement sans rapport exécutés dans le même worker.

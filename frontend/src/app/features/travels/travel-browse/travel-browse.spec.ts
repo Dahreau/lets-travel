@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { vi } from 'vitest';
 import { Travel } from '../../../core/models/travel';
 import { TravelBrowse } from './travel-browse';
 
@@ -77,5 +78,35 @@ describe('TravelBrowse', () => {
     const req = httpMock.expectOne((r) => r.url === '/api/travels/search');
     expect(req.request.params.get('q')).toBe('paris');
     req.flush([]);
+  });
+
+  it('autocompletes suggestions while typing, debounced', () => {
+    vi.useFakeTimers();
+    fixture.detectChanges();
+    httpMock.expectOne('/api/travels/travelers/me/subscriptions').flush([]);
+    httpMock.expectOne('/api/travels').flush([]);
+
+    component['searchForm'].controls.q.setValue('par');
+    vi.advanceTimersByTime(250);
+
+    const req = httpMock.expectOne((r) => r.url === '/api/travels/autocomplete');
+    expect(req.request.params.get('q')).toBe('par');
+    req.flush([TRAVEL('t1')]);
+
+    expect(component['suggestions']().map((t) => t.id)).toEqual(['t1']);
+    vi.useRealTimers();
+  });
+
+  it('does not autocomplete for queries shorter than 2 characters', () => {
+    vi.useFakeTimers();
+    fixture.detectChanges();
+    httpMock.expectOne('/api/travels/travelers/me/subscriptions').flush([]);
+    httpMock.expectOne('/api/travels').flush([]);
+
+    component['searchForm'].controls.q.setValue('p');
+    vi.advanceTimersByTime(250);
+
+    httpMock.expectNone((r) => r.url === '/api/travels/autocomplete');
+    vi.useRealTimers();
   });
 });

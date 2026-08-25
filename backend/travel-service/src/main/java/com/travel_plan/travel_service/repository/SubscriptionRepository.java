@@ -39,4 +39,8 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
     long countByTravelerId(UUID travelerId);
 
     long countByTravelerIdAndStatus(UUID travelerId, SubscriptionStatus status);
+
+    // fix/audit-gaps : revenu mensuel Admin (AdminStatsService.monthlyRevenue), groupe ensuite
+    // par mois de subscribedAt en memoire (pas de group-by-month portable en derived query).
+    List<Subscription> findByStatus(SubscriptionStatus status);
 }

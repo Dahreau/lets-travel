@@ -36,11 +36,15 @@ describe('Shell', () => {
     ]);
   });
 
-  it('shows the dashboard and browse links for a TRAVEL_MANAGER, never the admin tools', () => {
+  it('shows the dashboard, browse and payment-methods links for a TRAVEL_MANAGER, never the admin tools', () => {
     vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
     fixture.detectChanges();
 
-    expect(component['navItems']().map((item) => item.label)).toEqual(['dashboard', 'voyages']);
+    expect(component['navItems']().map((item) => item.label)).toEqual([
+      'dashboard',
+      'voyages',
+      'payment-methods',
+    ]);
   });
 
   it('shows the browse & payment-methods nav for a TRAVELER, never the admin tools', () => {

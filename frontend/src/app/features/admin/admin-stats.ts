@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { AdminManagerRanking, AdminTravelRanking } from '../../core/models/admin-stats';
+import { AdminManagerRanking, AdminMonthlyRevenue, AdminTravelRanking } from '../../core/models/admin-stats';
 
 // feat/admin-dashboard-overview : classements globaux consommes par le dashboard Admin.
 @Injectable({ providedIn: 'root' })
@@ -15,5 +15,9 @@ export class AdminStatsService {
 
   travelRankings(): Observable<AdminTravelRanking[]> {
     return this.http.get<AdminTravelRanking[]>(`${this.baseUrl}/travel-rankings`);
+  }
+
+  monthlyRevenue(): Observable<AdminMonthlyRevenue[]> {
+    return this.http.get<AdminMonthlyRevenue[]>(`${this.baseUrl}/monthly-revenue`);
   }
 }

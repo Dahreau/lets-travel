@@ -6,6 +6,7 @@ import { toDatetimeLocalValue, toIsoInstant } from '../../../core/util/datetime'
 import { extractErrorMessage } from '../../../core/http/api-error';
 import { AuthService } from '../../../core/auth/auth';
 import { ToastService } from '../../../core/notifications/toast';
+import { ConfirmDialog } from '../../../shared/ui/confirm-dialog';
 import { PageHeader } from '../../../shared/ui/page-header';
 import { Spinner } from '../../../shared/ui/spinner';
 import { User } from '../../../core/models/user';
@@ -24,7 +25,7 @@ import { TravelsService } from '../travels';
 
 @Component({
   selector: 'app-travel-form',
-  imports: [ReactiveFormsModule, RouterLink, PageHeader, Spinner],
+  imports: [ReactiveFormsModule, RouterLink, PageHeader, Spinner, ConfirmDialog],
   templateUrl: './travel-form.html',
 })
 export class TravelForm implements OnInit {
@@ -44,6 +45,8 @@ export class TravelForm implements OnInit {
   protected readonly isEdit = computed(() => this.travelId() !== null);
   protected readonly loading = signal(false);
   protected readonly saving = signal(false);
+  protected readonly deleting = signal(false);
+  protected readonly confirmingDelete = signal(false);
   // Uniquement les comptes TRAVEL_MANAGER : un Travel Manager gère ses propres voyages (le
   // backend force managerId à son propre userId, cf. TravelService.resolveManagerId), seul un
   // Admin doit choisir explicitement pour qui il crée/modifie un voyage.
@@ -278,5 +281,30 @@ export class TravelForm implements OnInit {
       },
       error: (error: unknown) => this.toastService.error(extractErrorMessage(error)),
     });
+  }
+
+  // Backend verifie deja proprietaire-ou-admin (TravelService.requireOwnershipOrAdmin) : ce
+  // bouton n'est qu'un raccourci UI, pas un controle de securite supplementaire.
+  protected confirmDelete(): void {
+    const id = this.travelId();
+    if (!id) {
+      return;
+    }
+
+    this.deleting.set(true);
+    this.travelsService
+      .delete(id)
+      .pipe(finalize(() => this.deleting.set(false)))
+      .subscribe({
+        next: () => {
+          this.toastService.success('Voyage supprimé');
+          this.confirmingDelete.set(false);
+          this.router.navigate(['/travels']);
+        },
+        error: (error: unknown) => {
+          this.toastService.error(extractErrorMessage(error));
+          this.confirmingDelete.set(false);
+        },
+      });
   }
 }
