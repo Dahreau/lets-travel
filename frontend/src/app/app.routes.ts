@@ -8,6 +8,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/login/login').then((m) => m.Login),
   },
   {
+    // Inscription publique Traveler (feat/traveler-frontend) - pas de authGuard, comme /login.
+    path: 'register',
+    loadComponent: () => import('./features/register/register').then((m) => m.Register),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./layout/shell/shell').then((m) => m.Shell),
@@ -43,6 +48,18 @@ export const routes: Routes = [
         path: 'travels/:id/edit',
         loadComponent: () =>
           import('./features/travels/travel-form/travel-form').then((m) => m.TravelForm),
+      },
+      {
+        // Parcours Traveler (feat/traveler-frontend) : recherche + abonnement, distinct de
+        // /travels (table CRUD Admin/Manager) - segment different, pas d'ambiguite de matching.
+        path: 'browse',
+        loadComponent: () =>
+          import('./features/travels/travel-browse/travel-browse').then((m) => m.TravelBrowse),
+      },
+      {
+        path: 'browse/:id',
+        loadComponent: () =>
+          import('./features/travels/travel-detail/travel-detail').then((m) => m.TravelDetail),
       },
       {
         // Gestion des abonnés/feedback d'un voyage - réservé au Travel Manager propriétaire

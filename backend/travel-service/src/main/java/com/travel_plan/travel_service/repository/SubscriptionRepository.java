@@ -32,4 +32,11 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
             + "WHERE s.travel.managerId = :managerId AND s.status = :status")
     long countDistinctTravelersByManagerIdAndStatus(
             @Param("managerId") UUID managerId, @Param("status") SubscriptionStatus status);
+
+    // feat/traveler-frontend : historique personnel du Traveler connecte (TravelerStatsService).
+    List<Subscription> findByTravelerIdOrderBySubscribedAtDesc(UUID travelerId);
+
+    long countByTravelerId(UUID travelerId);
+
+    long countByTravelerIdAndStatus(UUID travelerId, SubscriptionStatus status);
 }

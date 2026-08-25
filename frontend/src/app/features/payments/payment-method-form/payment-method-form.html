@@ -5,15 +5,17 @@
 } @else {
   <form [formGroup]="form" (ngSubmit)="submit()" class="card">
     <div class="form-grid">
-      <div class="field">
-        <label class="label" for="ownerId">Owner<span class="req">*</span></label>
-        <select id="ownerId" class="select" formControlName="ownerId">
-          <option value="" disabled>— sélectionner —</option>
-          @for (user of users(); track user.id) {
-            <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
-          }
-        </select>
-      </div>
+      @if (!isTraveler()) {
+        <div class="field">
+          <label class="label" for="ownerId">Owner<span class="req">*</span></label>
+          <select id="ownerId" class="select" formControlName="ownerId">
+            <option value="" disabled>— sélectionner —</option>
+            @for (user of users(); track user.id) {
+              <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+            }
+          </select>
+        </div>
+      }
 
       <div class="field">
         <label class="label" for="provider">Provider<span class="req">*</span></label>

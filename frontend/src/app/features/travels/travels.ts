@@ -16,6 +16,20 @@ export class TravelsService {
     return this.http.get<Travel>(`${this.baseUrl}/${id}`);
   }
 
+  // feat/traveler-frontend : recherche Elasticsearch (feat/search-and-recommendations), pas
+  // encore consommee cote UI jusqu'ici - voir TravelController.search/autocomplete/recommendations.
+  search(query: string): Observable<Travel[]> {
+    return this.http.get<Travel[]>(`${this.baseUrl}/search`, { params: { q: query } });
+  }
+
+  autocomplete(query: string): Observable<Travel[]> {
+    return this.http.get<Travel[]>(`${this.baseUrl}/autocomplete`, { params: { q: query } });
+  }
+
+  recommendations(): Observable<Travel[]> {
+    return this.http.get<Travel[]>(`${this.baseUrl}/recommendations`);
+  }
+
   create(request: TravelRequest): Observable<Travel> {
     return this.http.post<Travel>(this.baseUrl, request);
   }

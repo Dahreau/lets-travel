@@ -30,4 +30,11 @@ describe('SubscriptionsService', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush(null);
   });
+
+  it('POSTs a subscription for the connected traveler', () => {
+    service.subscribe('t1').subscribe();
+    const req = httpMock.expectOne('/api/travels/t1/subscriptions');
+    expect(req.request.method).toBe('POST');
+    req.flush({});
+  });
 });

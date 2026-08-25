@@ -1,4 +1,11 @@
-<app-page-header title="dashboard" [subtitle]="isManager() ? 'mes voyages' : 'system status'" />
+<app-page-header
+  title="dashboard"
+  [subtitle]="isManager() ? 'mes voyages' : isTraveler() ? 'mon espace' : 'system status'"
+>
+  @if (isTraveler()) {
+    <a routerLink="/browse" class="btn btn-primary">parcourir les voyages</a>
+  }
+</app-page-header>
 
 @if (loading()) {
   <app-spinner />
@@ -48,6 +55,91 @@
                   abonnés & feedback
                 </a>
                 <a [routerLink]="['/travels', travel.id, 'edit']" class="btn btn-ghost btn-sm">edit</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+} @else if (isTraveler()) {
+  @if (travelerStats(); as s) {
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">participations</div>
+        <div class="stat-value">{{ s.participationCount }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">avis laissés</div>
+        <div class="stat-value">{{ s.feedbackCount }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">désabonnements</div>
+        <div class="stat-value">{{ s.cancellationCount }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">signalements déposés</div>
+        <div class="stat-value">{{ s.reportCount }}</div>
+      </div>
+    </div>
+  }
+
+  <h2 class="section-title">recommandé pour vous</h2>
+
+  @if (recommendations().length === 0) {
+    <div class="empty-state">
+      Pas encore de recommandation — abonnez-vous à quelques voyages pour en recevoir.
+    </div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Titre</th>
+            <th>Dates</th>
+            <th>Prix</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (travel of recommendations(); track travel.id) {
+            <tr>
+              <td>{{ travel.title }}</td>
+              <td>{{ travel.startDate }} → {{ travel.endDate }}</td>
+              <td>{{ travel.price !== null ? travel.price + ' ' + travel.currency : '—' }}</td>
+              <td class="actions">
+                <a [routerLink]="['/browse', travel.id]" class="btn btn-ghost btn-sm">voir</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <h2 class="section-title">historique d'abonnements</h2>
+
+  @if (mySubscriptions().length === 0) {
+    <div class="empty-state">Aucun abonnement pour l'instant</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Voyage</th>
+            <th>Statut</th>
+            <th>Abonné le</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (subscription of mySubscriptions(); track subscription.id) {
+            <tr>
+              <td>{{ subscription.travelId | slice: 0 : 8 }}…</td>
+              <td><app-badge [value]="subscription.status" /></td>
+              <td>{{ subscription.subscribedAt }}</td>
+              <td class="actions">
+                <a [routerLink]="['/browse', subscription.travelId]" class="btn btn-ghost btn-sm">voir</a>
               </td>
             </tr>
           }

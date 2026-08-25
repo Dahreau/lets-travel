@@ -231,3 +231,13 @@ public List<UUID> recommend(UUID travelerId) {
 ```
 
 **À retenir** : sur ce projet, ne pas ajouter de garde `== null` par réflexe autour d'un retour de méthode Spring Data de type collection — c'est à la fois inutile (contrat jamais violé) et repéré comme code mort par Sonar. Confirmé par un `mvn test` vert (158/158) après suppression.
+
+## 22. Le stage Deploy échoue à créer le conteneur `elasticsearch` : "sysctl vm.max_map_count is not in a separate kernel namespace"
+
+**Problème** : build+test+Sonar passent sur `lets-travel-travel-service`, mais le stage Deploy plante à la création du conteneur `elasticsearch` : `OCI runtime create failed: runc create failed: sysctl "vm.max_map_count" is not in a separate kernel namespace: unknown`.
+
+**Cause** : le service `elasticsearch` définissait `sysctls: - vm.max_map_count=262144` dans `docker-compose.yml`. Or `vm.max_map_count` est un sysctl kernel **global**, jamais isolable par conteneur (confirmé par l'issue officielle `docker/compose#4498`) — ce mécanisme ne peut structurellement jamais fonctionner, quel que soit l'hôte Docker.
+
+**Solution** : suppression du `sysctls:`. Aucun contournement n'était nécessaire : `discovery.type: single-node` (déjà configuré sur ce service) place Elasticsearch en **mode développement** (doc Elastic officielle + commit `elastic/elasticsearch@5b7fd72`), où un bootstrap check en échec — dont `vm.max_map_count` — devient un simple warning au démarrage plutôt qu'un blocage. Le nœud démarre normalement, avec juste un warning dans ses logs.
+
+**À retenir** : sur ce projet, un sysctl kernel global ne doit jamais être défini via `sysctls:` dans `docker-compose.yml` (échoue selon l'hôte/kernel). Avant d'ajouter une solution de contournement (fichier de config hôte, conteneur privilégié...), vérifier si la configuration déjà en place (ici `discovery.type=single-node`, service jamais exposé à l'extérieur) ne rend pas le problème inoffensif par défaut. Confirmé par un pipeline Jenkins vert (build+test+Sonar+Deploy) et le merge de `feat/search-and-recommendations` dans `main`.

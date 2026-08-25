@@ -23,4 +23,12 @@ describe('FeedbacksService', () => {
     expect(req.request.method).toBe('GET');
     req.flush([]);
   });
+
+  it('POSTs a new feedback for a travel', () => {
+    service.submit('t1', { rating: 5, comment: 'Great trip' }).subscribe();
+    const req = httpMock.expectOne('/api/travels/t1/feedbacks');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ rating: 5, comment: 'Great trip' });
+    req.flush({});
+  });
 });

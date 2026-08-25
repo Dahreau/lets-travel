@@ -2,11 +2,12 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
+import { AuthService } from '../../../core/auth/auth';
 import { extractErrorMessage } from '../../../core/http/api-error';
 import { ToastService } from '../../../core/notifications/toast';
 import { PageHeader } from '../../../shared/ui/page-header';
 import { Spinner } from '../../../shared/ui/spinner';
-import { METHOD_TYPES, PROVIDER_TYPES, PaymentMethodRequest } from '../../../core/models/payment';
+import { METHOD_TYPES, PROVIDER_TYPES, PaymentMethod, PaymentMethodRequest } from '../../../core/models/payment';
 import { User } from '../../../core/models/user';
 import { UsersService } from '../../users/users';
 import { PaymentMethodsService } from '../payment-methods';
@@ -20,6 +21,7 @@ export class PaymentMethodForm implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly paymentMethodsService = inject(PaymentMethodsService);
   private readonly usersService = inject(UsersService);
+  private readonly authService = inject(AuthService);
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -31,6 +33,10 @@ export class PaymentMethodForm implements OnInit {
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly users = signal<User[]>([]);
+  // GET /api/users est reserve a l'Admin : un Traveler qui gere son propre moyen de paiement
+  // n'a jamais a choisir un owner arbitraire (feat/traveler-frontend - sinon 403 garanti,
+  // meme piege que PaymentForm/ownerId, voir docs/nouveautes-vs-travel-plan.md).
+  protected readonly isTraveler = computed(() => this.authService.currentUser()?.role === 'TRAVELER');
 
   protected readonly form = this.fb.nonNullable.group({
     ownerId: ['', Validators.required],
@@ -45,6 +51,32 @@ export class PaymentMethodForm implements OnInit {
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
 
+    if (this.isTraveler()) {
+      this.form.controls.ownerId.setValue(this.authService.userId() ?? '');
+      this.loadForTraveler(id);
+      return;
+    }
+
+    this.loadForAdminOrManager(id);
+  }
+
+  private loadForTraveler(id: string | null): void {
+    if (!id) {
+      this.loading.set(false);
+      return;
+    }
+
+    this.methodId.set(id);
+    this.paymentMethodsService
+      .findById(id)
+      .pipe(finalize(() => this.loading.set(false)))
+      .subscribe({
+        next: (method) => this.patchMethod(method),
+        error: (error: unknown) => this.toastService.error(extractErrorMessage(error)),
+      });
+  }
+
+  private loadForAdminOrManager(id: string | null): void {
     const users$ = this.usersService.findAll();
     if (!id) {
       users$.pipe(finalize(() => this.loading.set(false))).subscribe({
@@ -60,18 +92,22 @@ export class PaymentMethodForm implements OnInit {
       .subscribe({
         next: ({ users, method }) => {
           this.users.set(users);
-          this.form.patchValue({
-            ownerId: method.ownerId,
-            provider: method.provider,
-            type: method.type,
-            providerToken: '••••••••',
-            brand: method.brand ?? '',
-            last4: method.last4 ?? '',
-            isDefault: method.isDefault,
-          });
+          this.patchMethod(method);
         },
         error: (error: unknown) => this.toastService.error(extractErrorMessage(error)),
       });
+  }
+
+  private patchMethod(method: PaymentMethod): void {
+    this.form.patchValue({
+      ownerId: method.ownerId,
+      provider: method.provider,
+      type: method.type,
+      providerToken: '••••••••',
+      brand: method.brand ?? '',
+      last4: method.last4 ?? '',
+      isDefault: method.isDefault,
+    });
   }
 
   protected submit(): void {

@@ -41,4 +41,15 @@ describe('Shell', () => {
 
     expect(component['navItems']().map((item) => item.label)).toEqual(['dashboard']);
   });
+
+  it('shows the browse & payment-methods nav for a TRAVELER, never the admin tools', () => {
+    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'traveler1', role: 'TRAVELER' });
+    fixture.detectChanges();
+
+    expect(component['navItems']().map((item) => item.label)).toEqual([
+      'dashboard',
+      'voyages',
+      'payment-methods',
+    ]);
+  });
 });

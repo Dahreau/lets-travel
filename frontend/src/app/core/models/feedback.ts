@@ -6,3 +6,8 @@ export interface Feedback {
   comment: string;
   createdAt: string;
 }
+
+export interface FeedbackRequest {
+  rating: number;
+  comment: string;
+}

@@ -1,0 +1,54 @@
+<app-page-header title="voyages" subtitle="parcourir & s'abonner" />
+
+<form [formGroup]="searchForm" (ngSubmit)="search()" class="card" style="margin-bottom: 16px">
+  <div class="field">
+    <label class="label" for="q">Recherche</label>
+    <input id="q" class="input" formControlName="q" placeholder="titre, ville, pays..." />
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">$ chercher</button>
+  </div>
+</form>
+
+@if (loading()) {
+  <app-spinner />
+} @else if (travels().length === 0) {
+  <div class="empty-state">Aucun voyage trouvé</div>
+} @else {
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Titre</th>
+          <th>Dates</th>
+          <th>Prix</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (travel of travels(); track travel.id) {
+          <tr>
+            <td>{{ travel.title }}</td>
+            <td>{{ travel.startDate }} → {{ travel.endDate }}</td>
+            <td>{{ travel.price !== null ? travel.price + ' ' + travel.currency : '—' }}</td>
+            <td class="actions">
+              <a [routerLink]="['/browse', travel.id]" class="btn btn-ghost btn-sm">voir</a>
+              @if (isSubscribed()(travel.id)) {
+                <span class="badge badge-success">abonné</span>
+              } @else {
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  [disabled]="subscribingId() === travel.id"
+                  (click)="subscribe(travel)"
+                >
+                  s'abonner
+                </button>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

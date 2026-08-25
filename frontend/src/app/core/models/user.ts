@@ -27,3 +27,13 @@ export interface UserRequest {
   role: UserRole;
   address: Address | null;
 }
+
+// feat/traveler-frontend : 1ere etape de l'inscription publique (POST /api/users/register),
+// pas de champ "role" - toujours force a TRAVELER cote serveur (UserService.register).
+export interface UserRegistrationRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  address: Address | null;
+}

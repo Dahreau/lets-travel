@@ -16,4 +16,9 @@ public interface ReportRepository extends JpaRepository<Report, UUID> {
     // publique - uniquement le compte, jamais le detail (l'admin seul lit le contenu des
     // signalements, voir SecurityConfig et ReportService.listAll).
     long countByReportedTypeAndReportedId(ReportedType reportedType, UUID reportedId);
+
+    // feat/traveler-frontend : nombre de signalements DEPOSES par le Traveler connecte
+    // (TravelerStatsService.myStats), a ne pas confondre avec countByReportedTypeAndReportedId
+    // ci-dessus qui compte les signalements RECUS par un manager.
+    long countByReporterId(UUID reporterId);
 }

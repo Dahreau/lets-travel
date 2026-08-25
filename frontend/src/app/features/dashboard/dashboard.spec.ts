@@ -90,3 +90,49 @@ describe('Dashboard (as TRAVEL_MANAGER)', () => {
     httpMock.expectNone('/api/payment-methods');
   });
 });
+
+describe('Dashboard (as TRAVELER)', () => {
+  let fixture: ReturnType<typeof TestBed.createComponent<Dashboard>>;
+  let component: Dashboard;
+  let httpMock: HttpTestingController;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [Dashboard],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    }).compileComponents();
+
+    const authService = TestBed.inject(AuthService);
+    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'traveler1', role: 'TRAVELER' });
+
+    httpMock = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(Dashboard);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  afterEach(() => httpMock.verify());
+
+  it('shows personal stats, recommendations and subscription history, never calling the admin-only endpoints', () => {
+    httpMock
+      .expectOne('/api/travels/travelers/me/stats')
+      .flush({ participationCount: 4, feedbackCount: 2, reportCount: 0, cancellationCount: 1 });
+    httpMock.expectOne('/api/travels/recommendations').flush([TRAVEL('t1', 'm1')]);
+    httpMock
+      .expectOne('/api/travels/travelers/me/subscriptions')
+      .flush([{ id: 's1', travelId: 't1', travelerId: 'u1', status: 'ACTIVE', subscribedAt: '2026-01-01', cancelledAt: null }]);
+
+    expect(component['travelerStats']()).toEqual({
+      participationCount: 4,
+      feedbackCount: 2,
+      reportCount: 0,
+      cancellationCount: 1,
+    });
+    expect(component['recommendations']().map((t) => t.id)).toEqual(['t1']);
+    expect(component['mySubscriptions']().map((s) => s.id)).toEqual(['s1']);
+
+    httpMock.expectNone('/api/users');
+    httpMock.expectNone('/api/payments');
+    httpMock.expectNone('/api/payment-methods');
+  });
+});
