@@ -24,4 +24,11 @@ describe('ReportsService', () => {
     expect(req.request.body).toEqual({ reportedType: 'MANAGER', reportedId: 'm1', reason: 'No show' });
     req.flush(null);
   });
+
+  it('GETs the full moderation list', () => {
+    service.listAll().subscribe();
+    const req = httpMock.expectOne('/api/reports');
+    expect(req.request.method).toBe('GET');
+    req.flush([]);
+  });
 });

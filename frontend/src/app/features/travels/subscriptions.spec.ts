@@ -37,4 +37,11 @@ describe('SubscriptionsService', () => {
     expect(req.request.method).toBe('POST');
     req.flush({});
   });
+
+  it('GETs the co-travelers of a travel', () => {
+    service.coTravelers('t1').subscribe();
+    const req = httpMock.expectOne('/api/travels/t1/subscriptions/co-travelers');
+    expect(req.request.method).toBe('GET');
+    req.flush(['u2']);
+  });
 });

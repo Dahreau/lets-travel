@@ -8,28 +8,29 @@ interface NavItem {
   label: string;
 }
 
-// Sonar S1192 (New Code) : ce literal apparaissait dans les 3 tableaux ci-dessous.
+// Sonar S1192 (New Code) : ces literals apparaissaient dans plusieurs des 3 tableaux ci-dessous.
 const DASHBOARD_NAV_ITEM: NavItem = { path: '/dashboard', label: 'dashboard' };
+const BROWSE_NAV_ITEM: NavItem = { path: '/browse', label: 'voyages' };
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
   DASHBOARD_NAV_ITEM,
+  BROWSE_NAV_ITEM,
   { path: '/users', label: 'users' },
   { path: '/travels', label: 'travels' },
   { path: '/payments', label: 'payments' },
   { path: '/payment-methods', label: 'payment-methods' },
 ];
 
-// Un Travel Manager n'a accès à aucun des outils d'admin (users/payments/payment-methods
-// sont réservés à l'Admin cote backend, cf. troubleshooting.md) : son unique entrée est le
-// dashboard, qui bascule automatiquement sur sa propre vue (voir Dashboard.isManager).
-const MANAGER_NAV_ITEMS: NavItem[] = [DASHBOARD_NAV_ITEM];
+// feat/admin-dashboard-overview : /browse manquait alors que le backend l'autorise deja
+// (RoleHierarchy). users/payments/payment-methods restent Admin-only cote backend.
+const MANAGER_NAV_ITEMS: NavItem[] = [DASHBOARD_NAV_ITEM, BROWSE_NAV_ITEM];
 
 // feat/traveler-frontend : parcourir/s'abonner (browse) et gerer ses moyens de paiement
 // (deja scopes au caller cote backend, cf. PaymentMethodController.findAll) - pas d'acces
 // a /payments (liste globale, Admin-only) ni /users.
 const TRAVELER_NAV_ITEMS: NavItem[] = [
   DASHBOARD_NAV_ITEM,
-  { path: '/browse', label: 'voyages' },
+  BROWSE_NAV_ITEM,
   { path: '/payment-methods', label: 'payment-methods' },
 ];
 

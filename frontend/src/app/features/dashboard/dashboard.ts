@@ -1,10 +1,13 @@
-import { SlicePipe } from '@angular/common';
+import { DecimalPipe, SlicePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
 import { AuthService } from '../../core/auth/auth';
 import { extractErrorMessage } from '../../core/http/api-error';
+import { AdminManagerRanking, AdminTravelRanking } from '../../core/models/admin-stats';
 import { ManagerStats } from '../../core/models/manager-stats';
+import { PaymentMethod } from '../../core/models/payment';
+import { ReportResponse } from '../../core/models/report';
 import { Subscription } from '../../core/models/subscription';
 import { Travel } from '../../core/models/travel';
 import { TravelerStats } from '../../core/models/traveler-stats';
@@ -12,9 +15,11 @@ import { ToastService } from '../../core/notifications/toast';
 import { Badge } from '../../shared/ui/badge';
 import { PageHeader } from '../../shared/ui/page-header';
 import { Spinner } from '../../shared/ui/spinner';
+import { AdminStatsService } from '../admin/admin-stats';
 import { ManagerStatsService } from '../manager/manager-stats';
 import { PaymentMethodsService } from '../payments/payment-methods';
 import { PaymentsService } from '../payments/payments';
+import { ReportsService } from '../travels/reports';
 import { TravelerStatsService } from '../travelers/traveler-stats';
 import { TravelsService } from '../travels/travels';
 import { UsersService } from '../users/users';
@@ -28,7 +33,7 @@ interface Stats {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [PageHeader, Spinner, Badge, RouterLink, SlicePipe],
+  imports: [PageHeader, Spinner, Badge, RouterLink, SlicePipe, DecimalPipe],
   templateUrl: './dashboard.html',
 })
 export class Dashboard implements OnInit {
@@ -39,21 +44,26 @@ export class Dashboard implements OnInit {
   private readonly paymentMethodsService = inject(PaymentMethodsService);
   private readonly managerStatsService = inject(ManagerStatsService);
   private readonly travelerStatsService = inject(TravelerStatsService);
+  private readonly adminStatsService = inject(AdminStatsService);
+  private readonly reportsService = inject(ReportsService);
   private readonly toastService = inject(ToastService);
 
-  // GET /api/users, /api/payments, /api/payment-methods (liste globale) sont reserves a
-  // l'Admin : Manager et Traveler prennent chacun une branche dediee qui ne les appelle
-  // jamais - cf. respectivement user-service et payment-service SecurityConfig.
+  // GET /api/users, /api/payments, /api/payment-methods (liste globale) = Admin-only : Manager
+  // et Traveler prennent chacun leur propre branche qui ne les appelle jamais.
   protected readonly isManager = computed(() => this.authService.currentUser()?.role === 'TRAVEL_MANAGER');
   protected readonly isTraveler = computed(() => this.authService.currentUser()?.role === 'TRAVELER');
 
   protected readonly loading = signal(true);
   protected readonly stats = signal<Stats | null>(null);
+  protected readonly managerRankings = signal<AdminManagerRanking[]>([]);
+  protected readonly travelRankings = signal<AdminTravelRanking[]>([]);
+  protected readonly reports = signal<ReportResponse[]>([]);
   protected readonly managerStats = signal<ManagerStats | null>(null);
   protected readonly myTravels = signal<Travel[]>([]);
   protected readonly travelerStats = signal<TravelerStats | null>(null);
   protected readonly recommendations = signal<Travel[]>([]);
   protected readonly mySubscriptions = signal<Subscription[]>([]);
+  protected readonly myPaymentMethods = signal<PaymentMethod[]>([]);
 
   ngOnInit(): void {
     if (this.isManager()) {
@@ -81,42 +91,51 @@ export class Dashboard implements OnInit {
       });
   }
 
-  // Recommandations personnalisees (feat/search-and-recommendations, Neo4j) + historique
-  // d'abonnements + stats perso (feat/traveler-frontend) - voir docs/lets-travel_project.md,
-  // section Traveler.
+  // Stats/recommandations/abonnements existants + moyens de paiement (feat/admin-dashboard-overview,
+  // deja scopes au caller cote backend) - voir docs/lets-travel_project.md, section Traveler.
   private loadTravelerDashboard(): void {
     forkJoin({
       stats: this.travelerStatsService.myStats(),
       recommendations: this.travelsService.recommendations(),
       subscriptions: this.travelerStatsService.mySubscriptions(),
+      paymentMethods: this.paymentMethodsService.findAll(),
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
-        next: ({ stats, recommendations, subscriptions }) => {
+        next: ({ stats, recommendations, subscriptions, paymentMethods }) => {
           this.travelerStats.set(stats);
           this.recommendations.set(recommendations);
           this.mySubscriptions.set(subscriptions);
+          this.myPaymentMethods.set(paymentMethods);
         },
         error: (error: unknown) => this.toastService.error(extractErrorMessage(error)),
       });
   }
 
+  // Vue d'ensemble Admin : compteurs globaux + classements (AdminStatsService) + moderation
+  // des signalements (ReportController, deja expose, Admin uniquement).
   private loadAdminDashboard(): void {
     forkJoin({
       users: this.usersService.findAll(),
       travels: this.travelsService.findAll(),
       payments: this.paymentsService.findAll(),
       paymentMethods: this.paymentMethodsService.findAll(),
+      managerRankings: this.adminStatsService.managerRankings(),
+      travelRankings: this.adminStatsService.travelRankings(),
+      reports: this.reportsService.listAll(),
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
-        next: ({ users, travels, payments, paymentMethods }) => {
+        next: ({ users, travels, payments, paymentMethods, managerRankings, travelRankings, reports }) => {
           this.stats.set({
             users: users.length,
             travels: travels.length,
             payments: payments.length,
             paymentMethods: paymentMethods.length,
           });
+          this.managerRankings.set(managerRankings);
+          this.travelRankings.set(travelRankings);
+          this.reports.set(reports);
         },
         error: (error: unknown) => this.toastService.error(extractErrorMessage(error)),
       });

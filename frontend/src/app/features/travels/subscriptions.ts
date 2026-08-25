@@ -20,4 +20,10 @@ export class SubscriptionsService {
   unsubscribe(travelId: string, subscriptionId: string): Observable<void> {
     return this.http.delete<void>(`/api/travels/${travelId}/subscriptions/${subscriptionId}`);
   }
+
+  // feat/admin-dashboard-overview : ids des autres travelers du meme voyage, pour signaler
+  // "un autre traveler" (SubscriptionController.coTravelers, 403 si non-participant).
+  coTravelers(travelId: string): Observable<string[]> {
+    return this.http.get<string[]>(`/api/travels/${travelId}/subscriptions/co-travelers`);
+  }
 }

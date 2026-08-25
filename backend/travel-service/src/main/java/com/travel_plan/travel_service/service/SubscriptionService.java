@@ -95,6 +95,22 @@ public class SubscriptionService {
                 .toList();
     }
 
+    // feat/admin-dashboard-overview : un Traveler ne peut signaler un autre Traveler que s'il a
+    // lui-meme participe a ce voyage - meme regle que ReportService.requireConsistentTarget.
+    public List<UUID> coTravelerIds(UUID travelId, AuthenticatedUser caller) {
+        getTravelOrThrow(travelId);
+        UUID travelerId = requireTravelerId(caller);
+        if (!subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, travelerId)) {
+            throw new ForbiddenException("You can only view co-travelers of a travel you participated in");
+        }
+
+        return subscriptionRepository.findByTravel_Id(travelId).stream()
+                .map(Subscription::getTravelerId)
+                .filter(id -> !id.equals(travelerId))
+                .distinct()
+                .toList();
+    }
+
     // Un compte ADMIN par defaut n'a pas de fiche User (userId null) : il ne peut pas
     // etre "le" traveler d'un abonnement, il n'y a rien a rattacher.
     private UUID requireTravelerId(AuthenticatedUser caller) {

@@ -16,12 +16,12 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
-// Meme convention de mock que StripePaymentProviderTest/PayPalPaymentProviderTest : on mocke
-// directement la chaine fluide de RestClient plutot que MockRestServiceServer, pour rester
-// coherent avec le reste de payment-service.
+// Meme convention que Stripe/PayPalPaymentProviderTest : on mocke la chaine fluide de
+// RestClient plutot que MockRestServiceServer, pour rester coherent.
 @SuppressWarnings({"unchecked", "rawtypes"})
 class TravelServiceClientTest {
 
@@ -58,13 +58,46 @@ class TravelServiceClientTest {
     }
 
     @Test
-    void getPricedTravelRethrowsOnNon404Error() {
+    void getPricedTravelDoesNotRetryOnNon404ClientError() {
         UUID travelId = UUID.randomUUID();
-        RestClientResponseException serviceUnavailable = new HttpServerErrorException(HttpStatusCode.valueOf(503));
-        stubGetError(travelId, serviceUnavailable);
+        RestClientResponseException badRequest = new HttpClientErrorException(HttpStatusCode.valueOf(400));
+        stubGetError(travelId, badRequest);
 
-        assertThatThrownBy(() -> client.getPricedTravel(travelId, "Bearer test-token"))
-                .isSameAs(serviceUnavailable);
+        assertThatThrownBy(() -> client.getPricedTravel(travelId, "Bearer test-token")).isSameAs(badRequest);
+    }
+
+    // Fallback (feat/admin-dashboard-overview) : un 503 est transitoire, donc reessaye - et
+    // reussit ici des la 2e tentative sans jamais remonter d'erreur a l'appelant.
+    @Test
+    void getPricedTravelRetriesOnTransientServerErrorThenSucceeds() {
+        UUID travelId = UUID.randomUUID();
+        TravelSummary summary = new TravelSummary(travelId, new BigDecimal("450.00"), "EUR");
+        RestClient.RequestHeadersUriSpec uriSpec = mock(RestClient.RequestHeadersUriSpec.class);
+        RestClient.RequestHeadersSpec headersSpec = mock(RestClient.RequestHeadersSpec.class);
+        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
+
+        when(restClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri("/api/travels/{id}", travelId)).thenReturn(headersSpec);
+        when(headersSpec.header(eq(HttpHeaders.AUTHORIZATION), anyString())).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(TravelSummary.class))
+                .thenThrow(new HttpServerErrorException(HttpStatusCode.valueOf(503)))
+                .thenReturn(summary);
+
+        TravelSummary result = client.getPricedTravel(travelId, "Bearer test-token");
+
+        assertThat(result).isEqualTo(summary);
+    }
+
+    // Panne de connexion persistante (travel-service injoignable) : les 3 tentatives echouent,
+    // l'erreur d'origine remonte telle quelle plutot que de bloquer indefiniment.
+    @Test
+    void getPricedTravelGivesUpAfterMaxAttemptsOnPersistentConnectionFailure() {
+        UUID travelId = UUID.randomUUID();
+        ResourceAccessException connectionFailure = new ResourceAccessException("connect timed out");
+        stubGetError(travelId, connectionFailure);
+
+        assertThatThrownBy(() -> client.getPricedTravel(travelId, "Bearer test-token")).isSameAs(connectionFailure);
     }
 
     private void stubGetResponse(UUID travelId, TravelSummary response) {
@@ -79,7 +112,7 @@ class TravelServiceClientTest {
         when(responseSpec.body(TravelSummary.class)).thenReturn(response);
     }
 
-    private void stubGetError(UUID travelId, RestClientResponseException error) {
+    private void stubGetError(UUID travelId, RuntimeException error) {
         RestClient.RequestHeadersUriSpec uriSpec = mock(RestClient.RequestHeadersUriSpec.class);
         RestClient.RequestHeadersSpec headersSpec = mock(RestClient.RequestHeadersSpec.class);
         RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);

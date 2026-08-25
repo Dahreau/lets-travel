@@ -42,6 +42,13 @@ public class SubscriptionController {
         return subscriptionService.listSubscribers(travelId, principal(authentication));
     }
 
+    // feat/admin-dashboard-overview : ids des co-travelers, pour signaler "un autre traveler"
+    // depuis TravelDetail - aucun changement SecurityConfig requis (voir SubscriptionService).
+    @GetMapping("/co-travelers")
+    public List<UUID> coTravelers(@PathVariable UUID travelId, Authentication authentication) {
+        return subscriptionService.coTravelerIds(travelId, principal(authentication));
+    }
+
     private AuthenticatedUser principal(Authentication authentication) {
         return (AuthenticatedUser) authentication.getPrincipal();
     }

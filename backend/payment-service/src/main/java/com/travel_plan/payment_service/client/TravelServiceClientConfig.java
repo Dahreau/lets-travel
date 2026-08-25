@@ -1,6 +1,7 @@
 package com.travel_plan.payment_service.client;
 
 import java.net.http.HttpClient;
+import java.time.Duration;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ssl.SslBundle;
@@ -12,42 +13,36 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
-// Premier appel inter-service du projet : payment-service doit connaitre le prix reel
-// d'un voyage (travel-service) pour ne pas faire confiance a un montant fourni par le
-// client (voir docs/nouveautes-vs-travel-plan.md). Jusqu'ici, seul api-gateway avait
-// besoin de load balancing entre replicas (2 instances par service, voir
-// application.properties) ; ce bean reproduit le meme mecanisme pour cet appel precis.
+// Premier appel inter-service du projet (voir docs/nouveautes-vs-travel-plan.md) : reproduit
+// le meme load balancing entre replicas (2 instances) qu'api-gateway, pour cet appel precis.
 @Configuration
 public class TravelServiceClientConfig {
 
-    // payment-service n'a PAS de RestClient.Builder auto-configure par Spring Boot (voir
-    // troubleshooting.md #11) : on part donc de RestClient.builder() a la main, comme le fait
-    // deja PaymentProviderConfig.paymentRestClient() pour Stripe/PayPal. Difference ici : cet
-    // appel va vers travel-service en interne (mTLS avec le bundle "internal-services"), donc
-    // il faut configurer explicitement le SSLContext quand ce bundle existe - uniquement en
-    // profil docker (spring.http.client.ssl.bundle vide en profil par defaut, voir
-    // application.properties/application-docker.properties). @LoadBalanced fait intercepter ce
-    // builder par Spring Cloud LoadBalancer : une URL logique "http://travel-service" est alors
-    // resolue vers une des 2 instances configurees dans application.properties
-    // (spring.cloud.discovery.client.simple.instances.travel-service[..].uri), schema HTTP/HTTPS
-    // inclus - inutile d'ecrire "https://" ici meme en profil docker.
+    // Fallback (enonce, section 4) : desormais toujours borne dans le temps (avant, seul le
+    // profil docker en avait) - couple au retry de TravelServiceClient contre un service en panne.
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(3);
+
+    // payment-service n'a pas de RestClient.Builder auto-configure (troubleshooting.md #11), d'ou
+    // ce builder manuel, coherent avec PaymentProviderConfig.paymentRestClient() (Stripe/PayPal).
+    // @LoadBalanced resout l'URL logique "http://travel-service" vers une des 2 instances
+    // configurees ; le SSLContext du bundle mTLS "internal-services" n'est active qu'en profil docker.
     @Bean
     @LoadBalanced
     public RestClient.Builder loadBalancedRestClientBuilder(
             @Value("${spring.http.client.ssl.bundle:}") String sslBundleName,
             ObjectProvider<SslBundles> sslBundlesProvider) {
-        RestClient.Builder builder = RestClient.builder();
+        HttpClient.Builder httpClientBuilder = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT);
         if (StringUtils.hasText(sslBundleName)) {
             SslBundles sslBundles = sslBundlesProvider.getIfAvailable();
             if (sslBundles != null) {
                 SslBundle sslBundle = sslBundles.getBundle(sslBundleName);
-                HttpClient httpClient = HttpClient.newBuilder()
-                        .sslContext(sslBundle.createSslContext())
-                        .build();
-                builder.requestFactory(new JdkClientHttpRequestFactory(httpClient));
+                httpClientBuilder.sslContext(sslBundle.createSslContext());
             }
         }
-        return builder;
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClientBuilder.build());
+        requestFactory.setReadTimeout(READ_TIMEOUT);
+        return RestClient.builder().requestFactory(requestFactory);
     }
 
     @Bean

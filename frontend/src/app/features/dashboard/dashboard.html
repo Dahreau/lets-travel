@@ -147,6 +147,37 @@
       </table>
     </div>
   }
+
+  <h2 class="section-title">moyens de paiement</h2>
+
+  @if (myPaymentMethods().length === 0) {
+    <div class="empty-state">
+      Aucun moyen de paiement enregistré — <a routerLink="/payment-methods">ajoutez-en un</a>.
+    </div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Fournisseur</th>
+            <th>Type</th>
+            <th>Détail</th>
+            <th>Par défaut</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (method of myPaymentMethods(); track method.id) {
+            <tr>
+              <td>{{ method.provider }}</td>
+              <td>{{ method.type }}</td>
+              <td>{{ method.brand ? method.brand + ' ····' + method.last4 : '—' }}</td>
+              <td>{{ method.isDefault ? 'oui' : '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
 } @else if (stats(); as s) {
   <div class="stat-grid">
     <div class="stat-card">
@@ -172,4 +203,105 @@
       // tous les microservices répondent — auth, users, travels, payments
     </p>
   </div>
+
+  <h2 class="section-title">top managers</h2>
+
+  @if (managerRankings().length === 0) {
+    <div class="empty-state">Aucun manager pour l'instant</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Manager</th>
+            <th>Score</th>
+            <th>Voyages</th>
+            <th>Voyageurs</th>
+            <th>Revenu estimé</th>
+            <th>Note moyenne</th>
+            <th>Signalements</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (manager of managerRankings() | slice: 0 : 5; track manager.managerId) {
+            <tr>
+              <td>
+                <a [routerLink]="['/manager', manager.managerId]">{{ manager.managerId | slice: 0 : 8 }}…</a>
+              </td>
+              <td>{{ manager.performanceScore | number: '1.0-1' }}</td>
+              <td>{{ manager.travelCount }}</td>
+              <td>{{ manager.travelerCount }}</td>
+              <td>{{ manager.estimatedRevenue }}</td>
+              <td>{{ manager.averageRating !== null ? (manager.averageRating | number: '1.0-1') : '—' }}</td>
+              <td>{{ manager.reportCount }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <h2 class="section-title">top voyages</h2>
+
+  @if (travelRankings().length === 0) {
+    <div class="empty-state">Aucun voyage pour l'instant</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Titre</th>
+            <th>Abonnés actifs</th>
+            <th>Revenu estimé</th>
+            <th>Note moyenne</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (travel of travelRankings() | slice: 0 : 5; track travel.travelId) {
+            <tr>
+              <td>{{ travel.title }}</td>
+              <td>{{ travel.activeSubscriberCount }}</td>
+              <td>{{ travel.revenue }}</td>
+              <td>{{ travel.averageRating !== null ? (travel.averageRating | number: '1.0-1') : '—' }}</td>
+              <td class="actions">
+                <a [routerLink]="['/travels', travel.travelId, 'edit']" class="btn btn-ghost btn-sm">voir</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <h2 class="section-title">signalements à modérer</h2>
+
+  @if (reports().length === 0) {
+    <div class="empty-state">Aucun signalement pour l'instant</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Cible</th>
+            <th>Motif</th>
+            <th>Déposé le</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (report of reports(); track report.id) {
+            <tr>
+              <td><app-badge [value]="report.reportedType" /> {{ report.reportedId | slice: 0 : 8 }}…</td>
+              <td>{{ report.reason }}</td>
+              <td>{{ report.createdAt }}</td>
+              <td class="actions">
+                <a [routerLink]="['/travels', report.travelId, 'edit']" class="btn btn-ghost btn-sm">voyage</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
 }

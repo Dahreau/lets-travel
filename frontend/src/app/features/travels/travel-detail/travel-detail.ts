@@ -1,11 +1,12 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { finalize, forkJoin } from 'rxjs';
+import { catchError, finalize, forkJoin, of, switchMap } from 'rxjs';
 import { extractErrorMessage } from '../../../core/http/api-error';
 import { PaymentMethod, PaymentRequest } from '../../../core/models/payment';
 import { Subscription } from '../../../core/models/subscription';
 import { Travel } from '../../../core/models/travel';
+import { User } from '../../../core/models/user';
 import { AuthService } from '../../../core/auth/auth';
 import { ToastService } from '../../../core/notifications/toast';
 import { Badge } from '../../../shared/ui/badge';
@@ -14,10 +15,13 @@ import { Spinner } from '../../../shared/ui/spinner';
 import { PaymentMethodsService } from '../../payments/payment-methods';
 import { PaymentsService } from '../../payments/payments';
 import { TravelerStatsService } from '../../travelers/traveler-stats';
+import { UsersService } from '../../users/users';
 import { FeedbacksService } from '../feedbacks';
 import { ReportsService } from '../reports';
 import { SubscriptionsService } from '../subscriptions';
 import { TravelsService } from '../travels';
+
+const MANAGER_TARGET = 'MANAGER';
 
 // feat/traveler-frontend : page detail Traveler d'un voyage - abonnement/desabonnement,
 // avis, signalement, paiement. Distincte de TravelForm (edition Admin/Manager).
@@ -36,6 +40,7 @@ export class TravelDetail implements OnInit {
   private readonly reportsService = inject(ReportsService);
   private readonly paymentsService = inject(PaymentsService);
   private readonly paymentMethodsService = inject(PaymentMethodsService);
+  private readonly usersService = inject(UsersService);
   private readonly authService = inject(AuthService);
   private readonly toastService = inject(ToastService);
 
@@ -48,6 +53,7 @@ export class TravelDetail implements OnInit {
   protected readonly hasParticipated = signal(false);
   protected readonly subscribing = signal(false);
   protected readonly unsubscribing = signal(false);
+  protected readonly coTravelers = signal<User[]>([]);
 
   protected readonly feedbackSubmitting = signal(false);
   protected readonly feedbackSubmitted = signal(false);
@@ -59,6 +65,7 @@ export class TravelDetail implements OnInit {
   protected readonly reportSubmitting = signal(false);
   protected readonly reportSubmitted = signal(false);
   protected readonly reportForm = this.fb.nonNullable.group({
+    target: [MANAGER_TARGET, Validators.required],
     reason: ['', [Validators.required, Validators.maxLength(2000)]],
   });
 
@@ -88,9 +95,28 @@ export class TravelDetail implements OnInit {
           if (travel.price !== null) {
             this.paymentForm.patchValue({ amount: travel.price, currency: travel.currency ?? 'EUR' });
           }
+
+          if (this.hasParticipated()) {
+            this.loadCoTravelers();
+          }
         },
         error: (error: unknown) => this.toastService.error(extractErrorMessage(error)),
       });
+  }
+
+  // Charge apres coup, seulement si le traveler a participe : sinon SubscriptionService.coTravelerIds
+  // renvoie 403 (voir SecurityConfig, meme regle que le report lui-meme).
+  private loadCoTravelers(): void {
+    this.subscriptionsService
+      .coTravelers(this.travelId)
+      .pipe(
+        switchMap((ids) =>
+          ids.length === 0
+            ? of([])
+            : forkJoin(ids.map((id) => this.usersService.findById(id).pipe(catchError(() => of(null))))),
+        ),
+      )
+      .subscribe((users) => this.coTravelers.set(users.filter((u): u is User => u !== null)));
   }
 
   protected subscribe(): void {
@@ -147,10 +173,6 @@ export class TravelDetail implements OnInit {
       });
   }
 
-  // Seul le manager du voyage est signalable depuis cette page : signaler "un autre traveler"
-  // exigerait de connaitre son id, que rien n'expose a un simple Traveler (la liste des
-  // abonnes d'un voyage est reservee au manager/admin, cf. SecurityConfig) - voir
-  // docs/nouveautes-vs-travel-plan.md pour le detail de cette limitation assumee.
   protected submitReport(): void {
     const travel = this.travel();
     if (this.reportForm.invalid || !travel) {
@@ -158,12 +180,15 @@ export class TravelDetail implements OnInit {
       return;
     }
 
+    const raw = this.reportForm.getRawValue();
+    const isManagerTarget = raw.target === MANAGER_TARGET;
+
     this.reportSubmitting.set(true);
     this.reportsService
       .submit(this.travelId, {
-        reportedType: 'MANAGER',
-        reportedId: travel.managerId,
-        reason: this.reportForm.getRawValue().reason,
+        reportedType: isManagerTarget ? 'MANAGER' : 'TRAVELER',
+        reportedId: isManagerTarget ? travel.managerId : raw.target,
+        reason: raw.reason,
       })
       .pipe(finalize(() => this.reportSubmitting.set(false)))
       .subscribe({
