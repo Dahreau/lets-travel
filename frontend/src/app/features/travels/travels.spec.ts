@@ -50,4 +50,26 @@ describe('TravelsService', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush(null);
   });
+
+  it('GETs search results with the query as a param', () => {
+    service.search('paris').subscribe();
+    const req = httpMock.expectOne((r) => r.url === '/api/travels/search');
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.get('q')).toBe('paris');
+    req.flush([]);
+  });
+
+  it('GETs autocomplete suggestions with the query as a param', () => {
+    service.autocomplete('par').subscribe();
+    const req = httpMock.expectOne((r) => r.url === '/api/travels/autocomplete');
+    expect(req.request.params.get('q')).toBe('par');
+    req.flush([]);
+  });
+
+  it('GETs personalized recommendations', () => {
+    service.recommendations().subscribe();
+    const req = httpMock.expectOne('/api/travels/recommendations');
+    expect(req.request.method).toBe('GET');
+    req.flush([]);
+  });
 });

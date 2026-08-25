@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, tap } from 'rxjs';
-import { LoginRequest, LoginResponse, MeResponse } from '../models/auth';
+import { LoginRequest, LoginResponse, MeResponse, RegisterRequest } from '../models/auth';
 import { decodeJwtPayload, isTokenExpired } from './jwt-util';
 
 const TOKEN_KEY = 'travel-plan.admin.token';
@@ -40,6 +40,14 @@ export class AuthService {
   login(credentials: LoginRequest): Observable<LoginResponse> {
     return this.http
       .post<LoginResponse>('/api/auth/login', credentials)
+      .pipe(tap((response) => localStorage.setItem(TOKEN_KEY, response.token)));
+  }
+
+  // feat/traveler-frontend : 2e etape de l'inscription publique - meme reponse que login(),
+  // connecte immediatement l'inscrit (voir AuthController.register cote backend).
+  register(request: RegisterRequest): Observable<LoginResponse> {
+    return this.http
+      .post<LoginResponse>('/api/auth/register', request)
       .pipe(tap((response) => localStorage.setItem(TOKEN_KEY, response.token)));
   }
 

@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { User, UserRequest } from '../../core/models/user';
+import { User, UserRegistrationRequest, UserRequest } from '../../core/models/user';
 
 @Injectable({ providedIn: 'root' })
 export class UsersService {
@@ -18,6 +18,11 @@ export class UsersService {
 
   create(request: UserRequest): Observable<User> {
     return this.http.post<User>(this.baseUrl, request);
+  }
+
+  // feat/traveler-frontend : 1ere etape de l'inscription publique, route ouverte (SecurityConfig).
+  register(request: UserRegistrationRequest): Observable<User> {
+    return this.http.post<User>(`${this.baseUrl}/register`, request);
   }
 
   update(id: string, request: UserRequest): Observable<User> {

@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { UserRequest } from '../../core/models/user';
+import { UserRegistrationRequest, UserRequest } from '../../core/models/user';
 import { UsersService } from './users';
 
 describe('UsersService', () => {
@@ -68,5 +68,20 @@ describe('UsersService', () => {
     const req = httpMock.expectOne('/api/users/u1');
     expect(req.request.method).toBe('DELETE');
     req.flush(null);
+  });
+
+  it('POSTs a public registration', () => {
+    const request: UserRegistrationRequest = {
+      firstName: 'Grace',
+      lastName: 'Hopper',
+      email: 'grace@example.com',
+      phone: null,
+      address: null,
+    };
+    service.register(request).subscribe();
+    const req = httpMock.expectOne('/api/users/register');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(request);
+    req.flush({});
   });
 });

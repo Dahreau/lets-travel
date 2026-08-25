@@ -76,6 +76,20 @@ describe('AuthService', () => {
 
     expect(service.userId()).toBeNull();
   });
+
+  it('stores the token on register and becomes authenticated', () => {
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const travelerId = '22222222-2222-2222-2222-222222222222';
+    const token = fakeToken(futureExp, travelerId);
+
+    service.register({ username: 'traveler1', password: 'secret', userId: travelerId }).subscribe();
+    const req = httpMock.expectOne('/api/auth/register');
+    expect(req.request.method).toBe('POST');
+    req.flush({ token });
+
+    expect(service.token).toBe(token);
+    expect(service.isAuthenticated()).toBe(true);
+  });
 });
 
 function fakeToken(exp: number, userId?: string): string {

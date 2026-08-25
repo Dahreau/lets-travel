@@ -231,3 +231,47 @@ public List<UUID> recommend(UUID travelerId) {
 ```
 
 **À retenir** : sur ce projet, ne pas ajouter de garde `== null` par réflexe autour d'un retour de méthode Spring Data de type collection — c'est à la fois inutile (contrat jamais violé) et repéré comme code mort par Sonar. Confirmé par un `mvn test` vert (158/158) après suppression.
+
+## 22. Le stage Deploy échoue à créer le conteneur `elasticsearch` : "sysctl vm.max_map_count is not in a separate kernel namespace"
+
+**Problème** : build+test+Sonar passent sur `lets-travel-travel-service`, mais le stage Deploy plante à la création du conteneur `elasticsearch` : `OCI runtime create failed: runc create failed: sysctl "vm.max_map_count" is not in a separate kernel namespace: unknown`.
+
+**Cause** : le service `elasticsearch` définissait `sysctls: - vm.max_map_count=262144` dans `docker-compose.yml`. Or `vm.max_map_count` est un sysctl kernel **global**, jamais isolable par conteneur (confirmé par l'issue officielle `docker/compose#4498`) — ce mécanisme ne peut structurellement jamais fonctionner, quel que soit l'hôte Docker.
+
+**Solution** : suppression du `sysctls:`. Aucun contournement n'était nécessaire : `discovery.type: single-node` (déjà configuré sur ce service) place Elasticsearch en **mode développement** (doc Elastic officielle + commit `elastic/elasticsearch@5b7fd72`), où un bootstrap check en échec — dont `vm.max_map_count` — devient un simple warning au démarrage plutôt qu'un blocage. Le nœud démarre normalement, avec juste un warning dans ses logs.
+
+**À retenir** : sur ce projet, un sysctl kernel global ne doit jamais être défini via `sysctls:` dans `docker-compose.yml` (échoue selon l'hôte/kernel). Avant d'ajouter une solution de contournement (fichier de config hôte, conteneur privilégié...), vérifier si la configuration déjà en place (ici `discovery.type=single-node`, service jamais exposé à l'extérieur) ne rend pas le problème inoffensif par défaut. Confirmé par un pipeline Jenkins vert (build+test+Sonar+Deploy) et le merge de `feat/search-and-recommendations` dans `main`.
+
+## 23. Quality Gate frontend en échec sur `lets-travel-frontend` (PR `feat/traveler-frontend`) : assertion générique `.length).toBe(n)` au lieu de `toHaveLength(n)`
+
+**Problème** : le job Sonar `npx --yes @sonar/scan` du pipeline PR-9 échoue (`QUALITY GATE STATUS: FAILED`) sur un seul New Code issue, Low, règle "Prefer a more specific assertion instead of this generic one" — `payment-method-form.spec.ts:98`, `expect(fixture.componentInstance['users']().length).toBe(1)`.
+
+**Cause** : même règle Sonar déjà rencontrée sur `feat/manager-frontend` (`troubleshooting.md`, incident non numéroté du round 1 Sonar de cette branche, 9 occurrences à l'époque) — un `expect(x.length).toBe(n)` doit s'écrire `expect(x).toHaveLength(n)`, plus lisible et donnant un message d'échec plus précis. Cette occurrence a été introduite dans un test écrit lors de la passe préventive Sonar du 25/08 sur `feat/traveler-frontend` : le grep systématique de cette passe couvrait S1192, les imports dupliqués/inutilisés et le mort-code Spring Data, mais pas ce pattern déjà rencontré — oubli à corriger dans la checklist de vérification préventive.
+
+**Solution** :
+```typescript
+// avant
+expect(fixture.componentInstance['users']().length).toBe(1);
+// après
+expect(fixture.componentInstance['users']()).toHaveLength(1);
+```
+
+**À retenir** : ajouter systématiquement un grep `\.length\)\.toBe\(|\.length\)\.toEqual\(` sur tous les fichiers `*.spec.ts` neufs/modifiés lors de toute passe préventive Sonar sur ce projet — cette règle a déjà coûté un aller-retour CI à deux reprises (`feat/manager-frontend` puis `feat/traveler-frontend`).
+
+## 24. Stage Deploy : `rm: cannot remove '.../backend/user-service/target': Directory not empty`
+
+**Problème** : le round CI suivant (build+test+Sonar passés) plante au tout début du stage Deploy sur `rm -rf "$DEPLOY_DIR"/*` (script de préservation des secrets Vault/certs avant reconstruction du workspace de déploiement), avec `rm: cannot remove '.../deploy-workspace/backend/user-service/target': Directory not empty`.
+
+**Cause probable** : `target/` est un résidu d'un run précédent (confirmé présent sur le disque, non régénéré par le pipeline actuel — aucune tâche Ansible ni service Docker Compose de ce projet n'écrit de `target/` dans `deploy-workspace`, et `tar` l'exclut explicitement à la reconstruction). `rm -rf` échoue dessus de façon non déterministe, cohérent avec les autres soucis déjà rencontrés sur ce repo de verrous transitoires côté hôte sur les chemins Windows montés via WSL2/DrvFs (voir l'incident nginx et le dossier `internal.crt` de l'incident infra du 24/08) — probablement un antivirus/l'indexation Windows ou Docker Desktop qui scanne/verrouille brièvement un fichier pendant la suppression récursive. Cause non confirmée à 100% (pas d'accès Docker/hôte depuis cet environnement pour l'observer en direct), mais cohérente avec l'historique du projet.
+
+**Solution** : le `rm -rf "$DEPLOY_DIR"/*` du `Jenkinsfile` est encapsulé dans une boucle de 5 tentatives avec 3s de pause entre chacune, plutôt qu'un `set -e` qui ferait échouer tout le stage sur un verrou transitoire :
+```bash
+for attempt in 1 2 3 4 5; do
+    rm -rf "$DEPLOY_DIR"/* && break
+    [ "$attempt" = 5 ] && { echo "rm -rf $DEPLOY_DIR/* a echoue apres 5 tentatives" >&2; exit 1; }
+    sleep 3
+done
+```
+Solution portable (dans le `Jenkinsfile` versionné, pas une bidouille locale). Le dossier `target/` bloquant a aussi été signalé à l'utilisateur pour suppression manuelle ponctuelle, la boucle de retry ne pouvant pas garantir qu'un verrou déjà posé au moment du run se libère en quelques secondes.
+
+**À retenir** : sur ce projet, tout `rm -rf` sur un chemin Windows monté via WSL2/DrvFs dans un script CI doit être encapsulé dans une boucle de retry courte plutôt que de faire échouer tout le stage sur un premier échec — cohérent avec les autres soucis de verrous transitoires déjà rencontrés sur ce repo (nginx, `internal.crt`).

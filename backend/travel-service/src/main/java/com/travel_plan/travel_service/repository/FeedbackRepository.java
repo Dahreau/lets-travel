@@ -15,4 +15,7 @@ public interface FeedbackRepository extends JpaRepository<Feedback, UUID> {
     // feat/manager-frontend : tous les avis recus sur l'ensemble des voyages d'un manager,
     // utilise pour calculer la note moyenne affichee sur sa page publique (ManagerStatsService).
     List<Feedback> findByTravel_ManagerId(UUID managerId);
+
+    // feat/traveler-frontend : nombre d'avis LAISSES par le Traveler connecte (TravelerStatsService.myStats).
+    long countByTravelerId(UUID travelerId);
 }
