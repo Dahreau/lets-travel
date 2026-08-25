@@ -107,6 +107,8 @@ describe('TravelBrowse', () => {
     vi.advanceTimersByTime(250);
 
     httpMock.expectNone((r) => r.url === '/api/travels/autocomplete');
+    expect(component['suggestions']().length).toBe(0); // Assertion to ensure no suggestions are populated
+    expect(component['searchForm'].controls.q.value).toBe('p'); // Assertion to ensure the query value is correctly set
     vi.useRealTimers();
   });
 });
