@@ -95,6 +95,6 @@ describe('PaymentMethodForm (as ADMIN)', () => {
     const req = httpMock.expectOne('/api/users');
     req.flush([{ id: 'u2', firstName: 'Ada', lastName: 'Lovelace' }]);
 
-    expect(fixture.componentInstance['users']().length).toBe(1);
+    expect(fixture.componentInstance['users']()).toHaveLength(1);
   });
 });

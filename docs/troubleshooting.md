@@ -241,3 +241,19 @@ public List<UUID> recommend(UUID travelerId) {
 **Solution** : suppression du `sysctls:`. Aucun contournement n'était nécessaire : `discovery.type: single-node` (déjà configuré sur ce service) place Elasticsearch en **mode développement** (doc Elastic officielle + commit `elastic/elasticsearch@5b7fd72`), où un bootstrap check en échec — dont `vm.max_map_count` — devient un simple warning au démarrage plutôt qu'un blocage. Le nœud démarre normalement, avec juste un warning dans ses logs.
 
 **À retenir** : sur ce projet, un sysctl kernel global ne doit jamais être défini via `sysctls:` dans `docker-compose.yml` (échoue selon l'hôte/kernel). Avant d'ajouter une solution de contournement (fichier de config hôte, conteneur privilégié...), vérifier si la configuration déjà en place (ici `discovery.type=single-node`, service jamais exposé à l'extérieur) ne rend pas le problème inoffensif par défaut. Confirmé par un pipeline Jenkins vert (build+test+Sonar+Deploy) et le merge de `feat/search-and-recommendations` dans `main`.
+
+## 23. Quality Gate frontend en échec sur `lets-travel-frontend` (PR `feat/traveler-frontend`) : assertion générique `.length).toBe(n)` au lieu de `toHaveLength(n)`
+
+**Problème** : le job Sonar `npx --yes @sonar/scan` du pipeline PR-9 échoue (`QUALITY GATE STATUS: FAILED`) sur un seul New Code issue, Low, règle "Prefer a more specific assertion instead of this generic one" — `payment-method-form.spec.ts:98`, `expect(fixture.componentInstance['users']().length).toBe(1)`.
+
+**Cause** : même règle Sonar déjà rencontrée sur `feat/manager-frontend` (`troubleshooting.md`, incident non numéroté du round 1 Sonar de cette branche, 9 occurrences à l'époque) — un `expect(x.length).toBe(n)` doit s'écrire `expect(x).toHaveLength(n)`, plus lisible et donnant un message d'échec plus précis. Cette occurrence a été introduite dans un test écrit lors de la passe préventive Sonar du 25/08 sur `feat/traveler-frontend` : le grep systématique de cette passe couvrait S1192, les imports dupliqués/inutilisés et le mort-code Spring Data, mais pas ce pattern déjà rencontré — oubli à corriger dans la checklist de vérification préventive.
+
+**Solution** :
+```typescript
+// avant
+expect(fixture.componentInstance['users']().length).toBe(1);
+// après
+expect(fixture.componentInstance['users']()).toHaveLength(1);
+```
+
+**À retenir** : ajouter systématiquement un grep `\.length\)\.toBe\(|\.length\)\.toEqual\(` sur tous les fichiers `*.spec.ts` neufs/modifiés lors de toute passe préventive Sonar sur ce projet — cette règle a déjà coûté un aller-retour CI à deux reprises (`feat/manager-frontend` puis `feat/traveler-frontend`).
