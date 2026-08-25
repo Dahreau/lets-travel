@@ -121,11 +121,20 @@
 
   @if (hasParticipated()) {
     <div class="card">
-      <h2 class="section-title">signaler le manager</h2>
+      <h2 class="section-title">signaler</h2>
       @if (reportSubmitted()) {
         <p class="page-subtitle">Signalement envoyé.</p>
       } @else {
         <form [formGroup]="reportForm" (ngSubmit)="submitReport()">
+          <div class="field">
+            <label class="label" for="target">Personne à signaler<span class="req">*</span></label>
+            <select id="target" class="select" formControlName="target">
+              <option value="MANAGER">le manager de ce voyage</option>
+              @for (co of coTravelers(); track co.id) {
+                <option [value]="co.id">{{ co.firstName }} {{ co.lastName }}</option>
+              }
+            </select>
+          </div>
           <div class="field">
             <label class="label" for="reason">Motif<span class="req">*</span></label>
             <textarea id="reason" class="textarea" formControlName="reason" rows="3"></textarea>

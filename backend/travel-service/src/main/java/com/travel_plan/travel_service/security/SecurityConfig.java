@@ -61,6 +61,9 @@ public class SecurityConfig {
                         // ci-dessous (TRAVELER minimum), ouverte a tout utilisateur authentifie.
                         .requestMatchers(HttpMethod.GET, "/api/travels/managers/me/stats")
                         .hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)
+                        // feat/admin-dashboard-overview : doit precéder GET /api/travels/** plus bas (TRAVELER
+                        // minimum, trop permissif pour ce classement Admin-only).
+                        .requestMatchers(HttpMethod.GET, "/api/travels/admin/**").hasRole(ADMIN_ROLE)
                         // Un Travel Manager cree/modifie/supprime ses propres voyages (verifie en
                         // plus dans TravelService, la HttpSecurity ne sait pas encore lequel est "le sien").
                         .requestMatchers(HttpMethod.POST, "/api/travels").hasAnyRole(ADMIN_ROLE, TRAVEL_MANAGER_ROLE)

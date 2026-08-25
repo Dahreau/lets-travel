@@ -135,6 +135,29 @@ class SubscriptionControllerTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void coTravelersReturnsOtherTravelerIds() throws Exception {
+        UUID otherTravelerId = UUID.randomUUID();
+        when(subscriptionService.coTravelerIds(travelId, travelerAuth().user())).thenReturn(List.of(otherTravelerId));
+
+        mockMvc.perform(
+                        get("/api/travels/{travelId}/subscriptions/co-travelers", travelId)
+                                .principal(travelerAuth().token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value(otherTravelerId.toString()));
+    }
+
+    @Test
+    void coTravelersReturns403WhenCallerNeverParticipated() throws Exception {
+        when(subscriptionService.coTravelerIds(travelId, travelerAuth().user()))
+                .thenThrow(new ForbiddenException("You can only view co-travelers of a travel you participated in"));
+
+        mockMvc.perform(
+                        get("/api/travels/{travelId}/subscriptions/co-travelers", travelId)
+                                .principal(travelerAuth().token()))
+                .andExpect(status().isForbidden());
+    }
+
     // AuthenticatedUser est un record : chaque appel a travelerAuth()/managerAuth() reconstruit
     // une instance egale (equals()) a celle capturee par le mock, donc Mockito matche correctement
     // meme sans reutiliser exactement le meme objet entre le stubbing et l'appel MockMvc.

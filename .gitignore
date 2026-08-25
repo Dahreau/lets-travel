@@ -70,3 +70,6 @@ infra/internal-tls/certs/*.key
 
 # Clé de déscellement Vault (générée une seule fois par vault-unseal.yml, jamais commitée)
 infra/vault/.unseal-key.txt
+
+# Scratch/transfert (session Claude, jamais destine a etre commite)
+_to_delete/

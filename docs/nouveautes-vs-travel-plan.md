@@ -314,13 +314,72 @@ l'appelant voit une erreur et rien n'est retenu côté Postgres.
 
 **Elasticsearch, dernier service à rejoindre le réseau Docker interne uniquement.** Comme
 Vault et Zipkin : pas de port publié sur l'host, uniquement joignable par `travel-service` sur
-le réseau `app`. `vm.max_map_count >= 262144` (exigence noyau connue d'Elasticsearch 8.x) est
-fixé via `sysctls:` dans `docker-compose.yml` ; si le healthcheck échoue malgré ça, c'est
-probablement le noyau hôte (WSL2) qu'il faut ajuster une fois manuellement (documenté en
-commentaire dans `docker-compose.yml`).
+le réseau `app`. `discovery.type: single-node` place le nœud en mode développement, où le
+bootstrap check `vm.max_map_count` (exigence noyau connue d'Elasticsearch 8.x) devient un
+simple warning au démarrage plutôt qu'un blocage — pas de `sysctls:` dans `docker-compose.yml`
+(un sysctl kernel global ne peut de toute façon jamais être fixé par conteneur, voir
+`troubleshooting.md` #22).
 
 **Ce qui reste volontairement absent de cette branche.** Backend uniquement — la consultation
 de la recherche/autocomplete/recommandations côté Angular (page Traveler) est laissée à
 `feat/traveler-frontend`, qui construira le vrai parcours de navigation. Pas de synonymes, de
 correction orthographique (fuzzy search) ni de filtre à facettes sur la recherche : hors scope
 de l'énoncé, qui demande une recherche "smooth" et "dynamic", pas exhaustive.
+
+## `feat/traveler-frontend` — dashboard Traveler, navigation des voyages, inscription publique
+
+### Avant (travel-plan)
+
+Aucune UI Traveler n'existait : l'app Angular était un dashboard Admin/Manager uniquement.
+Un Traveler n'avait ni page d'inscription publique côté frontend, ni moyen de parcourir les
+voyages, s'y abonner, payer, laisser un avis ou signaler un problème depuis l'interface — ces
+actions n'étaient exposées que côté API (`feat/traveler-experience`,
+`feat/traveler-subscriptions`, `feat/travel-pricing-and-traveler-payment`).
+
+### Ce que Let's Travel ajoute
+
+**Inscription publique (`/register`).** Formulaire en deux temps côté serveur, invisible côté
+UI : `POST /api/users/register` crée le profil, puis `POST /api/auth/register` crée le compte
+avec le `userId` renvoyé et connecte immédiatement — même enchaînement que la connexion
+classique, avec un appel de plus. L'adresse est optionnelle (case à cocher) : le sous-groupe de
+champs correspondant est désactivé tant que la case n'est pas cochée, pour ne pas bloquer
+l'inscription par des champs requis jamais affichés.
+
+**Dashboard Traveler.** Troisième vue du composant `Dashboard` existant (après Admin et
+Manager), aiguillée sur le rôle : statistiques personnelles (participations, avis, signalements,
+annulations — `GET /api/travels/travelers/me/stats`), recommandations personnalisées
+(`GET /api/travels/recommendations`, voir `feat/search-and-recommendations`), historique
+d'abonnements. La barre de navigation (`Shell`) affiche désormais un menu dédié Traveler
+(dashboard, voyages, moyens de paiement) au lieu du menu Admin qu'un Traveler recevait par
+erreur jusqu'ici (bug préexistant, jamais visible faute d'UI Traveler).
+
+**Parcours de navigation des voyages (`/browse`, `/browse/:id`).** Nouveaux composants,
+volontairement distincts des tables CRUD Admin/Manager déjà en place (inadaptées : pas
+d'édition/suppression côté Traveler). `TravelBrowse` liste les voyages, avec recherche
+Elasticsearch (`GET /api/travels/search`, repli sur `GET /api/travels` si le champ est vide) et
+un état d'abonnement précalculé par voyage. `TravelDetail` regroupe abonnement/désabonnement, un
+mini-formulaire de paiement dédié au Traveler connecté (paye pour lui-même, pas de sélecteur
+global de voyages/utilisateurs comme le formulaire Admin), un formulaire d'avis (affiché
+uniquement après participation à un voyage terminé) et un formulaire de signalement (le manager
+du voyage ou un autre traveler y ayant participé).
+
+**Signalement d'un autre Traveler (feat/admin-dashboard-overview).** Le backend (`ReportedType`
+enum) exigeait déjà que la cible soit un autre abonné du même voyage, mais rien n'exposait cette
+liste à un simple Traveler (réservée Manager/Admin). Ajout d'une route dédiée
+`GET /api/travels/{id}/subscriptions/co-travelers` (aucun changement `SecurityConfig` : elle
+tombe sous la règle générique `GET /api/travels/**`, TRAVELER minimum), qui renvoie les ids des
+autres abonnés une fois la participation du caller elle-même vérifiée (403 sinon). Le formulaire
+de signalement propose désormais un sélecteur cible (manager ou co-traveler résolu via
+`GET /api/users/{id}`).
+
+**Deux bugs frontend/backend de dérive détectés et corrigés au passage.** `PaymentMethodForm`
+(formulaire Admin de moyen de paiement) appelait `GET /api/users` (Admin-only côté
+`user-service`) pour peupler un sélecteur "owner" — un Traveler ouvrant ce formulaire aurait
+fait planter la page en 403 ; corrigé en fixant automatiquement le propriétaire au Traveler
+connecté et en sautant cet appel pour ce rôle. Le sous-groupe adresse du formulaire
+d'inscription (voir ci-dessus) rendait le formulaire invalide en permanence par défaut tant que
+la case "adresse renseignée" n'était pas cochée ET remplie, sans message d'erreur visible.
+
+**Ce qui reste volontairement absent de cette branche.** Rien côté scope Traveler : dashboard,
+navigation, paiement, avis et signalement (manager ou autre traveler) couvrent l'ensemble des
+parcours demandés par l'audit pour ce rôle.

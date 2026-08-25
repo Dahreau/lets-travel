@@ -269,6 +269,42 @@ class SubscriptionServiceTest {
         assertThat(subscriptionService.listSubscribers(travelId, admin)).isEmpty();
     }
 
+    @Test
+    void coTravelerIdsReturnsOtherSubscribersExcludingCaller() {
+        Travel travel = travelDepartingIn(10);
+        UUID otherTravelerId = UUID.randomUUID();
+        when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
+        when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, travelerId)).thenReturn(true);
+        when(subscriptionRepository.findByTravel_Id(travelId))
+                .thenReturn(List.of(activeSubscription(travel, travelerId), activeSubscription(travel, otherTravelerId)));
+
+        assertThat(subscriptionService.coTravelerIds(travelId, traveler)).containsExactly(otherTravelerId);
+    }
+
+    @Test
+    void coTravelerIdsDeduplicatesRepeatedTravelerIds() {
+        Travel travel = travelDepartingIn(10);
+        UUID otherTravelerId = UUID.randomUUID();
+        Subscription cancelled = activeSubscription(travel, otherTravelerId);
+        cancelled.setStatus(SubscriptionStatus.CANCELLED);
+        when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
+        when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, travelerId)).thenReturn(true);
+        when(subscriptionRepository.findByTravel_Id(travelId))
+                .thenReturn(List.of(activeSubscription(travel, otherTravelerId), cancelled));
+
+        assertThat(subscriptionService.coTravelerIds(travelId, traveler)).containsExactly(otherTravelerId);
+    }
+
+    @Test
+    void coTravelerIdsThrowsWhenCallerNeverParticipated() {
+        Travel travel = travelDepartingIn(10);
+        when(travelRepository.findById(travelId)).thenReturn(Optional.of(travel));
+        when(subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, travelerId)).thenReturn(false);
+
+        assertThatThrownBy(() -> subscriptionService.coTravelerIds(travelId, traveler))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
     private Travel travelDepartingIn(int daysFromNow) {
         return Travel.builder()
                 .id(travelId)

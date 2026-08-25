@@ -22,6 +22,18 @@ const TRAVEL = {
   updatedAt: '',
 };
 
+const USER = (id: string) => ({
+  id,
+  firstName: 'Co',
+  lastName: id,
+  email: '',
+  phone: null,
+  role: 'TRAVELER',
+  address: null,
+  createdAt: '',
+  updatedAt: '',
+});
+
 describe('TravelDetail', () => {
   let fixture: ReturnType<typeof TestBed.createComponent<TravelDetail>>;
   let component: TravelDetail;
@@ -48,11 +60,18 @@ describe('TravelDetail', () => {
 
   afterEach(() => httpMock.verify());
 
-  function flushInit(subscriptions: unknown[] = [], paymentMethods: unknown[] = []): void {
+  // co-travelers n'est chargé que si le traveler a participé (SubscriptionService.coTravelerIds,
+  // 403 sinon) : coTravelerIds ne s'applique donc qu'aux appels flushInit avec une subscription.
+  function flushInit(subscriptions: unknown[] = [], paymentMethods: unknown[] = [], coTravelerIds: string[] = []): void {
     fixture.detectChanges();
     httpMock.expectOne('/api/travels/t1').flush(TRAVEL);
     httpMock.expectOne('/api/travels/travelers/me/subscriptions').flush(subscriptions);
     httpMock.expectOne('/api/payment-methods').flush(paymentMethods);
+
+    if ((subscriptions as { travelId: string }[]).some((s) => s.travelId === 't1')) {
+      httpMock.expectOne('/api/travels/t1/subscriptions/co-travelers').flush(coTravelerIds);
+      coTravelerIds.forEach((id) => httpMock.expectOne(`/api/users/${id}`).flush(USER(id)));
+    }
   }
 
   it('marks the traveler as having participated when a past subscription exists', () => {
@@ -112,5 +131,41 @@ describe('TravelDetail', () => {
   it('isPastEndDate distinguishes past and future dates', () => {
     expect(component['isPastEndDate']('2020-01-01')).toBe(true);
     expect(component['isPastEndDate']('2999-01-01')).toBe(false);
+  });
+
+  it('loads and resolves co-travelers once the traveler has participated', () => {
+    flushInit(
+      [{ id: 's1', travelId: 't1', travelerId: 'u1', status: 'ACTIVE', subscribedAt: '', cancelledAt: null }],
+      [],
+      ['u2'],
+    );
+
+    expect(component['coTravelers']().map((u) => u.id)).toEqual(['u2']);
+  });
+
+  it('submits a report against the manager by default', () => {
+    flushInit([{ id: 's1', travelId: 't1', travelerId: 'u1', status: 'ACTIVE', subscribedAt: '', cancelledAt: null }]);
+
+    component['reportForm'].patchValue({ reason: 'No show' });
+    component['submitReport']();
+
+    const req = httpMock.expectOne('/api/travels/t1/reports');
+    expect(req.request.body).toEqual({ reportedType: 'MANAGER', reportedId: 'm1', reason: 'No show' });
+    req.flush(null);
+  });
+
+  it('submits a report against a selected co-traveler', () => {
+    flushInit(
+      [{ id: 's1', travelId: 't1', travelerId: 'u1', status: 'ACTIVE', subscribedAt: '', cancelledAt: null }],
+      [],
+      ['u2'],
+    );
+
+    component['reportForm'].patchValue({ target: 'u2', reason: 'Rude behaviour' });
+    component['submitReport']();
+
+    const req = httpMock.expectOne('/api/travels/t1/reports');
+    expect(req.request.body).toEqual({ reportedType: 'TRAVELER', reportedId: 'u2', reason: 'Rude behaviour' });
+    req.flush(null);
   });
 });

@@ -4,17 +4,22 @@ import com.travel_plan.payment_service.exception.TravelNotFoundException;
 import com.travel_plan.payment_service.exception.TravelPriceNotSetException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.time.Duration;
 import java.util.UUID;
 
-// Appelle travel-service pour recuperer le prix reel d'un voyage plutot que de faire
-// confiance a un montant fourni par le client (voir docs/nouveautes-vs-travel-plan.md).
-// Le JWT du traveler appelant est propage tel quel (voir PaymentController) : c'est ce
-// meme JWT que travel-service valide deja pour ses propres routes GET /api/travels/**.
+// Recupere le prix reel aupres de travel-service plutot que de faire confiance au client
+// (voir docs/nouveautes-vs-travel-plan.md), JWT de l'appelant propage tel quel.
 @Component
 public class TravelServiceClient {
+
+    // Fallback (enonce, section 4) : timeout court (TravelServiceClientConfig) + retry borne ici
+    // sur les seules pannes transitoires (5xx, connexion/timeout) - jamais sur un 404 ou un 4xx.
+    private static final int MAX_ATTEMPTS = 3;
+    private static final Duration RETRY_DELAY = Duration.ofMillis(200);
 
     private final RestClient travelServiceRestClient;
 
@@ -22,9 +27,8 @@ public class TravelServiceClient {
         this.travelServiceRestClient = travelServiceRestClient;
     }
 
-    // Recupere le voyage aupres de travel-service et s'assure qu'il a un prix reel avant
-    // de laisser payment-service continuer - un voyage cree avant la migration V4 (prix
-    // non renseigne) ne doit jamais generer un paiement a un montant devine.
+    // S'assure que le voyage a un prix reel avant de continuer - un voyage pre-migration V4
+    // (prix non renseigne) ne doit jamais generer un paiement a un montant devine.
     public TravelSummary getPricedTravel(UUID travelId, String authorizationHeader) {
         TravelSummary summary = fetchTravelSummary(travelId, authorizationHeader);
         if (summary.price() == null || summary.currency() == null) {
@@ -34,17 +38,42 @@ public class TravelServiceClient {
     }
 
     private TravelSummary fetchTravelSummary(UUID travelId, String authorizationHeader) {
-        try {
-            return travelServiceRestClient.get()
-                    .uri("/api/travels/{id}", travelId)
-                    .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
-                    .retrieve()
-                    .body(TravelSummary.class);
-        } catch (RestClientResponseException ex) {
-            if (ex.getStatusCode().value() == 404) {
-                throw new TravelNotFoundException(travelId);
+        RuntimeException lastError = null;
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                return travelServiceRestClient.get()
+                        .uri("/api/travels/{id}", travelId)
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                        .retrieve()
+                        .body(TravelSummary.class);
+            } catch (RestClientResponseException ex) {
+                if (ex.getStatusCode().value() == 404) {
+                    throw new TravelNotFoundException(travelId);
+                }
+                if (!isTransient(ex.getStatusCode().value())) {
+                    throw ex;
+                }
+                lastError = ex;
+            } catch (ResourceAccessException ex) {
+                lastError = ex;
             }
-            throw ex;
+            if (attempt < MAX_ATTEMPTS) {
+                sleep(RETRY_DELAY);
+            }
+        }
+        throw lastError;
+    }
+
+    private static boolean isTransient(int status) {
+        return status == 502 || status == 503 || status == 504;
+    }
+
+    private static void sleep(Duration duration) {
+        try {
+            Thread.sleep(duration.toMillis());
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while retrying travel-service call", ex);
         }
     }
 }

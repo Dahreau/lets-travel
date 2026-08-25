@@ -22,12 +22,13 @@ describe('Shell', () => {
     component = fixture.componentInstance;
   });
 
-  it('shows the full admin toolkit nav for an ADMIN', () => {
+  it('shows the full admin toolkit nav, including browse, for an ADMIN', () => {
     vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'admin', role: 'ADMIN' });
     fixture.detectChanges();
 
     expect(component['navItems']().map((item) => item.label)).toEqual([
       'dashboard',
+      'voyages',
       'users',
       'travels',
       'payments',
@@ -35,11 +36,11 @@ describe('Shell', () => {
     ]);
   });
 
-  it('shows only the dashboard link for a TRAVEL_MANAGER', () => {
+  it('shows the dashboard and browse links for a TRAVEL_MANAGER, never the admin tools', () => {
     vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
     fixture.detectChanges();
 
-    expect(component['navItems']().map((item) => item.label)).toEqual(['dashboard']);
+    expect(component['navItems']().map((item) => item.label)).toEqual(['dashboard', 'voyages']);
   });
 
   it('shows the browse & payment-methods nav for a TRAVELER, never the admin tools', () => {
