@@ -257,3 +257,21 @@ expect(fixture.componentInstance['users']()).toHaveLength(1);
 ```
 
 **À retenir** : ajouter systématiquement un grep `\.length\)\.toBe\(|\.length\)\.toEqual\(` sur tous les fichiers `*.spec.ts` neufs/modifiés lors de toute passe préventive Sonar sur ce projet — cette règle a déjà coûté un aller-retour CI à deux reprises (`feat/manager-frontend` puis `feat/traveler-frontend`).
+
+## 24. Stage Deploy : `rm: cannot remove '.../backend/user-service/target': Directory not empty`
+
+**Problème** : le round CI suivant (build+test+Sonar passés) plante au tout début du stage Deploy sur `rm -rf "$DEPLOY_DIR"/*` (script de préservation des secrets Vault/certs avant reconstruction du workspace de déploiement), avec `rm: cannot remove '.../deploy-workspace/backend/user-service/target': Directory not empty`.
+
+**Cause probable** : `target/` est un résidu d'un run précédent (confirmé présent sur le disque, non régénéré par le pipeline actuel — aucune tâche Ansible ni service Docker Compose de ce projet n'écrit de `target/` dans `deploy-workspace`, et `tar` l'exclut explicitement à la reconstruction). `rm -rf` échoue dessus de façon non déterministe, cohérent avec les autres soucis déjà rencontrés sur ce repo de verrous transitoires côté hôte sur les chemins Windows montés via WSL2/DrvFs (voir l'incident nginx et le dossier `internal.crt` de l'incident infra du 24/08) — probablement un antivirus/l'indexation Windows ou Docker Desktop qui scanne/verrouille brièvement un fichier pendant la suppression récursive. Cause non confirmée à 100% (pas d'accès Docker/hôte depuis cet environnement pour l'observer en direct), mais cohérente avec l'historique du projet.
+
+**Solution** : le `rm -rf "$DEPLOY_DIR"/*` du `Jenkinsfile` est encapsulé dans une boucle de 5 tentatives avec 3s de pause entre chacune, plutôt qu'un `set -e` qui ferait échouer tout le stage sur un verrou transitoire :
+```bash
+for attempt in 1 2 3 4 5; do
+    rm -rf "$DEPLOY_DIR"/* && break
+    [ "$attempt" = 5 ] && { echo "rm -rf $DEPLOY_DIR/* a echoue apres 5 tentatives" >&2; exit 1; }
+    sleep 3
+done
+```
+Solution portable (dans le `Jenkinsfile` versionné, pas une bidouille locale). Le dossier `target/` bloquant a aussi été signalé à l'utilisateur pour suppression manuelle ponctuelle, la boucle de retry ne pouvant pas garantir qu'un verrou déjà posé au moment du run se libère en quelques secondes.
+
+**À retenir** : sur ce projet, tout `rm -rf` sur un chemin Windows monté via WSL2/DrvFs dans un script CI doit être encapsulé dans une boucle de retry courte plutôt que de faire échouer tout le stage sur un premier échec — cohérent avec les autres soucis de verrous transitoires déjà rencontrés sur ce repo (nginx, `internal.crt`).

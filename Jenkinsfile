@@ -107,7 +107,13 @@ pipeline {
                         fi
                     done
 
-                    rm -rf "$DEPLOY_DIR"/*
+                    # rm -rf sur ce bind-mount WSL2/DrvFs echoue parfois "Directory not empty"
+                    # sur un rm concurrent (verrou transitoire cote hote) : on retente.
+                    for attempt in 1 2 3 4 5; do
+                        rm -rf "$DEPLOY_DIR"/* && break
+                        [ "$attempt" = 5 ] && { echo "rm -rf $DEPLOY_DIR/* a echoue apres 5 tentatives" >&2; exit 1; }
+                        sleep 3
+                    done
                     tar --exclude=.git --exclude=node_modules --exclude=target --exclude=dist --exclude=.angular -C "$WORKSPACE" -cf - . | tar -C "$DEPLOY_DIR" -xf -
 
                     for f in $STATE_FILES; do
