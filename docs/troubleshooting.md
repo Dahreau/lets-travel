@@ -339,3 +339,68 @@ Solution portable (dans le `Jenkinsfile` versionné, pas une bidouille locale). 
 
 **À retenir** : un signal d'erreur affiche seulement sur les erreurs HTTP (`error: (error) => ...`) laisse un trou silencieux sur le chemin de validation locale (`form.invalid`) si personne n'y pense explicitement — verifier les deux chemins a chaque nouveau formulaire.
 
+## 31. Register : message d'erreur present mais toujours pas exploitable - un champ invalide invisible (password trop court, masque)
+
+**Probleme** : formulaire d'inscription rempli en apparence dans tous les champs, soumission qui echoue quand meme avec le message generique "Certains champs obligatoires sont manquants ou invalides" (entree #30) - impossible de savoir quel champ pose probleme, en particulier `password` (masque par `type="password"`, sa longueur invisible a l'oeil).
+
+**Cause** : `register.html` n'avait aucun `[class.invalid]` sur ses champs (contrairement a son propre voisin `login.html`, qui a exactement ce binding sur `username`/`password`) - un champ invalide ne se distingue donc visuellement d'aucune facon des autres. Concretement ici : `password` a `Validators.minLength(6)`, et un mot de passe de moins de 6 caracteres ne montre aucun signe (pas de bordure rouge, pas d'indice de longueur requise).
+
+**Solution** : `[class.invalid]="form.controls.X.invalid && form.controls.X.touched"` ajoute sur les 9 champs requis de `register.html` (5 principaux + 4 de l'adresse), meme pattern que `login.html` deja etabli. Indice permanent "6 caracteres minimum" ajoute sous le champ password, seul champ dont la contrainte est invisible meme une fois le champ rempli.
+
+**À retenir** : un nouveau formulaire doit reprendre le binding `[class.invalid]` de ses voisins des sa creation, pas seulement le signal `errorMessage()` (entree #30) - un message generique sans mise en evidence du champ fautif reste quasi inexploitable des que le formulaire depasse 2-3 champs.
+
+## 32. 401 sur `/api/auth/register` et `/api/users/register` malgre un `permitAll()` correct cote service
+
+**Probleme** : inscription impossible en conditions reelles (branche `fix/audit-gaps`, verification finale avant oral) - `POST /api/users/register` renvoyait 401 avant meme d'atteindre `user-service`, alors que `SecurityConfig` de ce service autorise explicitement cette route en `permitAll()`.
+
+**Cause** : `api-gateway/RouteConfig.java` appliquait `jwtFilter` sans exception a toutes les routes `/api/users/**` et `/api/auth/**` (sauf `/api/auth/login`, deja isolee). Le filtre JWT de la gateway rejette une requete sans token avant meme qu'elle atteigne le microservice cible - la regle `permitAll()` de `user-service`/`auth-service` n'a donc jamais l'occasion de s'appliquer, la gateway bloquant en amont.
+
+**Solution** : `RouteConfig.java` scinde desormais chaque route de service en deux `RouterFunction` distincts - un groupe `*-public` (sans `jwtFilter`) pour `/api/auth/login`, `/api/auth/register` et `/api/users/register`, un groupe protege (`jwtFilter` applique) pour tout le reste.
+
+**À retenir** : sur une architecture a gateway, une route publique doit etre `permitAll()` a la fois cote microservice ET cote gateway (routing/filtres) - les deux couches font de l'auth independamment, et la premiere qui bloque a raison.
+
+## 33. `/api/auth/me` reserve a ADMIN empeche tout Traveler/Manager de recuperer son propre profil apres login
+
+**Probleme** : trouve lors de l'audit complet (pas encore reporte par un utilisateur) - `SecurityConfig` d'`auth-service` ne declarait aucune regle explicite pour `/api/auth/me`, route appelee par tous les roles juste apres login/register pour recuperer l'identite du compte connecte.
+
+**Cause** : en l'absence de regle dediee, `/api/auth/me` tombait dans le `anyRequest().hasRole("ADMIN")` final - seul un compte ADMIN pouvait donc s'authentifier lui-meme via cette route, ce qui aurait bloque tout Traveler/Manager en aval du login des que le frontend l'appelle.
+
+**Solution** : ajout d'une regle explicite `.requestMatchers("/api/auth/me").authenticated()` avant le `anyRequest().hasRole("ADMIN")`, ainsi qu'un `permitAll()` explicite sur `/api/auth/register` (deja public via la gateway mais sans regle propre cote service).
+
+**À retenir** : `anyRequest()` en regle de secours (fallback) cache facilement des routes appelees par tous les roles qui n'ont jamais recu de regle dediee - toute nouvelle route consommee par plusieurs roles doit avoir sa propre ligne explicite, jamais compter sur le fallback pour deviner l'intention.
+
+## 34. 500 intermittent sur login qui persiste apres le fix TLS, meme sur un compte cree avec le bon mot de passe
+
+**Probleme** : apres correction du bug de bind-mount TLS (entree #28), le login restait intermittemment en 500 malgre un mot de passe correct sur un compte fraichement cree.
+
+**Cause** : `AdminSeeder` (execute au demarrage de chaque replica `auth-service`, `deploy.replicas: 2`) tente de creer le compte admin par defaut sans protection contre la concurrence. Le force-remove ajoute en #28 fait qu'un `docker compose up` recree desormais systematiquement les deux replicas ensemble a chaque deploiement - ils demarrent alors en meme temps, et le second `accountRepository.save(admin)` leve une `DataIntegrityViolationException` non rattrapee dans le `CommandLineRunner`, ce qui fait planter la JVM de ce replica. Le replica redemarre (`restart: unless-stopped`) mais pendant la fenetre de crash/redemarrage, le load balancer statique de la gateway (`SimpleDiscoveryClient`, sans connaissance de l'etat de sante) continue de router une partie du trafic - dont des logins legitimes - vers l'instance en train de planter.
+
+**Solution** : `accountRepository.save(admin)` entoure d'un `try/catch(DataIntegrityViolationException)` dans `AdminSeeder` - le second replica log simplement qu'un autre replica a deja cree l'admin, au lieu de planter.
+
+**À retenir** : tout `CommandLineRunner`/code de bootstrap qui ecrit en base doit etre idempotent et tolerant a la concurrence des que le service tourne en plusieurs replicas - un simple `count() == 0` avant insertion (deja en place ici) ne protege pas contre une course entre deux instances qui demarrent au meme instant. Gap connu, non traite faute de temps/perimetre : la gateway n'a pas de load balancing conscient de l'etat de sante (pas de retrait automatique d'un replica en train de planter/redemarrer).
+
+## 35. `auth-service` seul service sans gestion complete des exceptions - un 500 sur exception inattendue ne donnait aucune information exploitable
+
+**Probleme** : trouve lors de l'audit complet - `auth-service` etait le seul des 5 microservices sans `ApiExceptionHandler` couvrant `DataIntegrityViolationException`, `MethodArgumentNotValidException`, `HttpMessageNotReadableException` et `MethodArgumentTypeMismatchException` ; une exception dans ce perimetre remontait en 500 brut sans message exploitable ni log structure, contrairement aux autres services deja audites.
+
+**Solution** : `ApiExceptionHandler.java` d'`auth-service` complete avec les memes handlers que `user-service` (409 message explicite sur doublon, 400 sur validation/JSON malforme/type invalide, 500 avec `log.error` sur le reste), en conservant le format `ErrorResponse{message}` deja utilise par ce service plutot que de changer de format.
+
+**À retenir** : une gestion d'erreur consistante doit etre verifiee service par service et pas seulement teste implicitement via les flux qui marchent - un service qui gere bien ses erreurs "connues" peut quand meme laisser un angle mort sur les erreurs generiques (JSON malforme, contrainte DB) si personne ne l'a copie depuis le pattern etabli ailleurs dans le projet.
+
+## 36. `payment-service` sans truststore TLS interne - risque de `SSLHandshakeException` sur ses appels sortants vers `travel-service`
+
+**Probleme** : trouve lors de l'audit infra complet, pas encore reproduit en conditions reelles - `payment-service/application-docker.properties` ne declarait pas de truststore pour le bundle SSL interne (`spring.ssl.bundle.pem.internal-services`), contrairement a `api-gateway` qui a la meme ligne.
+
+**Cause** : sans ce truststore explicite, le `RestClient` sortant de `payment-service` vers `travel-service` retombe sur le `cacerts` par defaut de la JVM, qui ne connait pas le certificat auto-signe genere par le pipeline (`infra/internal-tls/certs/internal.crt`) - tout appel sortant echouerait en `SSLHandshakeException` des que ce chemin de code serait exerce.
+
+**Solution** : ajout de `spring.ssl.bundle.pem.internal-services.truststore.certificate=file:/etc/internal-tls/internal.crt`, identique a la ligne deja presente cote `api-gateway`.
+
+**À retenir** : toute config TLS interne (bundle keystore/truststore) doit etre dupliquee de facon identique sur TOUS les services qui font des appels sortants vers un autre service interne, pas seulement ceux ou le bug a deja ete vu - verifier par recherche croisee (`grep` du nom de la propriete sur tous les `application-docker.properties`) plutot que service par service au fil des rapports de bug.
+
+## 37. `vault` non couvert par le force-remove anti bind-mount perime (meme classe de bug que #28, sur un autre service)
+
+**Probleme** : trouve lors de l'audit infra complet - le service `vault` monte lui-meme des fichiers regenerables (`infra/vault/certs`, config), exactement le meme type de montage que celui qui causait le bug TLS de l'entree #28, mais n'etait pas dans la liste de force-remove etendue a cette occasion (qui ne couvrait que `postgres`, `neo4j`, `nginx` et les 5 microservices).
+
+**Solution** : `vault` ajoute a la meme liste de force-remove dans `deploy.yml` (task renommee en consequence, variable `stale_mount_containers_rm`).
+
+**À retenir** : suite directe de l'À retenir de l'entree #28 - cette liste doit etre revue a chaque nouveau service qui monte un fichier regenerable en bind mount, `vault` avait ete oublie car protege par ailleurs par sa propre tache "Force-remove any previous vault-init container" qui ne couvre que le conteneur d'init, pas `vault` lui-meme.

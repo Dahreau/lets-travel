@@ -112,7 +112,7 @@
       changed_when: "'Removing' in vault_init_rm.stdout"
       failed_when: false
 
-    - name: Force-remove postgres, neo4j, nginx and the 5 internal-tls-mounted services before recreate (same stale Docker Desktop/WSL2 bind-mount race as vault-init - also hits infra/internal-tls/certs, not just published ports)
+    - name: Force-remove postgres, neo4j, nginx, vault and the 5 internal-tls-mounted services before recreate (same stale Docker Desktop/WSL2 bind-mount race as vault-init - also hits infra/internal-tls/certs and infra/vault/certs, not just published ports)
       ansible.builtin.command:
         argv:
           - docker
@@ -125,6 +125,7 @@
           - postgres
           - neo4j
           - nginx
+          - vault
           - auth-service
           - user-service
           - travel-service

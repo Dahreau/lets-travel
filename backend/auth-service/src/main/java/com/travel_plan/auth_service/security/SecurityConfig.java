@@ -33,6 +33,10 @@ public class SecurityConfig {
                         // Account role=TRAVELER force). Voir user-service SecurityConfig pour la 1ere
                         // etape (profil User).
                         .requestMatchers("/api/auth/register").permitAll()
+                        // /me est appele par tous les roles juste apres login/register (voir
+                        // AuthController.me) - sans cette regle il tombe dans anyRequest() et
+                        // seul ADMIN peut s'authentifier lui-meme.
+                        .requestMatchers("/api/auth/me").authenticated()
                         .anyRequest().hasRole("ADMIN"))
                 .addFilterBefore(
                         new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);

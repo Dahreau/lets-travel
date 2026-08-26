@@ -152,6 +152,7 @@ export class TravelDetail implements OnInit {
   protected submitFeedback(): void {
     if (this.feedbackForm.invalid) {
       this.feedbackForm.markAllAsTouched();
+      this.toastService.error('Note obligatoire entre 1 et 5.');
       return;
     }
 
@@ -173,6 +174,7 @@ export class TravelDetail implements OnInit {
     const travel = this.travel();
     if (this.reportForm.invalid || !travel) {
       this.reportForm.markAllAsTouched();
+      this.toastService.error('Le motif du signalement est obligatoire.');
       return;
     }
 
@@ -201,6 +203,7 @@ export class TravelDetail implements OnInit {
     const myUserId = this.authService.userId();
     if (this.paymentForm.invalid || !travel || !myUserId) {
       this.paymentForm.markAllAsTouched();
+      this.toastService.error('Sélectionnez un moyen de paiement.');
       return;
     }
 

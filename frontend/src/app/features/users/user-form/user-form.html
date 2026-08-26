@@ -61,19 +61,39 @@
         <div class="form-grid">
           <div class="field">
             <label class="label" for="street">Rue<span class="req">*</span></label>
-            <input id="street" class="input" formControlName="street" />
+            <input
+              id="street"
+              class="input"
+              formControlName="street"
+              [class.invalid]="form.controls.address.controls.street.invalid && form.controls.address.controls.street.touched"
+            />
           </div>
           <div class="field">
             <label class="label" for="city">Ville<span class="req">*</span></label>
-            <input id="city" class="input" formControlName="city" />
+            <input
+              id="city"
+              class="input"
+              formControlName="city"
+              [class.invalid]="form.controls.address.controls.city.invalid && form.controls.address.controls.city.touched"
+            />
           </div>
           <div class="field">
             <label class="label" for="postalCode">Code postal<span class="req">*</span></label>
-            <input id="postalCode" class="input" formControlName="postalCode" />
+            <input
+              id="postalCode"
+              class="input"
+              formControlName="postalCode"
+              [class.invalid]="form.controls.address.controls.postalCode.invalid && form.controls.address.controls.postalCode.touched"
+            />
           </div>
           <div class="field">
             <label class="label" for="country">Pays<span class="req">*</span></label>
-            <input id="country" class="input" formControlName="country" />
+            <input
+              id="country"
+              class="input"
+              formControlName="country"
+              [class.invalid]="form.controls.address.controls.country.invalid && form.controls.address.controls.country.touched"
+            />
           </div>
         </div>
       </div>

@@ -7,13 +7,23 @@
     <div class="form-grid">
       <div class="field">
         <label class="label" for="title">Titre<span class="req">*</span></label>
-        <input id="title" class="input" formControlName="title" />
+        <input
+          id="title"
+          class="input"
+          formControlName="title"
+          [class.invalid]="form.controls.title.invalid && form.controls.title.touched"
+        />
       </div>
 
       @if (isAdmin()) {
         <div class="field">
           <label class="label" for="managerId">Travel Manager<span class="req">*</span></label>
-          <select id="managerId" class="select" formControlName="managerId">
+          <select
+            id="managerId"
+            class="select"
+            formControlName="managerId"
+            [class.invalid]="form.controls.managerId.invalid && form.controls.managerId.touched"
+          >
             <option value="" disabled>— sélectionner —</option>
             @for (manager of managers(); track manager.id) {
               <option [value]="manager.id">{{ manager.firstName }} {{ manager.lastName }} — {{ manager.email }}</option>
@@ -24,12 +34,24 @@
 
       <div class="field">
         <label class="label" for="startDate">Date de début<span class="req">*</span></label>
-        <input id="startDate" class="input" type="date" formControlName="startDate" />
+        <input
+          id="startDate"
+          class="input"
+          type="date"
+          formControlName="startDate"
+          [class.invalid]="form.controls.startDate.invalid && form.controls.startDate.touched"
+        />
       </div>
 
       <div class="field">
         <label class="label" for="endDate">Date de fin<span class="req">*</span></label>
-        <input id="endDate" class="input" type="date" formControlName="endDate" />
+        <input
+          id="endDate"
+          class="input"
+          type="date"
+          formControlName="endDate"
+          [class.invalid]="form.controls.endDate.invalid && form.controls.endDate.touched"
+        />
       </div>
 
       <div class="field">
@@ -43,12 +65,26 @@
 
       <div class="field">
         <label class="label" for="price">Prix<span class="req">*</span></label>
-        <input id="price" class="input" type="number" step="0.01" min="0.01" formControlName="price" />
+        <input
+          id="price"
+          class="input"
+          type="number"
+          step="0.01"
+          min="0.01"
+          formControlName="price"
+          [class.invalid]="form.controls.price.invalid && form.controls.price.touched"
+        />
       </div>
 
       <div class="field">
         <label class="label" for="currency">Devise<span class="req">*</span></label>
-        <input id="currency" class="input" formControlName="currency" maxlength="3" />
+        <input
+          id="currency"
+          class="input"
+          formControlName="currency"
+          maxlength="3"
+          [class.invalid]="form.controls.currency.invalid && form.controls.currency.touched"
+        />
       </div>
     </div>
 
@@ -66,19 +102,37 @@
         <div class="form-grid">
           <div class="field">
             <label class="label">Ville<span class="req">*</span></label>
-            <input class="input" formControlName="city" />
+            <input
+              class="input"
+              formControlName="city"
+              [class.invalid]="destination.controls.city.invalid && destination.controls.city.touched"
+            />
           </div>
           <div class="field">
             <label class="label">Pays<span class="req">*</span></label>
-            <input class="input" formControlName="country" />
+            <input
+              class="input"
+              formControlName="country"
+              [class.invalid]="destination.controls.country.invalid && destination.controls.country.touched"
+            />
           </div>
           <div class="field">
             <label class="label">Arrivée<span class="req">*</span></label>
-            <input class="input" type="date" formControlName="arrivalDate" />
+            <input
+              class="input"
+              type="date"
+              formControlName="arrivalDate"
+              [class.invalid]="destination.controls.arrivalDate.invalid && destination.controls.arrivalDate.touched"
+            />
           </div>
           <div class="field">
             <label class="label">Départ<span class="req">*</span></label>
-            <input class="input" type="date" formControlName="departureDate" />
+            <input
+              class="input"
+              type="date"
+              formControlName="departureDate"
+              [class.invalid]="destination.controls.departureDate.invalid && destination.controls.departureDate.touched"
+            />
           </div>
         </div>
 
@@ -97,7 +151,11 @@
             <div class="form-grid">
               <div class="field">
                 <label class="label">Nom<span class="req">*</span></label>
-                <input class="input" formControlName="name" />
+                <input
+                  class="input"
+                  formControlName="name"
+                  [class.invalid]="destination.controls.accommodation.controls.name.invalid && destination.controls.accommodation.controls.name.touched"
+                />
               </div>
               <div class="field">
                 <label class="label">Type<span class="req">*</span></label>
@@ -109,15 +167,29 @@
               </div>
               <div class="field">
                 <label class="label">Adresse<span class="req">*</span></label>
-                <input class="input" formControlName="address" />
+                <input
+                  class="input"
+                  formControlName="address"
+                  [class.invalid]="destination.controls.accommodation.controls.address.invalid && destination.controls.accommodation.controls.address.touched"
+                />
               </div>
               <div class="field">
                 <label class="label">Check-in<span class="req">*</span></label>
-                <input class="input" type="date" formControlName="checkIn" />
+                <input
+                  class="input"
+                  type="date"
+                  formControlName="checkIn"
+                  [class.invalid]="destination.controls.accommodation.controls.checkIn.invalid && destination.controls.accommodation.controls.checkIn.touched"
+                />
               </div>
               <div class="field">
                 <label class="label">Check-out<span class="req">*</span></label>
-                <input class="input" type="date" formControlName="checkOut" />
+                <input
+                  class="input"
+                  type="date"
+                  formControlName="checkOut"
+                  [class.invalid]="destination.controls.accommodation.controls.checkOut.invalid && destination.controls.accommodation.controls.checkOut.touched"
+                />
               </div>
             </div>
           </div>
@@ -129,11 +201,20 @@
             <div class="form-grid">
               <div class="field">
                 <label class="label">Nom<span class="req">*</span></label>
-                <input class="input" formControlName="name" />
+                <input
+                  class="input"
+                  formControlName="name"
+                  [class.invalid]="activity.controls.name.invalid && activity.controls.name.touched"
+                />
               </div>
               <div class="field">
                 <label class="label">Date<span class="req">*</span></label>
-                <input class="input" type="date" formControlName="date" />
+                <input
+                  class="input"
+                  type="date"
+                  formControlName="date"
+                  [class.invalid]="activity.controls.date.invalid && activity.controls.date.touched"
+                />
               </div>
               <div class="field">
                 <label class="label">Coût</label>
@@ -176,19 +257,37 @@
           </div>
           <div class="field">
             <label class="label">De<span class="req">*</span></label>
-            <input class="input" formControlName="fromLocation" />
+            <input
+              class="input"
+              formControlName="fromLocation"
+              [class.invalid]="transportation.controls.fromLocation.invalid && transportation.controls.fromLocation.touched"
+            />
           </div>
           <div class="field">
             <label class="label">Vers<span class="req">*</span></label>
-            <input class="input" formControlName="toLocation" />
+            <input
+              class="input"
+              formControlName="toLocation"
+              [class.invalid]="transportation.controls.toLocation.invalid && transportation.controls.toLocation.touched"
+            />
           </div>
           <div class="field">
             <label class="label">Départ<span class="req">*</span></label>
-            <input class="input" type="datetime-local" formControlName="departureTime" />
+            <input
+              class="input"
+              type="datetime-local"
+              formControlName="departureTime"
+              [class.invalid]="transportation.controls.departureTime.invalid && transportation.controls.departureTime.touched"
+            />
           </div>
           <div class="field">
             <label class="label">Arrivée<span class="req">*</span></label>
-            <input class="input" type="datetime-local" formControlName="arrivalTime" />
+            <input
+              class="input"
+              type="datetime-local"
+              formControlName="arrivalTime"
+              [class.invalid]="transportation.controls.arrivalTime.invalid && transportation.controls.arrivalTime.touched"
+            />
           </div>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" (click)="removeTransportation(tIndex)">

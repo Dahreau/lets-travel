@@ -1,142 +1,168 @@
 @if (loading()) {
-<app-spinner />
+  <app-spinner />
 } @else if (travel(); as t) {
-<app-page-header [title]="t.title" subtitle="détail du voyage">
-  <a routerLink="/browse" class="btn btn-ghost">← retour</a>
-</app-page-header>
+  <app-page-header [title]="t.title" subtitle="détail du voyage">
+    <a routerLink="/browse" class="btn btn-ghost">← retour</a>
+  </app-page-header>
 
-<div class="card">
-  <div class="stat-grid">
-    <div class="stat-card">
-      <div class="stat-label">dates</div>
-      <div class="stat-value" style="font-size: 16px">{{ t.startDate }} → {{ t.endDate }}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">prix</div>
-      <div class="stat-value">{{ t.price !== null ? t.price + ' ' + t.currency : 'gratuit' }}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">statut</div>
-      <div class="stat-value"><app-badge [value]="t.status" /></div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">destinations</div>
-      <div class="stat-value">{{ t.destinations.length }}</div>
-    </div>
-  </div>
-
-  <p class="page-subtitle" style="margin-top: 12px">
-    Organisé par <a [routerLink]="['/manager', t.managerId]">ce Travel Manager</a>
-  </p>
-</div>
-
-<div class="card">
-  @if (activeSubscription()) {
-  <p class="page-subtitle" style="margin-bottom: 12px">Vous êtes abonné à ce voyage.</p>
-  <button type="button" class="btn btn-danger" [disabled]="unsubscribing()" (click)="unsubscribe()">
-    {{ unsubscribing() ? '...' : '$ se désabonner' }}
-  </button>
-  } @else {
-  <button type="button" class="btn btn-primary" [disabled]="subscribing()" (click)="subscribe()">
-    {{ subscribing() ? '...' : "$ s'abonner" }}
-  </button>
-  }
-</div>
-
-@if (t.price !== null) {
-<div class="card">
-  <h2 class="section-title">payer ce voyage</h2>
-  @if (paymentMethods().length === 0) {
-  <div class="empty-state">
-    Aucun moyen de paiement enregistré —
-    <a routerLink="/payment-methods/new">en ajouter un</a>.
-  </div>
-  } @else {
-  <form [formGroup]="paymentForm" (ngSubmit)="submitPayment()">
-    <div class="form-grid">
-      <div class="field">
-        <label class="label" for="paymentMethodId">Moyen de paiement<span class="req">*</span></label>
-        <select id="paymentMethodId" class="select" formControlName="paymentMethodId">
-          <option value="" disabled>— sélectionner —</option>
-          @for (method of paymentMethods(); track method.id) {
-          <option [value]="method.id">
-            {{ method.provider }} · {{ method.brand || method.type }}
-            {{ method.last4 ? '••' + method.last4 : '' }}
-          </option>
-          }
-        </select>
+  <div class="card">
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">dates</div>
+        <div class="stat-value" style="font-size: 16px">{{ t.startDate }} → {{ t.endDate }}</div>
       </div>
-      <div class="field">
-        <label class="label" for="amount">Montant</label>
-        <div class="stat-value" id="amount" style="font-size: 16px">{{ t.price }} {{ t.currency }}</div>
+      <div class="stat-card">
+        <div class="stat-label">prix</div>
+        <div class="stat-value">{{ t.price !== null ? t.price + ' ' + t.currency : 'gratuit' }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">statut</div>
+        <div class="stat-value"><app-badge [value]="t.status" /></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">destinations</div>
+        <div class="stat-value">{{ t.destinations.length }}</div>
       </div>
     </div>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary" [disabled]="paymentSubmitting()">
-        {{ paymentSubmitting() ? '...' : '$ payer' }}
-      </button>
-    </div>
-  </form>
-  }
-</div>
-}
 
-@if (hasParticipated() && isPastEndDate(t.endDate)) {
-<div class="card">
-  <h2 class="section-title">votre avis</h2>
-  @if (feedbackSubmitted()) {
-  <p class="page-subtitle">Avis envoyé, merci !</p>
-  } @else {
-  <form [formGroup]="feedbackForm" (ngSubmit)="submitFeedback()">
-    <div class="field">
-      <label class="label" for="rating">Note (1 à 5)<span class="req">*</span></label>
-      <select id="rating" class="select" formControlName="rating">
-        @for (n of [1, 2, 3, 4, 5]; track n) {
-        <option [ngValue]="n">{{ n }}</option>
-        }
-      </select>
-    </div>
-    <div class="field">
-      <label class="label" for="comment">Commentaire</label>
-      <textarea id="comment" class="textarea" formControlName="comment" rows="3"></textarea>
-    </div>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary" [disabled]="feedbackSubmitting()">
-        {{ feedbackSubmitting() ? '...' : '$ envoyer' }}
-      </button>
-    </div>
-  </form>
-  }
-</div>
-}
+    <p class="page-subtitle" style="margin-top: 12px">
+      Organisé par <a [routerLink]="['/manager', t.managerId]">ce Travel Manager</a>
+    </p>
+  </div>
 
-@if (hasParticipated()) {
-<div class="card">
-  <h2 class="section-title">signaler</h2>
-  @if (reportSubmitted()) {
-  <p class="page-subtitle">Signalement envoyé.</p>
-  } @else {
-  <form [formGroup]="reportForm" (ngSubmit)="submitReport()">
-    <div class="field">
-      <label class="label" for="target">Personne à signaler<span class="req">*</span></label>
-      <select id="target" class="select" formControlName="target">
-        <option value="MANAGER">le manager de ce voyage</option>
-        @for (co of coTravelers(); track co.id) {
-        <option [value]="co.id">{{ co.firstName }} {{ co.lastName }}</option>
-        }
-      </select>
-    </div>
-    <div class="field">
-      <label class="label" for="reason">Motif<span class="req">*</span></label>
-      <textarea id="reason" class="textarea" formControlName="reason" rows="3"></textarea>
-    </div>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-danger" [disabled]="reportSubmitting()">
-        {{ reportSubmitting() ? '...' : '$ signaler' }}
+  <div class="card">
+    @if (activeSubscription()) {
+      <p class="page-subtitle" style="margin-bottom: 12px">Vous êtes abonné à ce voyage.</p>
+      <button
+        type="button"
+        class="btn btn-danger"
+        [disabled]="unsubscribing()"
+        (click)="unsubscribe()"
+      >
+        {{ unsubscribing() ? '...' : '$ se désabonner' }}
       </button>
+    } @else {
+      <button type="button" class="btn btn-primary" [disabled]="subscribing()" (click)="subscribe()">
+        {{ subscribing() ? '...' : "$ s'abonner" }}
+      </button>
+    }
+  </div>
+
+  @if (t.price !== null) {
+    <div class="card">
+      <h2 class="section-title">payer ce voyage</h2>
+      @if (paymentMethods().length === 0) {
+        <div class="empty-state">
+          Aucun moyen de paiement enregistré —
+          <a routerLink="/payment-methods/new">en ajouter un</a>.
+        </div>
+      } @else {
+        <form [formGroup]="paymentForm" (ngSubmit)="submitPayment()">
+          <div class="form-grid">
+            <div class="field">
+              <label class="label" for="paymentMethodId">Moyen de paiement<span class="req">*</span></label>
+              <select
+                id="paymentMethodId"
+                class="select"
+                formControlName="paymentMethodId"
+                [class.invalid]="paymentForm.controls.paymentMethodId.invalid && paymentForm.controls.paymentMethodId.touched"
+              >
+                <option value="" disabled>— sélectionner —</option>
+                @for (method of paymentMethods(); track method.id) {
+                  <option [value]="method.id">
+                    {{ method.provider }} · {{ method.brand || method.type }}
+                    {{ method.last4 ? '••' + method.last4 : '' }}
+                  </option>
+                }
+              </select>
+            </div>
+            <div class="field">
+              <label class="label">Montant</label>
+              <div class="stat-value" style="font-size: 16px">{{ t.price }} {{ t.currency }}</div>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" [disabled]="paymentSubmitting()">
+              {{ paymentSubmitting() ? '...' : '$ payer' }}
+            </button>
+          </div>
+        </form>
+      }
     </div>
-  </form>
   }
-</div>
-}
+
+  @if (hasParticipated() && isPastEndDate(t.endDate)) {
+    <div class="card">
+      <h2 class="section-title">votre avis</h2>
+      @if (feedbackSubmitted()) {
+        <p class="page-subtitle">Avis envoyé, merci !</p>
+      } @else {
+        <form [formGroup]="feedbackForm" (ngSubmit)="submitFeedback()">
+          <div class="field">
+            <label class="label" for="rating">Note (1 à 5)<span class="req">*</span></label>
+            <select
+              id="rating"
+              class="select"
+              formControlName="rating"
+              [class.invalid]="feedbackForm.controls.rating.invalid && feedbackForm.controls.rating.touched"
+            >
+              @for (n of [1, 2, 3, 4, 5]; track n) {
+                <option [ngValue]="n">{{ n }}</option>
+              }
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="comment">Commentaire</label>
+            <textarea id="comment" class="textarea" formControlName="comment" rows="3"></textarea>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" [disabled]="feedbackSubmitting()">
+              {{ feedbackSubmitting() ? '...' : '$ envoyer' }}
+            </button>
+          </div>
+        </form>
+      }
+    </div>
+  }
+
+  @if (hasParticipated()) {
+    <div class="card">
+      <h2 class="section-title">signaler</h2>
+      @if (reportSubmitted()) {
+        <p class="page-subtitle">Signalement envoyé.</p>
+      } @else {
+        <form [formGroup]="reportForm" (ngSubmit)="submitReport()">
+          <div class="field">
+            <label class="label" for="target">Personne à signaler<span class="req">*</span></label>
+            <select
+              id="target"
+              class="select"
+              formControlName="target"
+              [class.invalid]="reportForm.controls.target.invalid && reportForm.controls.target.touched"
+            >
+              <option value="MANAGER">le manager de ce voyage</option>
+              @for (co of coTravelers(); track co.id) {
+                <option [value]="co.id">{{ co.firstName }} {{ co.lastName }}</option>
+              }
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="reason">Motif<span class="req">*</span></label>
+            <textarea
+              id="reason"
+              class="textarea"
+              formControlName="reason"
+              rows="3"
+              [class.invalid]="reportForm.controls.reason.invalid && reportForm.controls.reason.touched"
+            ></textarea>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-danger" [disabled]="reportSubmitting()">
+              {{ reportSubmitting() ? '...' : '$ signaler' }}
+            </button>
+          </div>
+        </form>
+      }
+    </div>
+  }
 }

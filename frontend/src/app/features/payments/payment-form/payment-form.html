@@ -1,56 +1,71 @@
 <app-page-header title="new payment" />
 
 @if (loading()) {
-<app-spinner />
+  <app-spinner />
 } @else {
-<form [formGroup]="form" (ngSubmit)="submit()" class="card">
-  <div class="form-grid">
-    <div class="field">
-      <label class="label" for="travelId">Voyage<span class="req">*</span></label>
-      <select id="travelId" class="select" formControlName="travelId">
-        <option value="" disabled>— sélectionner —</option>
-        @for (travel of travels(); track travel.id) {
-        <option [value]="travel.id">{{ travel.title }}</option>
-        }
-      </select>
+  <form [formGroup]="form" (ngSubmit)="submit()" class="card">
+    <div class="form-grid">
+      <div class="field">
+        <label class="label" for="travelId">Voyage<span class="req">*</span></label>
+        <select
+          id="travelId"
+          class="select"
+          formControlName="travelId"
+          [class.invalid]="form.controls.travelId.invalid && form.controls.travelId.touched"
+        >
+          <option value="" disabled>— sélectionner —</option>
+          @for (travel of travels(); track travel.id) {
+            <option [value]="travel.id">{{ travel.title }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="ownerId">Owner<span class="req">*</span></label>
+        <select
+          id="ownerId"
+          class="select"
+          formControlName="ownerId"
+          [class.invalid]="form.controls.ownerId.invalid && form.controls.ownerId.touched"
+        >
+          <option value="" disabled>— sélectionner —</option>
+          @for (user of users(); track user.id) {
+            <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="paymentMethodId">Moyen de paiement<span class="req">*</span></label>
+        <select
+          id="paymentMethodId"
+          class="select"
+          formControlName="paymentMethodId"
+          [class.invalid]="form.controls.paymentMethodId.invalid && form.controls.paymentMethodId.touched"
+        >
+          <option value="" disabled>— sélectionner —</option>
+          @for (method of paymentMethods(); track method.id) {
+            <option [value]="method.id">
+              {{ method.provider }} · {{ method.brand || method.type }}
+              {{ method.last4 ? '••' + method.last4 : '' }}
+            </option>
+          }
+        </select>
+      </div>
+
+      @if (selectedTravel(); as t) {
+        <div class="field">
+          <label class="label">Montant</label>
+          <div class="stat-value" style="font-size: 16px">{{ t.price }} {{ t.currency }}</div>
+        </div>
+      }
     </div>
 
-    <div class="field">
-      <label class="label" for="ownerId">Owner<span class="req">*</span></label>
-      <select id="ownerId" class="select" formControlName="ownerId">
-        <option value="" disabled>— sélectionner —</option>
-        @for (user of users(); track user.id) {
-        <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
-        }
-      </select>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" [disabled]="saving()">
+        {{ saving() ? 'saving...' : '$ save' }}
+      </button>
+      <a routerLink="/payments" class="btn btn-ghost">cancel</a>
     </div>
-
-    <div class="field">
-      <label class="label" for="paymentMethodId">Moyen de paiement<span class="req">*</span></label>
-      <select id="paymentMethodId" class="select" formControlName="paymentMethodId">
-        <option value="" disabled>— sélectionner —</option>
-        @for (method of paymentMethods(); track method.id) {
-        <option [value]="method.id">
-          {{ method.provider }} · {{ method.brand || method.type }}
-          {{ method.last4 ? '••' + method.last4 : '' }}
-        </option>
-        }
-      </select>
-    </div>
-
-    @if (selectedTravel(); as t) {
-    <div class="field">
-      <label class="label" for="montant">Montant</label>
-      <div id="montant" class="stat-value" style="font-size: 16px">{{ t.price }} {{ t.currency }}</div>
-    </div>
-    }
-  </div>
-
-  <div class="form-actions">
-    <button type="submit" class="btn btn-primary" [disabled]="saving()">
-      {{ saving() ? 'saving...' : '$ save' }}
-    </button>
-    <a routerLink="/payments" class="btn btn-ghost">cancel</a>
-  </div>
-</form>
+  </form>
 }
