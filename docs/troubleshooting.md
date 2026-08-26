@@ -306,3 +306,36 @@ Solution portable (dans le `Jenkinsfile` versionné, pas une bidouille locale). 
 **Solution** : enregistrer une route factice pour la cible de la navigation (`provideRouter([{ path: 'travels', component: DummyComponent }])`, `DummyComponent` étant un composant vide déclaré dans le fichier de test) — pattern déjà utilisé par `login.spec.ts` pour le même besoin.
 
 **À retenir** : dès qu'un test de composant sur ce projet laisse un flux aller jusqu'à un `router.navigate(...)` réel (pas juste vérifié par un spy), `provideRouter([])` ne suffit pas — il faut enregistrer au moins une route factice pour la cible, sous peine d'un rejet de promesse non intercepté qui peut faire échouer des fichiers de test totalement sans rapport exécutés dans le même worker.
+
+## 28. Certificat TLS interne correct sur disque, mais 500 sur toute requete inter-services (login, inscription) — bind mount Docker Desktop/WSL2 perime
+
+**Probleme** : `POST /api/auth/login` et `/api/auth/register` renvoyaient systematiquement 500. Le log `api-gateway` montrait la vraie cause : `CertificateException: No subject alternative DNS name matching lets-travel-app-auth-service-1 found.` Pourtant `openssl x509 -in infra/internal-tls/certs/internal.crt -noout -text` confirmait que le certificat sur disque contenait bien ce SAN (ainsi que tous les autres noms de conteneurs attendus) — la config Ansible (`ansible/playbooks/deploy.yml`) est correcte et n'a pas bouge.
+
+**Cause** : les conteneurs `auth-service`/`api-gateway` etaient deja demarres (ou leur bind mount deja etabli) avant que le fichier `internal.crt` ne soit (re)genere sur le disque hote. Docker Desktop sur WSL2 peut servir une vue perimee d'un bind mount a un conteneur deja lance — meme bug de fond que celui deja documente pour `vault-init` dans `deploy.yml` (commentaire : "reusing a stopped one can hit a stale Docker Desktop/WSL2 bind-mount bug"), ici sur un montage different (`./infra/internal-tls/certs`).
+
+**Solution immediate** : recreer entierement les conteneurs concernes pour qu'ils relisent le contenu actuel du bind mount — `docker compose down` puis `docker compose up -d` (un simple `restart` ne suffit pas forcement, il faut la recreation du conteneur).
+
+**Solution definitive (pipeline)** : `docker compose up` seul ne recree jamais un conteneur juste parce qu'un fichier monte en bind mount a change sous ses pieds (seule la config declaree - env vars, image - est diffee). `deploy.yml` avait deja ce garde-fou pour `vault-init`/`postgres`/`neo4j`/`nginx` (task "Force-remove ... before recreate") mais pas pour les 5 microservices qui montent `infra/internal-tls/certs` : etendu a `auth-service`, `user-service`, `travel-service`, `payment-service`, `api-gateway` dans la meme task. En passant systematiquement par le pipeline Ansible (`ansible-playbook ... site.yml`, meme commande que Jenkins) plutot que par un `docker compose up` direct, ce bind-mount perime ne peut plus se reproduire sans intervention manuelle.
+
+**À retenir** : sur ce projet et cet environnement (WSL2), tout bug de type "le fichier sur disque est correct mais le conteneur ne le voit pas" doit faire suspecter en premier ce bind-mount perime avant de re-suspecter la config elle-meme. Et surtout : ce garde-fou doit couvrir TOUS les services qui montent un fichier regenerable, pas seulement ceux touches par le premier incident (vault-init) - la meme classe de bug peut resurgir sur n'importe quel autre bind mount tant que le service concerne n'est pas dans la liste de force-remove.
+
+## 29. Redirection HTTP→HTTPS nginx cassee quand les ports host ne sont pas 80/443
+
+**Probleme** : suivre un lien `http://localhost:8080/...` redirigeait vers une URL `https://localhost/...` qui ne repondait pas, obligeant a corriger l'URL a la main (port 8443 manquant).
+
+**Cause** : `infra/nginx/nginx.conf` redirigeait avec `return 301 https://$host$request_uri;` — la variable nginx `$host` ne contient jamais le port. Comme le projet mappe volontairement `8080`/`8443` (pas `80`/`443`, pour tourner en parallele d'une autre instance), la redirection retombait sur le 443 implicite, non mappe cote host.
+
+**Solution** : port HTTPS explicite dans la redirection (`https://$host:8443$request_uri`), avec un commentaire pointant vers `NGINX_HTTPS_HOST_PORT` si ce port est change dans `.env`.
+
+**À retenir** : `$host` seul ne suffit jamais pour une redirection HTTP→HTTPS des que les ports exposes ne sont pas les ports standards 80/443.
+
+## 30. Formulaires Login/Register : aucun retour visuel si le formulaire est invalide a la soumission
+
+**Probleme** : soumettre le formulaire d'inscription (ou de login) avec un champ obligatoire manquant ne produisait absolument aucun retour utilisateur — ni message d'erreur, ni style, ni log console. Difficile a distinguer d'un vrai bug backend au premier abord.
+
+**Cause** : `submit()` faisait `if (this.form.invalid) { this.form.markAllAsTouched(); return; }` sans jamais renseigner le signal `errorMessage` deja utilise et affiche par ces deux templates pour les erreurs HTTP — `markAllAsTouched()` seul ne suffit pas en l'absence de styles/messages par champ bases sur l'etat `touched+invalid`.
+
+**Solution** : `errorMessage.set(...)` ajoute dans la branche invalide de `Login.submit()` et `Register.submit()`, reutilisant le paragraphe d'erreur deja present dans les deux templates.
+
+**À retenir** : un signal d'erreur affiche seulement sur les erreurs HTTP (`error: (error) => ...`) laisse un trou silencieux sur le chemin de validation locale (`form.invalid`) si personne n'y pense explicitement — verifier les deux chemins a chaque nouveau formulaire.
+

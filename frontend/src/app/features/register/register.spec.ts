@@ -35,11 +35,12 @@ describe('Register', () => {
     expect(component['form'].invalid).toBe(true);
   });
 
-  it('does not call the registration endpoints when submitting an empty form', () => {
+  it('does not call the registration endpoints when submitting an empty form, and shows an error', () => {
     component['submit']();
 
     httpMock.expectNone('/api/users/register');
     expect(component['form'].touched).toBe(true);
+    expect(component['errorMessage']()).not.toBeNull();
   });
 
   it('is valid without an address, and requires the address fields once "adresse renseignée" is toggled on', () => {

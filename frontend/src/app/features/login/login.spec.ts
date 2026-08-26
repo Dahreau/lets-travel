@@ -35,7 +35,7 @@ describe('Login', () => {
     expect(component['form'].invalid).toBe(true);
   });
 
-  it('does not call the auth service when submitting an empty form', () => {
+  it('does not call the auth service when submitting an empty form, and shows an error', () => {
     const authService = TestBed.inject(AuthService);
     const loginSpy = vi.spyOn(authService, 'login');
 
@@ -43,6 +43,7 @@ describe('Login', () => {
 
     expect(loginSpy).not.toHaveBeenCalled();
     expect(component['form'].touched).toBe(true);
+    expect(component['errorMessage']()).not.toBeNull();
   });
 
   it('logs in and fetches the current user when the form is valid', () => {

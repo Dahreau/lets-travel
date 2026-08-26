@@ -56,6 +56,7 @@ export class Register implements OnInit {
   protected submit(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
+      this.errorMessage.set('Certains champs obligatoires sont manquants ou invalides.');
       return;
     }
 
