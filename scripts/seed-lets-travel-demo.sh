@@ -1,22 +1,8 @@
 #!/bin/sh
 set -e
 
-# Cree des voyages de demo varies (pays/prix/duree differents) via les vraies APIs
-# lets-travel, pour avoir de quoi demontrer la recherche Elasticsearch et surtout
-# les recommandations Neo4j (qui ont besoin de plusieurs voyages avec des
-# country/priceRange/durationRange differents pour donner des resultats varies -
-# voir RecommendationSyncService.priceRange()/durationRange()).
-#
-# Contrairement a l'ancien scripts/seed-demo-data.sh (perime, ecrit pour l'ancien
-# projet travel-plan - champs ownerId, pas de destinations/subscriptions/feedback),
-# celui-ci cible le vrai schema lets-travel (managerId force par le backend, champs
-# TravelRequest/DestinationRequest reels).
-#
-# Reutilise un manager EXISTANT plutot que d'en creer un nouveau a chaque fois (pas
-# besoin de retenir un nouveau mot de passe a chaque lancement) - par defaut le
-# manager cree par les tests e2e (voir e2e/.fixtures/run.json apres un `npx playwright test`).
-# A relancer autant de fois que voulu : chaque titre est suffixe par un timestamp,
-# aucun risque de collision/doublon.
+# Cree des voyages de demo varies via les vraies APIs pour peupler recherche Elasticsearch et
+# recommandations Neo4j ; cible le vrai schema lets-travel (contrairement a l'ancien seed-demo-data.sh, perime).
 
 BASE_URL="${BASE_URL:-https://localhost:8443}"
 MANAGER_USERNAME="${MANAGER_USERNAME:-}"

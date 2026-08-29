@@ -11,11 +11,8 @@ import { PageHeader } from '../../../shared/ui/page-header';
 import { Spinner } from '../../../shared/ui/spinner';
 import { UsersService } from '../../users/users';
 
-// fix/audit-gaps (troubleshooting.md #41) : page self-service RGPD, ouverte a tout role
-// authentifie (voir app.routes.ts - pas de guard supplementaire au-dela du authGuard deja sur
-// le Shell parent). Couvre le droit d'acces/portabilite (export JSON de GET /api/users/me) et
-// le droit a l'effacement (DELETE /api/users/me) - meme pattern ConfirmDialog que UserList
-// pour la suppression, memes signaux loading/deleting.
+// voir troubleshooting.md #41 - page self-service RGPD (export + suppression), ouverte
+// a tout role authentifie.
 @Component({
   selector: 'app-my-data',
   imports: [RouterLink, SlicePipe, ConfirmDialog, PageHeader, Spinner],
@@ -42,9 +39,7 @@ export class MyData implements OnInit {
       });
   }
 
-  // Droit d'acces/portabilite (enonce RGPD) : telecharge exactement ce que renvoie
-  // GET /api/users/me, sans reformatage - c'est deja la representation complete du profil
-  // (adresse, consentement, dates), pas la peine d'inventer un autre format d'export.
+  // Droit d'acces/portabilite (RGPD) : export brut de GET /api/users/me, sans reformatage.
   protected exportData(): void {
     const profile = this.profile();
     if (!profile) {
@@ -66,9 +61,7 @@ export class MyData implements OnInit {
       .pipe(finalize(() => this.deleting.set(false)))
       .subscribe({
         next: () => {
-          // Compte de connexion deja supprime cote auth-service a ce stade (voir
-          // UserService.deleteMe cote backend) - le token local n'a plus aucune valeur,
-          // logout() + redirection /login evitent un appel API voue a un 401.
+          // Compte deja supprime cote auth-service ici - logout() evite un appel voue a un 401.
           this.authService.logout();
           this.router.navigateByUrl('/login');
         },

@@ -12,18 +12,15 @@ public interface ReportRepository extends JpaRepository<Report, UUID> {
 
     List<Report> findAllByOrderByCreatedAtDesc();
 
-    // feat/manager-frontend : nombre de signalements contre CE manager, affiche sur sa page
-    // publique - uniquement le compte, jamais le detail (l'admin seul lit le contenu des
-    // signalements, voir SecurityConfig et ReportService.listAll).
+    // feat/manager-frontend : nombre de signalements contre ce manager (page publique) - uniquement
+    // le compte, jamais le detail (reserve a l'Admin, voir SecurityConfig).
     long countByReportedTypeAndReportedId(ReportedType reportedType, UUID reportedId);
 
-    // feat/traveler-frontend : nombre de signalements DEPOSES par le Traveler connecte
-    // (TravelerStatsService.myStats), a ne pas confondre avec countByReportedTypeAndReportedId
-    // ci-dessus qui compte les signalements RECUS par un manager.
+    // feat/traveler-frontend : signalements DEPOSES par le Traveler connecte (ne pas confondre avec
+    // countByReportedTypeAndReportedId qui compte les signalements RECUS par un manager).
     long countByReporterId(UUID reporterId);
 
-    // fix/audit-gaps (troubleshooting.md #40) : un Traveler ne pouvait jamais relire le contenu
-    // de ses propres signalements (GET /api/reports est Admin-only) - utilise par
-    // TravelerStatsService.myReports, portee au caller uniquement (jamais un reporterId arbitraire).
+    // fix/audit-gaps (troubleshooting.md #40) : permet au Traveler de relire ses propres signalements,
+    // scope au caller uniquement.
     List<Report> findByReporterId(UUID reporterId);
 }

@@ -16,10 +16,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-// feat/traveler-frontend : tableau de bord personnel du Traveler connecte (docs/lets-travel_project.md).
-// Aucune restriction de role (contrairement a ManagerStatsService.myStats) : un TRAVEL_MANAGER ou
-// un ADMIN a un profil traveler herite acces aussi a ce tableau de bord, cf. le RoleHierarchy et
-// l'exigence du sujet ("Travel Manager a acces a toutes les fonctionnalites Traveler").
+// feat/traveler-frontend : tableau de bord personnel du Traveler connecte. Pas de restriction de
+// role : TRAVEL_MANAGER/ADMIN heritent aussi de cet acces via RoleHierarchy.
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -49,11 +47,8 @@ public class TravelerStatsService {
                 .toList();
     }
 
-    // fix/audit-gaps (troubleshooting.md #40) : jusqu'ici un Traveler ne pouvait relire ni le
-    // contenu de son propre feedback ni celui de ses propres signalements (les GET dedies sont
-    // reserves ADMIN/TRAVEL_MANAGER resp. ADMIN) - seuls les COMPTES (feedbackCount/reportCount
-    // de myStats) lui etaient visibles. Meme garde-fou que mySubscriptions ci-dessus :
-    // requireTravelerId force le caller.userId(), jamais un ID arbitraire.
+    // fix/audit-gaps (troubleshooting.md #40) : permet au Traveler de relire le contenu de son
+    // feedback/signalements, pas seulement les comptes de myStats.
     public List<FeedbackResponse> myFeedbacks(AuthenticatedUser caller) {
         UUID travelerId = requireTravelerId(caller);
 

@@ -12,27 +12,13 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
-// RouteConfig proxie chaque service via HandlerFunctions.http(), qui recupere un bean
-// RestClient.Builder dans le contexte Spring (spring-cloud-gateway-server-webmvc). Sans ce
-// bean, gateway-server-webmvc construit son propre RestClient.Builder par defaut - qui
-// n'utilise PAS le bundle mTLS "internal-services" (les proprietes
-// spring.ssl.bundle.pem.internal-services.* d'application-docker.properties ne s'appliquent
-// qu'aux clients HTTP auto-configures par Spring Boot lui-meme, pas a celui-la) : meme pattern
-// que TravelServiceClientConfig de payment-service/user-service (troubleshooting.md #11).
-//
-// IMPORTANT : pas de @LoadBalanced ici, contrairement a TravelServiceClientConfig. Le filtre
-// lb(...) deja present dans RouteConfig resout LUI-MEME le service logique ("auth-service")
-// vers une instance concrete (ex. "lets-travel-app-auth-service-2") AVANT que http() n'appelle
-// ce RestClient - un bean @LoadBalanced ici tenterait de re-resoudre ce nom d'instance concret
-// comme s'il s'agissait encore d'un service logique, et echouerait avec "No instances
-// available for lets-travel-app-auth-service-2" (voir troubleshooting.md #39).
+// RestClient.Builder custom requis pour le bundle mTLS "internal-services" (voir troubleshooting.md #11).
+// Pas de @LoadBalanced ici : lb() resout deja l'instance concrete avant http() (voir troubleshooting.md #39).
 @Configuration
 public class GatewayHttpClientConfig {
 
-    // 5s etait trop court pour un gateway generique (route TOUTES les requetes, y compris les
-    // plus lourdes comme POST /api/travels avec destinations/activites imbriquees) - contrairement
-    // a TravelServiceClientConfig qui ne timeout que sur UN appel interne leger precis. Pas de
-    // timeout cote nginx (infra/nginx/*.conf) donc 30s reste tres en dessous de son defaut (60s).
+    // READ_TIMEOUT a 30s (pas 5s) : le gateway route TOUTES les requetes, y compris les plus lourdes
+    // (POST /api/travels imbrique), contrairement a un client cible comme TravelServiceClientConfig.
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(30);
 

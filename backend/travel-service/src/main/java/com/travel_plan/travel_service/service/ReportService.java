@@ -60,9 +60,8 @@ public class ReportService {
                 .toList();
     }
 
-    // MANAGER : reportedId doit etre le manager de CE travel (pas un manager quelconque).
-    // TRAVELER : reportedId doit etre un autre abonne (actif ou annule) du MEME travel, pas
-    // soi-meme - garantit que le signalement porte sur une interaction reelle.
+    // MANAGER : reportedId doit etre le manager de CE travel. TRAVELER : reportedId doit etre un
+    // autre abonne du MEME travel, pas soi-meme.
     private void requireConsistentTarget(Travel travel, ReportRequest request, UUID reporterId) {
         if (request.reportedType() == ReportedType.MANAGER) {
             if (!travel.getManagerId().equals(request.reportedId())) {

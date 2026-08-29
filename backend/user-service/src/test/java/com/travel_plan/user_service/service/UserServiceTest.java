@@ -145,9 +145,8 @@ class UserServiceTest {
         verifyNoInteractions(authServiceClient);
     }
 
-    // Un compte ADMIN n'a pas de fiche User liee (CreateAccountRequest.isUserIdConsistentWithRole
-    // cote auth-service le rejetterait) - on ignore volontairement les identifiants fournis
-    // plutot que d'envoyer un appel voue a l'echec.
+    // Un compte ADMIN n'a pas de fiche User liee (rejete par
+    // CreateAccountRequest.isUserIdConsistentWithRole) - on ignore les identifiants fournis.
     @Test
     void createNeverProvisionsAccountForAdminRoleEvenWithCredentials() {
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -245,9 +244,8 @@ class UserServiceTest {
         assertThat(user.getAddress()).isNull();
     }
 
-    // fix/audit-gaps (troubleshooting.md #41) : le compte de connexion (auth-service) doit
-    // etre supprime AVANT le profil local, pour ne jamais se retrouver avec un profil supprime
-    // et un compte "fantome" toujours capable de se reconnecter si l'appel a auth-service echoue.
+    // voir troubleshooting.md #41 - le compte de connexion (auth-service) doit etre supprime AVANT
+    // le profil local (sinon compte "fantome" si l'appel echoue).
     @Test
     void deleteRemovesExistingUserAndItsAuthAccount() {
         UUID id = UUID.randomUUID();
@@ -268,9 +266,8 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.delete(id, "Bearer admin-token")).isInstanceOf(UserNotFoundException.class);
     }
 
-    // fix/audit-gaps (troubleshooting.md #41) : si auth-service est injoignable (ou refuse), le
-    // profil local ne doit PAS etre supprime - sinon on recree exactement le bug du compte
-    // fantome qu'on corrige (voir AuthServiceClient.deleteAccountByUserId).
+    // voir troubleshooting.md #41 - si auth-service echoue, le profil local ne doit PAS etre
+    // supprime (sinon compte "fantome").
     @Test
     void deleteDoesNotRemoveLocalUserWhenAuthServiceCallFails() {
         UUID id = UUID.randomUUID();

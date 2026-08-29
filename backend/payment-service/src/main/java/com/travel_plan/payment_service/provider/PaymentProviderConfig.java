@@ -11,12 +11,8 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class PaymentProviderConfig {
 
-    // fix/audit-gaps (troubleshooting.md #40) : RestClient.create() n'a AUCUN timeout par
-    // defaut (connect ni read) - un Stripe/PayPal qui traine ou ne repond jamais bloquait la
-    // requete indefiniment, sans meme le filet de securite d'un timeout amont (contrairement
-    // aux appels internes, tous timeoutes - voir TravelServiceClientConfig, GatewayHttpClientConfig).
-    // 15s de lecture car un fournisseur de paiement externe est naturellement plus lent qu'un
-    // appel interne docker (2-3s), mais reste borne.
+    // voir troubleshooting.md #40 - RestClient.create() n'a aucun timeout par defaut, un fournisseur
+    // qui traine bloquait la requete indefiniment ; 15s de lecture car plus lent qu'un appel interne.
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(15);
 

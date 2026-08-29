@@ -8,9 +8,8 @@ import { PageHeader } from '../../../shared/ui/page-header';
 import { Spinner } from '../../../shared/ui/spinner';
 import { UsersService } from '../../users/users';
 
-// fix/audit-gaps : "view profiles" des abonnes depuis la liste d'un voyage (enonce, role
-// Travel Manager) - lecture seule, reutilise GET /api/users/{id} deja restreint par #38
-// (un manager ne voit que le profil d'un de SES abonnes).
+// "view profiles" des abonnes (role Travel Manager) - reutilise GET /api/users/{id},
+// deja restreint par #38 (un manager ne voit que ses propres abonnes).
 @Component({
   selector: 'app-traveler-profile',
   imports: [RouterLink, PageHeader, Spinner],

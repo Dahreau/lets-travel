@@ -50,9 +50,7 @@ describe('Register', () => {
       email: 'ada@example.com',
       username: 'ada',
       password: 'secretpw',
-      // fix/audit-gaps (troubleshooting.md #41) : requiredTrue depuis l'ajout du consentement
-      // RGPD - sans ca le formulaire resterait invalide meme sans adresse, independamment de
-      // ce que ce test veut verifier.
+      // voir troubleshooting.md #41 - requiredTrue, sinon le form resterait invalide ici.
       acceptedPrivacyPolicy: true,
     });
     expect(component['form'].valid).toBe(true);

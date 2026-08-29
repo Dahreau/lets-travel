@@ -43,9 +43,7 @@ export interface UserRegistrationRequest {
   email: string;
   phone: string | null;
   address: Address | null;
-  // fix/audit-gaps (troubleshooting.md #41) : consentement RGPD obligatoire, @AssertTrue cote
-  // backend (UserRegistrationRequest.acceptedPrivacyPolicy) - rejette (400) toute inscription
-  // ou la case n'est pas cochee.
+  // voir troubleshooting.md #41 - consentement RGPD obligatoire, @AssertTrue cote backend.
   acceptedPrivacyPolicy: boolean;
 }
 

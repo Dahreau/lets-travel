@@ -7,9 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TravelRepository extends JpaRepository<Travel, UUID> {
 
-    // feat/manager-frontend : dashboard prive du manager (revenu estime, nombre de voyages) -
-    // la liste complete (pas juste un count) est necessaire pour recalculer le revenu voyage par
-    // voyage dans ManagerStatsService.
+    // feat/manager-frontend : dashboard prive du manager - liste complete necessaire pour recalculer
+    // le revenu voyage par voyage (ManagerStatsService).
     List<Travel> findByManagerId(UUID managerId);
 
     // feat/manager-frontend : page publique manager - seul le compte est necessaire ici.

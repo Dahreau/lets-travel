@@ -1,15 +1,6 @@
 ---
-# Enchaîne les playbooks dans le bon ordre. Vault tourne en mode serveur réel
-# (storage persistant, TLS) : il doit être initialisé/déscellé une seule fois
-# avant que le reste de la stack ne puisse s'en servir — c'est le rôle de
-# vault-unseal.yml, qui démarre Vault seul et écrit le vrai VAULT_ROOT_TOKEN
-# dans .env. deploy.yml tourne ensuite deux fois : une première fois pour
-# démarrer le reste (et laisser vault-init semer les rôles AppRole), puis
-# fetch-vault-secrets.yml récupère les identifiants et les écrit dans .env,
-# puis deploy.yml relance "docker compose up" — Docker Compose ne recrée
-# alors que les conteneurs microservices dont les variables d'environnement
-# ont changé (auth-service, user-service, travel-service, payment-service,
-# api-gateway), qui démarrent cette fois avec de vrais identifiants Vault.
+# Enchaîne les playbooks dans l'ordre : vault-unseal.yml démarre/descelle Vault, puis deploy.yml
+# tourne deux fois (avant/après fetch-vault-secrets.yml) pour relancer les services avec les vrais identifiants Vault.
 - import_playbook: install-docker.yml
 - import_playbook: vault-unseal.yml
 - import_playbook: deploy.yml

@@ -15,9 +15,8 @@ public interface FeedbackRepository extends JpaRepository<Feedback, UUID> {
 
     List<Feedback> findByTravel_Id(UUID travelId);
 
-    // fix/audit-gaps (troubleshooting.md #40) : un Traveler ne pouvait jamais relire le contenu
-    // de son propre feedback (GET .../feedbacks est reserve ADMIN/TRAVEL_MANAGER) - utilise par
-    // TravelerStatsService.myFeedbacks, portee au caller uniquement (jamais un travelerId arbitraire).
+    // fix/audit-gaps (troubleshooting.md #40) : permet au Traveler de relire son propre feedback,
+    // scope au caller uniquement.
     List<Feedback> findByTravelerId(UUID travelerId);
 
     // feat/manager-frontend : tous les avis recus sur l'ensemble des voyages d'un manager,

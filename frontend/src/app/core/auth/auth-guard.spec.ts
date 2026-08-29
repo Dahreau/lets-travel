@@ -44,9 +44,7 @@ describe('authGuard', () => {
     expect(result).toBe(true);
   });
 
-  // currentUser() reste à null après un rechargement de page tant que /me n'a pas été rappelé
-  // (voir commentaire dans auth-guard.ts) : le guard doit le repeupler lui-même avant de laisser
-  // passer la navigation, sinon le filtrage par rôle (nav manager, managerGuard) casserait.
+  // currentUser() reste a null apres reload tant que /me n'a pas ete rappele (voir auth-guard.ts).
   it('calls /me and allows navigation when authenticated but currentUser is not yet loaded', () => {
     spyOn(authService, 'isAuthenticated').and.returnValue(true);
     let resolved: unknown;

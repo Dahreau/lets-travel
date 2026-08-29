@@ -7,10 +7,8 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
-// fix/audit-gaps : verifie aupres de travel-service qu'un traveler est bien abonne a l'un des
-// voyages du Travel Manager appelant, avant de laisser UserService renvoyer son profil complet -
-// corrige l'IDOR sur GET /api/users/{id} (troubleshooting.md #38). JWT de l'appelant propage tel
-// quel, meme pattern que payment-service -> travel-service (TravelServiceClient).
+// voir troubleshooting.md #38 - verifie que le traveler est abonne a un voyage du manager
+// appelant avant de renvoyer son profil complet (corrige un IDOR).
 @Component
 public class TravelServiceClient {
 
@@ -20,9 +18,8 @@ public class TravelServiceClient {
         this.travelServiceRestClient = travelServiceRestClient;
     }
 
-    // Fail-closed : pas de header (ne devrait jamais arriver, SecurityConfig exige un appelant
-    // authentifie), travel-service injoignable, timeout ou erreur cote serveur -> traite comme
-    // "pas abonne" plutot que de laisser fuiter le profil ou de faire planter la requete en 500.
+    // Fail-closed : header absent, service injoignable ou erreur -> traite comme "pas abonne"
+    // (evite de fuiter le profil ou de faire planter la requete).
     public boolean isSubscriberOfCallingManager(UUID travelerId, String authorizationHeader) {
         if (authorizationHeader == null || authorizationHeader.isBlank()) {
             return false;

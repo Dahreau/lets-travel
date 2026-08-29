@@ -7,9 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
-// Verifie directement le comportement de la RoleHierarchy (sans contexte Spring complet) :
-// c'est le mecanisme dont depend "un Admin peut tout ce que peut un Travel Manager, qui
-// peut tout ce que peut un Traveler", explicitement demande par l'enonce Let's Travel.
+// Verifie la RoleHierarchy (sans contexte Spring complet) : Admin > Travel Manager > Traveler,
+// comme demande par l'enonce Let's Travel.
 class SecurityConfigTest {
 
     private final SecurityConfig securityConfig = new SecurityConfig(null);

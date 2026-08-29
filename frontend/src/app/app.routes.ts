@@ -69,9 +69,7 @@ export const routes: Routes = [
           import('./features/travels/travel-detail/travel-detail').then((m) => m.TravelDetail),
       },
       {
-        // Gestion des abonnés/feedback d'un voyage - réservé au Travel Manager propriétaire
-        // (ou Admin), cf. managerGuard. Doit précéder aucune autre route travels/* : segment
-        // "manager" distinct, pas d'ambiguïté de matching avec /travels/:id/edit ci-dessus.
+        // Reserve Travel Manager/Admin (cf. managerGuard). Doit precéder /travels/:id/edit ci-dessus.
         path: 'manager/travels/:id',
         canActivate: [managerGuard],
         loadComponent: () =>
@@ -128,9 +126,7 @@ export const routes: Routes = [
           ),
       },
       {
-        // fix/audit-gaps (troubleshooting.md #41) : self-service RGPD (export + suppression de
-        // compte), ouvert a tout role authentifie - pas de guard dedie au-dela de authGuard
-        // (deja applique au Shell parent), meme raisonnement que /manager/:managerId ci-dessus.
+        // voir troubleshooting.md #41 - self-service RGPD, ouvert a tout role authentifie.
         path: 'mon-compte',
         loadComponent: () => import('./features/account/my-data/my-data').then((m) => m.MyData),
       },

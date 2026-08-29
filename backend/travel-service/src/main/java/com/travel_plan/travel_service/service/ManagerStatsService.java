@@ -27,10 +27,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-// feat/manager-frontend : stats du dashboard prive du manager + stats publiques consultees par
-// un Traveler (docs/lets-travel_project.md). Volontairement sans nouvel appel inter-service :
-// tout est calcule a partir de Travel/Subscription/Feedback/Report, deja dans travel-service -
-// voir docs/nouveautes-vs-travel-plan.md pour le detail des simplifications assumees.
+// feat/manager-frontend : stats prive manager + stats publiques Traveler. Calcule uniquement a
+// partir de Travel/Subscription/Feedback/Report, sans appel inter-service.
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -43,11 +41,8 @@ public class ManagerStatsService {
     private final FeedbackRepository feedbackRepository;
     private final ReportRepository reportRepository;
 
-    // Un ADMIN n'a pas de "ses" voyages (contrairement a la liste d'abonnes/feedbacks d'UN
-    // travel donne, ou l'admin a un droit de regard global) : ce dashboard est personnel au
-    // manager connecte, donc on verifie explicitement le role plutot que de s'appuyer sur
-    // hasRole/RoleHierarchy (qui laisserait un ADMIN passer, cf. TravelService.resolveManagerId
-    // pour le meme raisonnement).
+    // Un ADMIN n'a pas de "ses" voyages : ce dashboard est personnel au manager connecte, donc on
+    // verifie explicitement le role plutot que hasRole/RoleHierarchy (qui laisserait passer un ADMIN).
     public ManagerStatsResponse myStats(AuthenticatedUser caller) {
         if (!TRAVEL_MANAGER_ROLE.equals(caller.role())) {
             throw new ForbiddenException("Seul un Travel Manager a un tableau de bord personnel");
@@ -105,9 +100,8 @@ public class ManagerStatsService {
                 .collect(Collectors.toMap(TravelFeedbackAggregate::getTravelId, aggregate -> aggregate));
     }
 
-    // Aucune validation que managerId correspond a un vrai manager : travel-service n'a pas de
-    // reference locale vers les comptes (meme limite que Travel.managerId partout ailleurs) - un
-    // id inconnu renvoie simplement des stats a zero plutot qu'un 404.
+    // Aucune validation que managerId correspond a un vrai manager (pas de reference locale vers
+    // les comptes) - un id inconnu renvoie des stats a zero plutot qu'un 404.
     public ManagerPublicStatsResponse publicStats(UUID managerId) {
         long travelCount = travelRepository.countByManagerId(managerId);
 

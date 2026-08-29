@@ -43,9 +43,8 @@ export interface Transportation {
 export interface Travel {
   id: string;
   title: string;
-  // Anciennement "ownerId" cote frontend (stale depuis feat/travel-manager-role, qui a renomme
-  // le champ backend) : un voyage est une offre creee et geree par un Travel Manager, pas la
-  // propriete d'un traveler (qui s'y abonne via Subscription - voir docs/nouveautes-vs-travel-plan.md).
+  // Renomme depuis "ownerId" (feat/travel-manager-role) : voyage = offre geree par un
+  // Travel Manager, pas la propriete d'un traveler (qui s'y abonne via Subscription).
   managerId: string;
   startDate: string;
   endDate: string;

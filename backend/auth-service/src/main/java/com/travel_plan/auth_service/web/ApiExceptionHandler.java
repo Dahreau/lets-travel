@@ -32,11 +32,8 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(exception.getMessage()));
     }
 
-    // fix/audit-gaps : filet manquant jusqu'ici sur ce service - une course entre 2 inserts
-    // concurrents du meme username (AdminSeeder sur 2 replicas, ou 2 register() paralleles)
-    // remontait en 500 brut au lieu d'un 409 clair.
-    // fix/audit-gaps (troubleshooting.md #41) : DELETE /api/auth/accounts/by-user/{userId} -
-    // appele par un userId deja supprime (ou jamais cree, cas ADMIN sans fiche User).
+    // voir troubleshooting.md #41 - levee si le userId cible est deja supprime ou n'a jamais
+    // eu de compte (cas ADMIN sans fiche User).
     @ExceptionHandler(AccountNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleAccountNotFound(AccountNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(exception.getMessage()));

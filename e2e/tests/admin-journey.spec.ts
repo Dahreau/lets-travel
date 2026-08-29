@@ -4,9 +4,8 @@ import { readFixture } from './support/fixture';
 test.describe.serial('Parcours Admin', () => {
   let page: Page;
 
-  // Injecte le token deja obtenu par global-setup.ts au lieu de se reconnecter via l'UI - le
-  // login est rate-limite cote nginx, et il est deja teste par auth.spec.ts, pas besoin de le
-  // repasser ici juste pour obtenir une session (voir #53 dans troubleshooting.md).
+  // Injecte le token de global-setup.ts au lieu de se reconnecter via l'UI (login rate-limite,
+  // deja teste par auth.spec.ts) - voir troubleshooting.md #53.
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
     const fixture = readFixture();
@@ -20,9 +19,8 @@ test.describe.serial('Parcours Admin', () => {
     await page.close();
   });
 
-  // dashboard.ts charge users/travels/payments/rankings ET GET /api/reports dans UN SEUL
-  // forkJoin : si /api/reports echoue (voir message envoye a Daro), tout le dashboard admin
-  // reste vide - ce test verifie donc directement ce risque connu, pas une simple supposition.
+  // dashboard.ts charge tout (users/travels/payments/rankings + /api/reports) dans UN SEUL forkJoin :
+  // si /api/reports echoue, tout le dashboard reste vide - ce test verifie ce risque connu.
   test('le dashboard admin affiche les compteurs globaux et les classements', async () => {
     await expect(page.locator('.stat-card', { hasText: 'users' }).locator('.stat-value')).not.toHaveText('0', {
       timeout: 15000,

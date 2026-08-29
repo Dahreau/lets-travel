@@ -17,14 +17,12 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
 
     List<Subscription> findByTravel_Id(UUID travelId);
 
-    // Preuve de participation (feedback/report, feat/traveler-experience) : n'importe quel
-    // statut compte, y compris CANCELLED - avoir ete inscrit a un moment donne suffit,
+    // Preuve de participation (feedback/report) : n'importe quel statut compte, y compris CANCELLED -
     // contrairement au cutoff de desabonnement qui ne regarde que les abonnements ACTIVE.
     boolean existsByTravel_IdAndTravelerId(UUID travelId, UUID travelerId);
 
-    // feat/manager-frontend : nombre de voyageurs DISTINCTS sur l'ensemble des voyages d'un
-    // manager - un derived query name ne sait pas exprimer "count distinct sur une propriete",
-    // d'ou le @Query explicite (seul cas du repository qui en a besoin).
+    // feat/manager-frontend : nombre de voyageurs DISTINCTS d'un manager - @Query explicite car un
+    // derived query name ne sait pas exprimer "count distinct sur une propriete".
     @Query("SELECT COUNT(DISTINCT s.travelerId) FROM Subscription s "
             + "WHERE s.travel.managerId = :managerId AND s.status = :status")
     long countDistinctTravelersByManagerIdAndStatus(
@@ -41,10 +39,8 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
     // par mois de subscribedAt en memoire (pas de group-by-month portable en derived query).
     List<Subscription> findByStatus(SubscriptionStatus status);
 
-    // fix/audit-gaps : verifie qu'un traveler a bien un abonnement (n'importe quel statut, meme
-    // raison que existsByTravel_IdAndTravelerId ci-dessus) sur un des voyages d'un manager donne -
-    // utilise par ManagerStatsService.isMySubscriber pour restreindre GET /api/users/{id} cote
-    // user-service aux vrais abonnes du manager appelant (troubleshooting.md #38, IDOR).
+    // fix/audit-gaps : verifie qu'un traveler est abonne a un voyage d'un manager donne, utilise pour
+    // restreindre GET /api/users/{id} aux vrais abonnes (troubleshooting.md #38, IDOR).
     boolean existsByTravel_ManagerIdAndTravelerId(UUID managerId, UUID travelerId);
 
     // Evite le N+1 d'AdminStatsService/ManagerStatsService (une requete par voyage) : un seul

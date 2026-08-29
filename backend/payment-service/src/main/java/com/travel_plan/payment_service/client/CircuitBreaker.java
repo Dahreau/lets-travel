@@ -6,9 +6,8 @@ import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-// Coupe les appels vers un service en panne prolongee au lieu de le marteler de requetes
-// vouees a echouer : s'ouvre apres failureThreshold echecs consecutifs, retente un seul
-// appel (HALF_OPEN) une fois openDuration ecoulee.
+// Coupe les appels vers un service en panne prolongee : s'ouvre apres failureThreshold echecs
+// consecutifs, retente un seul appel (HALF_OPEN) une fois openDuration ecoulee.
 public class CircuitBreaker {
 
     public enum State {

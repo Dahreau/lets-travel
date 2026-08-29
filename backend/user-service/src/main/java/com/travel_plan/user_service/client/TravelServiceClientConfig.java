@@ -13,9 +13,8 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
-// fix/audit-gaps : premier appel inter-service de user-service (troubleshooting.md #38) - meme
-// pattern que payment-service -> travel-service (voir son TravelServiceClientConfig), y compris
-// le load balancing entre les 2 replicas et le SSLContext du bundle mTLS "internal-services".
+// voir troubleshooting.md #38 - meme pattern mTLS/load-balancing que
+// payment-service -> travel-service.
 @Configuration
 public class TravelServiceClientConfig {
 

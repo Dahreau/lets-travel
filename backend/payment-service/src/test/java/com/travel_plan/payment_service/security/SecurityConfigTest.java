@@ -8,8 +8,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 // Verifie directement le comportement de la RoleHierarchy (sans contexte Spring complet) :
-// meme mecanisme que travel-service (voir son SecurityConfigTest), copie ici pour rester
-// coherent alors que payment-service a desormais lui aussi une RoleHierarchy a 3 niveaux.
+// meme mecanisme que travel-service (voir son SecurityConfigTest).
 class SecurityConfigTest {
 
     private final SecurityConfig securityConfig = new SecurityConfig(null);

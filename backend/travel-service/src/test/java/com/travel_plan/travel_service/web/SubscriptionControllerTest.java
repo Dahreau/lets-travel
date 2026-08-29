@@ -170,9 +170,8 @@ class SubscriptionControllerTest {
                 .andExpect(status().isForbidden());
     }
 
-    // AuthenticatedUser est un record : chaque appel a travelerAuth()/managerAuth() reconstruit
-    // une instance egale (equals()) a celle capturee par le mock, donc Mockito matche correctement
-    // meme sans reutiliser exactement le meme objet entre le stubbing et l'appel MockMvc.
+    // AuthenticatedUser est un record : chaque appel a travelerAuth()/managerAuth() reconstruit une
+    // instance egale (equals()), donc Mockito matche sans reutiliser le meme objet.
     private AuthenticatedManager travelerAuth() {
         AuthenticatedUser user = new AuthenticatedUser("traveler1", "TRAVELER", travelerId);
         Authentication token =

@@ -80,9 +80,8 @@ public class ApiExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, message);
     }
 
-    // Fournisseur de paiement (Stripe/PayPal) rejete/indisponible, OU appel a travel-service
-    // (voir client/TravelServiceClient) rejete/indisponible pour une raison non geree ci-dessus
-    // (ex: 5xx, timeout) -> 502 explicite plutot qu'un 500/403.
+    // Fournisseur de paiement OU appel a travel-service rejete/indisponible pour une raison non geree
+    // ci-dessus (5xx, timeout) -> 502 explicite plutot qu'un 500/403.
     @ExceptionHandler(RestClientException.class)
     public ResponseEntity<Map<String, Object>> handleUpstreamCallFailure(RestClientException ex) {
         log.warn("Upstream service call failed: {}", ex.getMessage());
@@ -91,11 +90,8 @@ public class ApiExceptionHandler {
                 "Un service externe (fournisseur de paiement ou travel-service) a rejete la requete ou etait injoignable");
     }
 
-    // @RequestHeader obligatoire absent (ex: Authorization manquant sur POST /api/payments) ->
-    // 400, pas 500 : sans ce handler explicite, MissingRequestHeaderException matchait quand
-    // meme le handler generique Exception.class ci-dessous (le ExceptionHandlerExceptionResolver
-    // s'arrete au premier @ExceptionHandler qui correspond dans ce @RestControllerAdvice, il ne
-    // retombe pas sur le traitement 400 par defaut de Spring une fois qu'un handler local existe).
+    // @RequestHeader obligatoire absent -> 400, pas 500 - voir troubleshooting.md #62
+    // (sans ce handler, tombait dans le handler generique Exception.class ci-dessous).
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<Map<String, Object>> handleMissingRequestHeader(MissingRequestHeaderException ex) {
         log.warn("Missing required header '{}': {}", ex.getHeaderName(), ex.getMessage());

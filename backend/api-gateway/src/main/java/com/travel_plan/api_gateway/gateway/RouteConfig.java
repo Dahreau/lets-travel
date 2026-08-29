@@ -20,9 +20,8 @@ public class RouteConfig {
 
     @Bean
     public RouterFunction<ServerResponse> authServiceRoutes(JwtGatewayFilterFunction jwtFilter) {
-        // /register public au meme titre que /login (2e etape de l'inscription publique
-        // traveler, voir AuthController) - sinon jwtFilter la bloque en 401 avant meme
-        // d'atteindre le permitAll() de auth-service.
+        // /register public comme /login (2e etape de l'inscription traveler, voir AuthController) -
+        // sinon jwtFilter bloque en 401 avant le permitAll() de auth-service.
         RouterFunction<ServerResponse> publicRoutes = route("auth-service-public")
                 .POST("/api/auth/login", http())
                 .POST("/api/auth/register", http())

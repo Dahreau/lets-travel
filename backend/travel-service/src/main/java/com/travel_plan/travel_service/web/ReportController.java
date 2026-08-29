@@ -15,9 +15,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-// Pas de @RequestMapping de classe : POST est scope a un travel ("/api/travels/{id}/reports"),
-// GET est une vue de moderation globale ("/api/reports"), les deux chemins ne partagent pas de
-// prefixe commun exploitable proprement.
+// Pas de @RequestMapping de classe : POST est scope a un travel, GET est une vue de moderation
+// globale ("/api/reports") - pas de prefixe commun exploitable.
 @RestController
 @RequiredArgsConstructor
 public class ReportController {

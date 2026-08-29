@@ -7,9 +7,8 @@ import { FIXTURE_PATH } from './fixture';
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme_dev_only';
 
-// S'execute une seule fois avant toute la suite (voir playwright.config.ts) : prepare un
-// manager + un voyage reels via l'API, pour que les specs testent de vraies parcours UI sans
-// avoir a recreer ces prealables (ni a multiplier les appels /api/auth/login, rate-limite).
+// S'execute une fois avant toute la suite : prepare un manager + un voyage reels via l'API,
+// pour eviter de recreer ces prealables ou multiplier les appels /api/auth/login (rate-limite).
 export default async function globalSetup(): Promise<void> {
   const runId = Date.now();
   const api = await pwRequest.newContext({ baseURL: BASE_URL, ignoreHTTPSErrors: true });

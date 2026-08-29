@@ -40,9 +40,8 @@ public class PaymentController {
         return PaymentResponse.from(paymentService.findById(id, principal(authentication)));
     }
 
-    // Le header Authorization du traveler appelant est propage tel quel vers travel-service
-    // (voir client/TravelServiceClient) : c'est ce meme JWT que travel-service valide deja pour
-    // ses propres routes GET /api/travels/**.
+    // Le header Authorization de l'appelant est propage tel quel vers travel-service (voir
+    // client/TravelServiceClient) : meme JWT que travel-service valide deja pour ses routes GET.
     @PostMapping
     public ResponseEntity<PaymentResponse> create(
             @Valid @RequestBody PaymentRequest request,

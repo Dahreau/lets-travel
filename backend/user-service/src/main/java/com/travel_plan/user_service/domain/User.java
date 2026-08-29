@@ -58,10 +58,8 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    // fix/audit-gaps (troubleshooting.md #41) : trace le consentement RGPD donne a l'inscription
-    // publique (voir UserRegistrationRequest.acceptedPrivacyPolicy). Nullable : reste vide pour
-    // les profils crees par un ADMIN via POST /api/users, qui ne passent pas par ce consentement
-    // (voir V2__add_privacy_accepted_at.sql).
+    // voir troubleshooting.md #41 - trace le consentement RGPD a l'inscription publique ; nullable,
+    // vide pour les profils crees par un ADMIN (V2__add_privacy_accepted_at.sql).
     @Column(name = "privacy_accepted_at")
     private Instant privacyAcceptedAt;
 

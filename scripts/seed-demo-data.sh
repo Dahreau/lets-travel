@@ -1,15 +1,8 @@
 #!/bin/sh
 set -e
 
-# Peuple la stack avec des utilisateurs, voyages et moyens de paiement de demo,
-# via les vraies APIs (pas d'insertion SQL/Cypher directe) pour que la
-# synchronisation Neo4j (TravelGraphSyncService) et les validations metier
-# s'appliquent comme en conditions reelles. A lancer une fois la stack up
-# (./scripts/start-app.sh ou ansible-playbook site.yml termine).
-#
-# Necessite curl et jq. A relancer seulement sur une base vide : les emails
-# sont fixes, un deuxieme lancement echouera sur des doublons (attendu, ce
-# n'est pas un script idempotent comme les playbooks Ansible).
+# Peuple la stack via les vraies APIs (pas d'insertion SQL/Cypher directe) pour respecter sync Neo4j
+# et validations metier. Necessite curl+jq ; pas idempotent (emails fixes, a relancer sur base vide).
 
 cd "$(dirname "$0")/.."
 

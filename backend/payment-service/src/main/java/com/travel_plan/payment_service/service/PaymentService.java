@@ -65,8 +65,7 @@ public class PaymentService {
                 .orElseThrow(() -> new PaymentMethodNotFoundException(request.paymentMethodId()));
         requireMethodOwnershipOrAdmin(method, caller);
 
-        // Le montant vient de travel-service, jamais de la requete (voir
-        // docs/nouveautes-vs-travel-plan.md) : faire confiance a un "amount" fourni par le client
+        // Montant vient de travel-service, jamais de la requete : faire confiance a un "amount" client
         // permettait de payer n'importe quel prix pour n'importe quel voyage.
         TravelSummary travel = travelServiceClient.getPricedTravel(request.travelId(), authorizationHeader);
 

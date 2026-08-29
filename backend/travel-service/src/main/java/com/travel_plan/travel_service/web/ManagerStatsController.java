@@ -24,17 +24,15 @@ public class ManagerStatsController {
         return managerStatsService.myStats(principal(authentication));
     }
 
-    // Page publique (voir docs/lets-travel_project.md, section Traveler) : ouverte a tout
-    // utilisateur authentifie, pas seulement le manager concerne ou un admin - route couverte
-    // par la regle generique GET /api/travels/** de SecurityConfig (TRAVELER minimum).
+    // Page publique : ouverte a tout utilisateur authentifie, couverte par la regle generique
+    // GET /api/travels/** de SecurityConfig (TRAVELER minimum).
     @GetMapping("/{managerId}/public-stats")
     public ManagerPublicStatsResponse publicStats(@PathVariable UUID managerId) {
         return managerStatsService.publicStats(managerId);
     }
 
-    // fix/audit-gaps : endpoint interne, jamais appele par le frontend - consomme uniquement par
-    // user-service (TravelServiceClient) pour verifier qu'un traveler est bien abonne a l'un des
-    // voyages du manager appelant avant de lui exposer son profil (troubleshooting.md #38).
+    // fix/audit-gaps : endpoint interne consomme par user-service pour verifier l'abonnement d'un
+    // traveler avant d'exposer son profil (troubleshooting.md #38).
     @GetMapping("/me/subscribers/{travelerId}")
     public SubscriberCheckResponse isMySubscriber(@PathVariable UUID travelerId, Authentication authentication) {
         return new SubscriberCheckResponse(managerStatsService.isMySubscriber(principal(authentication), travelerId));

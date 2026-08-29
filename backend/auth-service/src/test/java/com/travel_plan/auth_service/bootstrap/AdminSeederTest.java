@@ -51,7 +51,7 @@ class AdminSeederTest {
         verify(accountRepository, never()).save(any(Account.class));
     }
 
-    // fix/audit-gaps : couvre le catch ajoute pour la course entre 2 replicas (cf. troubleshooting.md #34).
+    // fix/audit-gaps : couvre le catch ajoute pour la course entre 2 replicas (voir troubleshooting.md #60).
     @Test
     void logsAndContinuesWhenAnotherReplicaAlreadyInsertedConcurrently() {
         when(accountRepository.count()).thenReturn(0L);

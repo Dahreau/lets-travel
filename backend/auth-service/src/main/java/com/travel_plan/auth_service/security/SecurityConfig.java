@@ -30,18 +30,14 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login").permitAll()
-                        // feat/traveler-experience : inscription publique, 2e etape (identifiants +
-                        // Account role=TRAVELER force). Voir user-service SecurityConfig pour la 1ere
-                        // etape (profil User).
+                        // Inscription publique, 2e etape (identifiants + role=TRAVELER force) ; la 1ere
+                        // etape (profil User) est dans user-service SecurityConfig.
                         .requestMatchers("/api/auth/register").permitAll()
-                        // /me est appele par tous les roles juste apres login/register (voir
-                        // AuthController.me) - sans cette regle il tombe dans anyRequest() et
-                        // seul ADMIN peut s'authentifier lui-meme.
+                        // /me est appele par tous les roles juste apres login/register - sans cette regle
+                        // il tombe dans anyRequest() (ADMIN uniquement).
                         .requestMatchers("/api/auth/me").authenticated()
-                        // fix/audit-gaps (troubleshooting.md #41) : appele par user-service pour
-                        // supprimer le compte de connexion associe a un profil supprime (self-service
-                        // ou admin). Garde fine (ADMIN ou proprietaire) faite dans le controller,
-                        // voir AccountController.deleteByUserId - ici juste "authentifie".
+                        // voir troubleshooting.md #41 - appele par user-service pour supprimer un compte lie ;
+                        // la garde fine (ADMIN ou proprietaire) est dans AccountController.deleteByUserId.
                         .requestMatchers(HttpMethod.DELETE, "/api/auth/accounts/by-user/*").authenticated()
                         .anyRequest().hasRole("ADMIN"))
                 .addFilterBefore(

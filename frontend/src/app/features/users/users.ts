@@ -38,9 +38,7 @@ export class UsersService {
     return this.http.get<User>(`${this.baseUrl}/me`);
   }
 
-  // fix/audit-gaps (troubleshooting.md #41) : droit a l'effacement RGPD - suppression
-  // self-service du compte de l'appelant (profil + compte de connexion, voir UserService.deleteMe
-  // cote backend).
+  // voir troubleshooting.md #41 - droit a l'effacement RGPD, self-service (cf. UserService.deleteMe).
   deleteMe(): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/me`);
   }

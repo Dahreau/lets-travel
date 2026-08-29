@@ -6,13 +6,8 @@ RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 USER root
 RUN mkdir -p /var/jenkins_home/.m2 && chown -R jenkins:jenkins /var/jenkins_home/.m2
 
-# docker-ce-cli + docker-compose-plugin (client + plugin "compose" seuls, pas
-# docker.io/containerd) pour que le stage Deploy pilote le démon Docker de
-# l'hôte via le socket monté (voir infra/ci/docker-compose.yml). Ni docker.io
-# ni son paquet dérivé docker-cli ne fournissent le plugin compose : il n'existe
-# que dans le dépôt officiel Docker, absent des dépôts Debian standards. Codename
-# et architecture détectés dynamiquement pour rester valides si l'image de base
-# Jenkins ou la machine hôte changent.
+# docker-ce-cli + docker-compose-plugin (pas docker.io/containerd) pour piloter le démon Docker hôte
+# via le socket monté - seul le dépôt officiel Docker fournit le plugin compose, pas Debian standard.
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
   && mkdir -p /etc/apt/keyrings \
   && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \

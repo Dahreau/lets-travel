@@ -10,11 +10,8 @@ if [ ! -f .env ]; then
     exit 0
 fi
 
-# Vault demarre TOUJOURS scelle sur un conteneur neuf (etat de scellement en memoire,
-# jamais persiste avec le volume de donnees) - sans ce bloc, vault-init (qui exige
-# vault a l'etat "healthy") ne demarre jamais et toute la stack reste bloquee derriere
-# a chaque redemarrage (meme cause que troubleshooting.md #48, ici pour le flux local
-# hors Jenkins/Ansible).
+# Vault redemarre scelle sur un conteneur neuf (etat en memoire) - sans ce bloc, vault-init
+# n'atteint jamais l'etat "healthy" (meme cause que troubleshooting.md #48, flux local ici).
 docker compose up -d vault
 
 echo "Attente de Vault..."

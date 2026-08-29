@@ -32,10 +32,7 @@ export class Register implements OnInit {
     phone: [''],
     username: ['', Validators.required],
     password: ['', [Validators.required, Validators.minLength(6)]],
-    // fix/audit-gaps (troubleshooting.md #41) : consentement RGPD obligatoire, non coche par
-    // defaut - requiredTrue cote client reprend exactement la contrainte @AssertTrue du backend
-    // (UserRegistrationRequest.acceptedPrivacyPolicy), pour un message d'erreur immediat plutot
-    // qu'un aller-retour serveur.
+    // voir troubleshooting.md #41 - requiredTrue reprend la contrainte @AssertTrue du backend.
     acceptedPrivacyPolicy: [false, Validators.requiredTrue],
     address: this.fb.nonNullable.group({
       street: ['', Validators.required],

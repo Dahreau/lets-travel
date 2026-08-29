@@ -37,10 +37,8 @@ public class UserService {
         return userRepository.findAll().stream().map(UserResponse::from).toList();
     }
 
-    // fix/audit-gaps : troubleshooting.md #38 - GET /api/users/{id} etait ouvert a tout
-    // TRAVEL_MANAGER pour N'IMPORTE QUEL id (IDOR), alors que l'intention (voir SecurityConfig)
-    // etait de ne laisser un manager consulter que le profil d'un de ses propres abonnes. Un
-    // ADMIN garde un acces total (callerIsAdmin=true, pas d'appel a travel-service).
+    // voir troubleshooting.md #38 - corrige l'IDOR GET /api/users/{id} (TRAVEL_MANAGER ne voit que
+    // ses abonnes) ; un ADMIN garde un acces total (callerIsAdmin=true).
     public UserResponse findById(UUID id, boolean callerIsAdmin, String authorizationHeader) {
         User user = getOrThrow(id);
         if (!callerIsAdmin && !travelServiceClient.isSubscriberOfCallingManager(id, authorizationHeader)) {
@@ -79,9 +77,8 @@ public class UserService {
                 .email(request.email())
                 .phone(request.phone())
                 .role(Role.TRAVELER)
-                // fix/audit-gaps (troubleshooting.md #41) : @AssertTrue sur acceptedPrivacyPolicy
-                // garantit deja que ce booleen vaut true a ce stade (sinon 400 avant d'arriver ici) -
-                // on horodate juste le moment du consentement.
+                // voir troubleshooting.md #41 - @AssertTrue garantit deja acceptedPrivacyPolicy=true ici,
+                // on horodate juste le consentement.
                 .privacyAcceptedAt(Instant.now())
                 .build();
         attachAddress(user, request.address());
@@ -102,38 +99,30 @@ public class UserService {
         return UserResponse.from(userRepository.saveAndFlush(user));
     }
 
-    // fix/audit-gaps (troubleshooting.md #41) : authorizationHeader propage vers auth-service
-    // (AuthServiceClient.deleteAccountByUserId) pour supprimer le compte de connexion associe -
-    // sans ca on recree le bug preexistant du compte "fantome" toujours capable de se reconnecter
-    // apres suppression du profil. Supprime l'Account AVANT le User (voir AuthServiceClient) :
-    // si l'appel a auth-service echoue, l'exception remonte et le profil local n'est PAS supprime,
-    // on ne se retrouve jamais avec un profil supprime mais un compte de connexion orphelin.
+    // voir troubleshooting.md #41 - supprime l'Account (auth-service) AVANT le User : si l'appel
+    // echoue, le profil local n'est pas supprime (pas de compte "fantome" orphelin).
     public void delete(UUID id, String authorizationHeader) {
         User user = getOrThrow(id);
         authServiceClient.deleteAccountByUserId(id, authorizationHeader);
         userRepository.delete(user);
     }
 
-    // fix/audit-gaps (troubleshooting.md #41) : droit d'acces/portabilite RGPD - export du
-    // profil de l'appelant. Reutilise UserResponse (deja tous les champs pertinents, y compris
-    // privacyAcceptedAt) plutot que de creer un DTO dedie.
+    // voir troubleshooting.md #41 - droit d'acces/portabilite RGPD ; reutilise UserResponse
+    // plutot qu'un DTO dedie.
     public UserResponse me(Authentication authentication) {
         UUID userId = requireUserId(authentication);
         return UserResponse.from(getOrThrow(userId));
     }
 
-    // fix/audit-gaps (troubleshooting.md #41) : droit a l'effacement RGPD - suppression
-    // self-service, meme chemin que delete(id, header) cote admin (voir sa Javadoc ci-dessus)
-    // pour ne pas dupliquer la logique de suppression cross-service.
+    // voir troubleshooting.md #41 - droit a l'effacement RGPD, self-service ; reutilise
+    // delete(id, header) pour ne pas dupliquer la logique cross-service.
     public void deleteMe(Authentication authentication, String authorizationHeader) {
         UUID userId = requireUserId(authentication);
         delete(userId, authorizationHeader);
     }
 
-    // Meme pattern de garde que TravelerStatsService.requireTravelerId cote travel-service :
-    // le principal doit etre notre AuthenticatedUser (toujours le cas en prod, voir
-    // JwtAuthenticationFilter) et porter un userId non-null (jamais le cas pour un compte ADMIN
-    // par defaut sans fiche User - /me n'a pas de sens pour ce compte-la).
+    // Meme pattern de garde que TravelerStatsService.requireTravelerId (travel-service) : userId
+    // non-null requis ; jamais le cas pour un compte ADMIN par defaut sans fiche User.
     private UUID requireUserId(Authentication authentication) {
         if (!(authentication.getPrincipal() instanceof AuthenticatedUser caller) || caller.userId() == null) {
             throw new ForbiddenException("Aucun profil utilisateur associe a ce compte");

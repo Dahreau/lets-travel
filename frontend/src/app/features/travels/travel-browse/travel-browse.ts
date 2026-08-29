@@ -12,9 +12,8 @@ import { TravelerStatsService } from '../../travelers/traveler-stats';
 import { SubscriptionsService } from '../subscriptions';
 import { TravelsService } from '../travels';
 
-// feat/traveler-frontend : composant DEDIE au parcours Traveler (recherche + abonnement),
-// volontairement distinct de TravelList (table CRUD reservee Admin/Manager) - un Traveler ne
-// doit ni editer ni supprimer un voyage.
+// Composant dedie au parcours Traveler (recherche + abonnement), distinct de TravelList
+// (CRUD reserve Admin/Manager).
 @Component({
   selector: 'app-travel-browse',
   imports: [ReactiveFormsModule, RouterLink, PageHeader, Spinner],

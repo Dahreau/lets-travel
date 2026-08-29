@@ -11,10 +11,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.RestClientException;
 
-// fix/audit-gaps (troubleshooting.md #40) : sans ce handler, une panne totale d'un service en
-// aval (ses 2 replicas down, timeout, ou tout autre echec du RestClient fourni par
-// GatewayHttpClientConfig) remontait comme une 500 Tomcat brute (page HTML par defaut), pas une
-// erreur JSON exploitable par le frontend - meme pattern que payment-service ApiExceptionHandler.
+// voir troubleshooting.md #40 - sans ce handler, une panne d'un service aval remontait en 500 Tomcat
+// brute au lieu d'une erreur JSON exploitable (meme pattern que payment-service ApiExceptionHandler).
 @RestControllerAdvice
 public class ApiExceptionHandler {
 

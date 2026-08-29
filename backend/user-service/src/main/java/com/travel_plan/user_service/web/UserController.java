@@ -31,11 +31,8 @@ public class UserController {
         return userService.findAll();
     }
 
-    // fix/audit-gaps : troubleshooting.md #38 - callerIsAdmin/authorizationHeader necessaires
-    // a UserService pour restreindre ce endpoint aux vrais abonnes quand l'appelant n'est pas
-    // ADMIN (voir SecurityConfig, ouvert a ADMIN et TRAVEL_MANAGER). authorizationHeader est
-    // optionnel ici uniquement pour ne pas casser les tests qui n'en fournissent pas - en
-    // production SecurityConfig garantit deja un appelant authentifie donc toujours present.
+    // voir troubleshooting.md #38 - callerIsAdmin/authorizationHeader restreignent ce endpoint aux
+    // vrais abonnes ; authorizationHeader optionnel seulement pour les tests (toujours present en prod).
     @GetMapping("/{id}")
     public UserResponse findById(
             @PathVariable UUID id,
@@ -84,10 +81,8 @@ public class UserController {
         return userService.me(authentication);
     }
 
-    // fix/audit-gaps (troubleshooting.md #41) : droit a l'effacement RGPD - l'appelant supprime
-    // SON PROPRE compte (profil user-service + compte de connexion auth-service, voir
-    // UserService.deleteMe). authorizationHeader requis (pas optionnel comme sur findById) :
-    // SecurityConfig garantit deja un appelant authentifie sur cette route.
+    // voir troubleshooting.md #41 - droit a l'effacement RGPD, supprime le profil et le compte de
+    // connexion (UserService.deleteMe) ; authorizationHeader requis ici (pas optionnel comme findById).
     @DeleteMapping("/me")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteMe(

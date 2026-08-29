@@ -6,9 +6,8 @@ export default defineConfig({
   globalSetup: require.resolve('./tests/support/global-setup'),
   timeout: 30000,
   expect: { timeout: 10000 },
-  // Serie totale : les tests de login (auth/manager/admin) partagent la meme limite nginx
-  // (5r/m sur /api/auth/login, voir infra/nginx) - les paralleliser risquerait des 429 qui ne
-  // seraient pas de vrais bugs projet.
+  // Serie totale (fullyParallel:false) : les tests login partagent la meme limite nginx (5r/m sur
+  // /api/auth/login) - paralleliser risquerait des 429 qui ne seraient pas de vrais bugs.
   fullyParallel: false,
   workers: 1,
   retries: 0,

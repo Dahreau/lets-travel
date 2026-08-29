@@ -6,9 +6,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
-// userId : obligatoire pour TRAVELER/TRAVEL_MANAGER (pointe vers le User cree
-// au prealable dans user-service) ; doit rester absent pour ADMIN, qui n'a pas
-// de fiche profil.
 public record CreateAccountRequest(
         @NotBlank String username,
         @NotBlank String password,

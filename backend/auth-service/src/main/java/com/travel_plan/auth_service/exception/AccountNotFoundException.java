@@ -2,9 +2,8 @@ package com.travel_plan.auth_service.exception;
 
 import java.util.UUID;
 
-// fix/audit-gaps (troubleshooting.md #41) : levee quand AccountController.deleteByUserId ne
-// trouve aucun compte pour ce userId - traite comme non-bloquant cote appelant (voir
-// AuthServiceClient.deleteAccountByUserId cote user-service, qui absorbe ce 404).
+// voir troubleshooting.md #41 - levee si deleteByUserId ne trouve aucun compte ; le 404 est
+// absorbe cote appelant (AuthServiceClient.deleteAccountByUserId).
 public class AccountNotFoundException extends RuntimeException {
 
     public AccountNotFoundException(UUID userId) {

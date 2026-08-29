@@ -783,3 +783,63 @@ docker compose restart payment-service
 **Solution** : ajout du paquet `chromium` (le paquet Debian complet, pas juste une liste de libs a la main) a la commande `apt-get install` de `infra/ci/jenkins/Dockerfile`. Installer ce paquet via apt resout automatiquement toutes ses dependances partagees (dont `libgobject-2.0.so.0`), qui deviennent alors disponibles systeme pour n'importe quel binaire Chrome/Chromium present sur la machine - y compris celui de Puppeteer, jamais invoque directement.
 
 **A retenir** : un CI qui installe seulement le runtime (ici Node.js) sans les dependances systeme d'outils tiers qu'il invoque en sous-main (ici Puppeteer/Chrome pour les tests navigateur) echoue uniquement en CI, jamais en local ou ces libs sont deja presentes par ailleurs - toujours verifier que l'image d'agent CI a explicitement tout ce dont les commandes qu'elle execute ont besoin, plutot que de supposer qu'elle "a Node donc ça doit marcher".
+
+## 60. `AdminSeeder` : 2 replicas demarrent en parallele et un des deux plante sur la contrainte unique du username
+
+**Probleme** : avec `auth-service` deploye en 2 replicas, les deux demarrent `CommandLineRunner.run()` en parallele, passent tous les deux le garde `accountRepository.count() > 0` (compte encore a 0) avant qu'aucun n'ait insere l'admin par defaut, puis tentent tous les deux `accountRepository.save(admin)`.
+
+**Cause** : `username` est contraint unique en base ; le second replica a inserer echouait sur cette contrainte avec une `DataIntegrityViolationException` remontee brute, ce qui plantait le replica (redemarrage en boucle) au lieu de simplement constater que l'admin par defaut existe deja.
+
+**Solution** : `AdminSeeder.run()` attrape `DataIntegrityViolationException` autour du `save()` et logge en `info` que l'admin est deja cree par un autre replica, plutot que de laisser l'exception remonter.
+
+**A retenir** : tout code d'initialisation au demarrage (`CommandLineRunner`, seed de donnees) qui verifie "est-ce que ca existe deja ?" avant d'inserer doit prevoir la course entre plusieurs replicas demarrant en parallele - le check-then-insert n'est jamais atomique entre deux processus, seule la contrainte unique en base l'est reellement.
+
+## 61. Spring Security : une regle specifique declaree apres une regle generique ne s'applique jamais (`authorizeHttpRequests` matche dans l'ordre de declaration)
+
+**Probleme** : plusieurs endpoints specifiques de travel-service (`/subscriptions`, `/feedbacks`, `/managers/me/stats`, etc.) doivent etre plus permissifs ou plus restrictifs que la regle generique `/api/travels/**` qui les englobe, mais les declarer dans le mauvais ordre les rendait inefficaces sans erreur visible (ex : un TRAVELER n'arrivait pas a annuler son propre abonnement, intercepte par une regle ADMIN/TRAVEL_MANAGER-only pensee pour `DELETE /api/travels/**`).
+
+**Cause** : `HttpSecurity.authorizeHttpRequests()` evalue les `requestMatchers` dans leur ordre de declaration et applique la premiere regle qui matche - une regle generique declaree avant une regle plus specifique masque silencieusement cette derniere, sans erreur de compilation ni au demarrage.
+
+**Solution** : toutes les regles specifiques (`/subscriptions`, `/feedbacks`, `/reports`, `/managers/me/stats`, `/managers/me/subscribers/*`, `/admin/**`) sont declarees AVANT les regles generiques `/api/travels/**` dans `SecurityConfig.securityFilterChain()`, avec un commentaire de 2 lignes a chaque endroit rappelant cette contrainte d'ordre.
+
+**A retenir** : dans `authorizeHttpRequests`, toujours declarer les regles du plus specifique au plus generique (jamais l'inverse) - piege classique de Spring Security qui ne produit aucune erreur, juste un comportement silencieusement different de l'intention.
+
+## 62. `MissingRequestHeaderException` tombait dans le handler `Exception.class` generique (500 au lieu de 400)
+
+**Probleme** : un appel a payment-service sans un `@RequestHeader` obligatoire remontait un 500 brut ("Unexpected error") au lieu d'un 400 explicite nommant l'en-tete manquant.
+
+**Cause** : sans handler explicite pour `MissingRequestHeaderException` dans `ApiExceptionHandler`, Spring ne retombe pas sur son comportement par defaut (400) une fois qu'un `@RestControllerAdvice` existe sur le projet - l'exception remonte jusqu'au handler generique `Exception.class`, qui repond 500 pour tout ce qu'il ne reconnait pas.
+
+**Solution** : ajout d'un `@ExceptionHandler(MissingRequestHeaderException.class)` dedie dans `payment-service/ApiExceptionHandler.java`, renvoyant 400 avec le nom de l'en-tete manquant.
+
+**A retenir** : des qu'un `@RestControllerAdvice` avec un handler `Exception.class` generique existe, toute exception Spring qui aurait normalement un statut par defaut (400, 404...) doit avoir son propre `@ExceptionHandler` explicite, sinon elle est silencieusement absorbee en 500 par le filet de securite generique.
+
+## 63. Matcher Spring Security `/api/payments/*` (un seul segment) et pas `/api/payments/**` : la nuance qui empeche une fuite de la liste complete
+
+**Probleme** : un Traveler doit pouvoir consulter/payer SES paiements (`GET/POST /api/payments/{id}`), mais jamais la liste complete de tous les paiements (`GET /api/payments`, Admin-only) - `PaymentService.findAll()` ne filtre pas par proprietaire.
+
+**Cause** : un matcher `/api/payments/**` (double etoile) aurait aussi couvert `/api/payments` (liste complete, `**` matche aussi sans segment supplementaire), ouvrant involontairement la liste globale a tout Traveler authentifie.
+
+**Solution** : `SecurityConfig` utilise `/api/payments/*` (un seul segment, exige un `{id}` apres `/payments/`) pour la regle TRAVELER, laissant `GET /api/payments` (sans segment supplementaire) retomber sur la regle `anyRequest().hasRole(ADMIN_ROLE)` par defaut.
+
+**A retenir** : `/**` et `/*` ne sont pas interchangeables en securite Spring - `/**` matche aussi le chemin sans segment supplementaire, `/*` exige exactement un segment de plus. Toujours verifier lequel des deux couvre par erreur une route plus large que prevu, surtout quand la route "liste complete" doit rester plus restrictive que la route "detail".
+
+## 64. Certificat TLS interne : le SAN est lie au nom de projet Docker Compose, a regenerer si ce nom change
+
+**Probleme** : le certificat TLS interne (`infra/internal-tls/certs/internal.crt`) est genere une seule fois (`creates:` dans le playbook Ansible) avec un SAN listant les noms DNS Docker Compose exacts de chaque replica (`lets-travel-app-auth-service-1`, etc.) - si le nom du projet Compose (`docker-compose.yml: name:`) change un jour, ces noms DNS changent aussi mais le certificat existant n'est jamais regenere automatiquement.
+
+**Cause** : `openssl req -addext subjectAltName=...` fige la liste de noms DNS au moment de la generation ; la tache Ansible qui le genere est gardee par `creates:`, donc elle ne se rejoue jamais si le fichier existe deja, meme si les noms DNS reels ont change entre-temps.
+
+**Solution** : aucune automatisation pour l'instant - documente en commentaire dans `ansible/playbooks/deploy.yml` et ici, a regenerer manuellement (`rm infra/internal-tls/certs/internal.crt` puis rejouer le playbook) si le nom de projet Compose change.
+
+**A retenir** : tout artefact genere une seule fois et garde par une condition `creates:`/`exists` doit etre explicitement documente comme "a regenerer si X change" - sinon la deprecation est invisible jusqu'a ce que le TLS interne echoue avec une erreur SAN mismatch, loin de la cause reelle.
+
+## 65. Params Jenkins granulaires (skip par stage, cibler des services) : un run partiel doit rester FAILURE meme si tout ce qu'il a teste est vert
+
+**Probleme** : `SKIP_BUILD_TEST` etait le seul param existant et sautait Build & Test ET Sonar ensemble, sans moyen de cibler un service precis ni de lancer Sonar seul quand on sait deja que Build & Test passe - or un run partiel qui affiche SUCCESS pourrait etre confondu avec une vraie validation complete du pipeline.
+
+**Cause** : les stages Build & Test et SonarQube partageaient le meme `when { !params.SKIP_BUILD_TEST }`, et rien ne forcait le resultat final quand une portion du pipeline n'avait pas tourne.
+
+**Solution** : ajout de `SKIP_SONAR`, `SKIP_DEPLOY` (independants) et `TARGET_SERVICES` (liste de services/frontend, vide = tous) qui ne restreint QUE Build & Test - Sonar analyse toujours tous les services, avec un flag `standalone` calcule par service (`true` si ce service n'a pas ete construit dans ce run) pour savoir s'il doit se recompiler lui-meme (`clean verify sonar:sonar`) avant l'analyse. Le bloc `post.always` calcule `fullRun` (aucun skip, `TARGET_SERVICES` vide) et force `currentBuild.result = 'FAILURE'` des que ce n'est pas le cas, quel que soit le resultat des stages qui ont reellement tourne.
+
+**A retenir** : un param qui permet de sauter une partie du pipeline doit toujours s'accompagner d'une regle qui empeche le build de finir en SUCCESS tant que le pipeline entier n'a pas tourne - sinon un run de debug/cible fini vert peut etre pris a tort pour une validation complete.

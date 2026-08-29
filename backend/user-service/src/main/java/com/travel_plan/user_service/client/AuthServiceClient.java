@@ -8,13 +8,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
-// fix/audit-gaps (troubleshooting.md #41) : supprime le compte de connexion (auth-service)
-// associe a un profil supprime cote user-service. Sans cet appel, un utilisateur supprime
-// (self-service via DELETE /api/users/me, ou par un admin via DELETE /api/users/{id}) gardait
-// un compte "fantome" capable de se reconnecter alors que son profil n'existait plus nulle
-// part - bug preexistant sur le chemin ADMIN, corrige en meme temps que le self-service.
-// Meme pattern d'appel que TravelServiceClient (JWT de l'appelant propage tel quel, mTLS +
-// load balancing via le bean @LoadBalanced partage, voir AuthServiceClientConfig).
+// voir troubleshooting.md #41 - supprime le compte de connexion associe (evite un compte
+// "fantome" apres suppression du profil, self-service ou admin).
 @Component
 public class AuthServiceClient {
 
@@ -24,11 +19,8 @@ public class AuthServiceClient {
         this.authServiceRestClient = authServiceRestClient;
     }
 
-    // Volontairement PAS fail-closed comme TravelServiceClient.isSubscriberOfCallingManager :
-    // ici c'est une ECRITURE destructive dans un flux de suppression, pas une lecture de
-    // controle d'acces. Si auth-service est injoignable, on doit arreter la suppression
-    // (l'exception remonte, geree par ApiExceptionHandler.handleUnexpected -> 500) plutot que de supprimer
-    // le profil en silence et laisser un compte fantome derriere - l'exact bug qu'on corrige.
+    // Volontairement PAS fail-closed comme TravelServiceClient : ici c'est une ecriture destructive,
+    // si auth-service est injoignable on arrete la suppression plutot que de creer un compte fantome.
     public void deleteAccountByUserId(UUID userId, String authorizationHeader) {
         if (authorizationHeader == null || authorizationHeader.isBlank()) {
             throw new IllegalStateException("Missing Authorization header for account deletion");

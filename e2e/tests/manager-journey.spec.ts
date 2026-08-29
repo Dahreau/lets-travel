@@ -36,9 +36,8 @@ test.describe.serial('Parcours Travel Manager', () => {
     await page.fill('#price', '250');
     await page.fill('#currency', 'EUR');
 
-    // Le formulaire demarre deja avec une destination (ngOnInit appelle addDestination() une
-    // fois) - cliquer "+ add destination" ici en ajoutait une 2e, vide et obligatoire, qui
-    // bloquait la soumission (validation Angular) sans jamais declencher le POST attendu.
+    // Le formulaire demarre deja avec 1 destination (ngOnInit) - cliquer "+ add destination" ici en
+    // ajoutait une 2e vide et obligatoire, bloquant la soumission sans declencher le POST.
     const destination = page.locator('.subcard').first();
     await destination.locator('input[formcontrolname="city"]').fill('Lyon');
     await destination.locator('input[formcontrolname="country"]').fill('France');

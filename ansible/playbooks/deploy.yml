@@ -74,9 +74,8 @@
           - "365"
           - -subj
           - /CN=lets-travel-internal
-          # SAN requis (pas juste CN) : nginx et api-gateway verifient le hostname du certificat.
-          # Les noms DNS suivent le nom de projet Compose (docker-compose.yml: name: lets-travel-app) —
-          # a regenerer (supprimer le .crt/.key existants) si ce nom de projet change un jour.
+          # SAN requis (pas juste CN) ; noms DNS lies au nom de projet Compose - a regenerer
+          # si ce nom change (troubleshooting.md #64).
           - -addext
           - "subjectAltName=DNS:api-gateway,DNS:lets-travel-app-auth-service-1,DNS:lets-travel-app-auth-service-2,DNS:lets-travel-app-user-service-1,DNS:lets-travel-app-user-service-2,DNS:lets-travel-app-travel-service-1,DNS:lets-travel-app-travel-service-2,DNS:lets-travel-app-payment-service-1,DNS:lets-travel-app-payment-service-2"
         creates: "{{ project_dir }}/infra/internal-tls/certs/internal.crt"
@@ -136,10 +135,8 @@
       changed_when: "'Removing' in stale_mount_containers_rm.stdout"
       failed_when: false
 
-    # Vault demarre TOUJOURS scelle sur un conteneur neuf (etat en memoire, pas persiste avec
-    # le volume) - la task de force-remove ci-dessus vient de le recreer, donc de defaire le
-    # descellement deja fait par vault-unseal.yml. Sans ce bloc, vault-init (qui depend de
-    # vault a l'etat "healthy") ne demarre jamais et toute la chaine derriere echoue en cascade.
+    # Vault redemarre scelle sur un conteneur neuf (etat en memoire) - le force-remove ci-dessus
+    # vient de le recreer ; sans ce bloc, vault-init n'atteint jamais l'etat "healthy".
     - name: Restart Vault alone and re-unseal it before bringing up the rest of the stack
       block:
         - name: Start only the Vault container

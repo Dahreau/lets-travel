@@ -36,12 +36,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String role = jwtService.extractRole(claims);
                 UUID userId = jwtService.extractUserId(claims);
 
-                // fix/audit-gaps (troubleshooting.md #41) : principal enrichi (username+role+userId),
-                // meme pattern que travel-service.AuthenticatedUser - necessaire pour que
-                // AccountController.deleteByUserId puisse verifier "suis-je le proprietaire ?" sans
-                // recevoir d'id falsifiable en parametre. userId peut etre null (compte ADMIN par
-                // defaut sans fiche User) : dans ce cas isSelf sera toujours false, seul isAdmin
-                // permettra l'acces - comportement voulu.
+                // voir troubleshooting.md #41 - principal enrichi (username+role+userId) pour verifier
+                // la propriete sans id falsifiable ; userId peut etre null (ADMIN par defaut) => isSelf=false.
                 var principal = new AuthenticatedUser(username, role, userId);
                 var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
                 var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);

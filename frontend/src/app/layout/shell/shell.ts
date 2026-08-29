@@ -11,9 +11,8 @@ interface NavItem {
 // Sonar S1192 (New Code) : ces literals apparaissaient dans plusieurs des 3 tableaux ci-dessous.
 const DASHBOARD_NAV_ITEM: NavItem = { path: '/dashboard', label: 'dashboard' };
 const BROWSE_NAV_ITEM: NavItem = { path: '/browse', label: 'voyages' };
-// fix/audit-gaps (troubleshooting.md #41) : self-service RGPD, meme route pour les 3 roles
-// (GET/DELETE /api/users/me resolvent l'appelant via le JWT, jamais un id) - seul item commun
-// aux 3 tableaux ci-dessous plutot que duplique en fin de chacun.
+// voir troubleshooting.md #41 - self-service RGPD, meme route pour les 3 roles (JWT resolvent
+// l'appelant, jamais un id).
 const ACCOUNT_NAV_ITEM: NavItem = { path: '/mon-compte', label: 'mon compte' };
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
@@ -35,9 +34,8 @@ const MANAGER_NAV_ITEMS: NavItem[] = [
   ACCOUNT_NAV_ITEM,
 ];
 
-// feat/traveler-frontend : parcourir/s'abonner (browse) et gerer ses moyens de paiement
-// (deja scopes au caller cote backend, cf. PaymentMethodController.findAll) - pas d'acces
-// a /payments (liste globale, Admin-only) ni /users.
+// Parcourir/s'abonner (browse) et gerer ses moyens de paiement (scopes au caller cote
+// backend) - pas d'acces a /payments (Admin-only) ni /users.
 const TRAVELER_NAV_ITEMS: NavItem[] = [
   DASHBOARD_NAV_ITEM,
   BROWSE_NAV_ITEM,

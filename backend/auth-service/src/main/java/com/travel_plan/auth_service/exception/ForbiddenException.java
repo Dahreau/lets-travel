@@ -1,9 +1,7 @@
 package com.travel_plan.auth_service.exception;
 
-// fix/audit-gaps (troubleshooting.md #41) : levee quand l'appelant de
-// DELETE /api/auth/accounts/by-user/{userId} n'est ni ADMIN ni le proprietaire de ce userId -
-// meme classe de garde que le fix IDOR #38 (un role autorise a appeler la route n'implique pas
-// qu'il soit autorise sur CETTE ressource precise).
+// voir troubleshooting.md #41 - levee si l'appelant n'est ni ADMIN ni proprietaire du userId
+// cible (meme classe de garde que le fix IDOR #38).
 public class ForbiddenException extends RuntimeException {
 
     public ForbiddenException(String message) {

@@ -1,11 +1,6 @@
 ---
-# Vault tourne maintenant en mode serveur réel (storage "file", TLS), plus en
-# mode dev : il démarre scellé (sealed) à chaque conteneur neuf et doit être
-# initialisé une seule fois dans sa vie. Toutes les commandes passent par
-# `docker compose exec` (le CLI vault à l'intérieur du conteneur, sur
-# 127.0.0.1) plutôt que par des appels HTTP externes : le port 8200 n'est plus
-# publié sur l'host (durcissement réseau), donc rien en dehors du réseau
-# Docker `app` ne peut de toute façon joindre Vault directement.
+# Vault tourne en mode serveur réel (storage "file", TLS) : scellé à chaque conteneur neuf, initialisé une seule fois.
+# Toutes les commandes passent par `docker compose exec` (CLI vault interne) car le port 8200 n'est plus publié sur l'host.
 - name: Initialize and unseal Vault
   hosts: travel_plan
   vars:
@@ -279,15 +274,5 @@
       when: vault_status_after.sealed | default(true)
       no_log: true
 
-# Pourquoi une seule part de clé (-key-shares=1 -key-threshold=1)
-#
-# Le partage de Shamir (plusieurs parts de clé, un seuil pour reconstituer la
-# clé complète) sert à répartir la confiance entre plusieurs opérateurs
-# humains dans une vraie organisation — aucun d'eux seul ne peut déverrouiller
-# Vault. Ici, un seul opérateur (le déploiement Ansible/Jenkins lui-même)
-# gère tout le cycle de vie : un partage à 5 clés dont 3 nécessaires n'ajoute
-# aucune sécurité réelle, juste de la complexité à automatiser (il faudrait
-# stocker les 5 parts quelque part de toute façon). Le compromis assumé et
-# documenté ici : une seule clé, sur disque, permissions 0600, jamais commitée
-# — le même niveau de confiance que le root token actuel, juste persistant
-# plutôt qu'en mémoire.
+# Pourquoi une seule part de clé (-key-shares=1 -key-threshold=1) : le partage de Shamir sert à répartir
+# la confiance entre plusieurs opérateurs humains - ici un seul (Ansible/Jenkins) gère tout, une clé unique suffit (disque, 0600, jamais commitée).

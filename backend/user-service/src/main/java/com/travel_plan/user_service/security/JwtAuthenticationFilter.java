@@ -36,10 +36,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String role = jwtService.extractRole(claims);
                 UUID userId = jwtService.extractUserId(claims);
 
-                // fix/audit-gaps (troubleshooting.md #41) : principal enrichi (username+role+userId),
-                // meme pattern que travel-service.AuthenticatedUser et auth-service.AuthenticatedUser -
-                // necessaire pour GET/DELETE /api/users/me (l'appelant resout SON PROPRE profil sans
-                // jamais recevoir d'id en parametre).
+                // voir troubleshooting.md #41 - principal enrichi avec userId, necessaire pour
+                // GET/DELETE /api/users/me (l'appelant resout son propre profil sans id en parametre).
                 var principal = new AuthenticatedUser(username, role, userId);
                 var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
                 var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
