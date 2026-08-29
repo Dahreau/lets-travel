@@ -19,4 +19,26 @@
       <div class="stat-value">{{ s.reportCount }}</div>
     </div>
   </div>
+
+  @if (s.travelRatings.length > 0) {
+    <h2>notes par voyage</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>voyage</th>
+          <th>note moyenne</th>
+          <th>avis</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (rating of s.travelRatings; track rating.travelId) {
+          <tr>
+            <td>{{ rating.title }}</td>
+            <td>{{ rating.averageRating !== null ? (rating.averageRating | number: '1.1-1') : '—' }}</td>
+            <td>{{ rating.feedbackCount }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
 }

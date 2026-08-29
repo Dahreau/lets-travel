@@ -38,19 +38,22 @@ public interface RecommendationRepository extends Neo4jRepository<TravelNode, St
             """)
     void recordFeedback(String travelerId, String travelId, int rating);
 
-    // Voyages partageant >=1 des 3 champs avec l'historique du Traveler, exclut deja-participes,
-    // score = nombre de voyages "aimes" en commun.
+    // Un voyage sans note pese 1 (participation neutre). Un voyage note pese (note - 3) :
+    // 4-5/5 pese plus qu'une simple participation, 1-2/5 devient negatif et est exclu (weight > 0),
+    // 3/5 est neutre. Score = somme des poids des voyages similaires.
     @Query("""
             MATCH (me:Traveler {id: $travelerId})-[:PARTICIPATED_IN|RATED]->(liked:Travel)
-            WITH me, collect(DISTINCT liked) AS likedTravels
-            UNWIND likedTravels AS liked
+            WITH DISTINCT me, liked
+            OPTIONAL MATCH (me)-[rated:RATED]->(liked)
+            WITH me, liked, coalesce(rated.rating - 3, 1) AS weight
+            WHERE weight > 0
             MATCH (candidate:Travel)
             WHERE candidate.id <> liked.id
               AND NOT (me)-[:PARTICIPATED_IN]->(candidate)
               AND (candidate.country = liked.country
                    OR candidate.priceRange = liked.priceRange
                    OR candidate.durationRange = liked.durationRange)
-            WITH candidate, count(DISTINCT liked) AS matchScore
+            WITH candidate, sum(weight) AS matchScore
             RETURN candidate.id AS travelId
             ORDER BY matchScore DESC
             LIMIT $limit

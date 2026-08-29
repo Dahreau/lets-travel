@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# fix/audit-gaps : verification "haute charge" de l'audit via `ab` seul (e2e/k6
-# explicitement ecartes, voir docs/nouveautes-vs-travel-plan.md) - besoin d'un compte local existant, tout role.
+# Verification "haute charge" minimale via `ab` - supersede par la vraie suite k6
+# (voir k6/lets-travel-load-test.js, docs/12-e2e-et-k6.md) - garde en filet de secours.
 
 BASE_URL="${BASE_URL:-http://localhost:8080}"
 USERNAME="${LOAD_TEST_USERNAME:?Set LOAD_TEST_USERNAME to an existing local account}"

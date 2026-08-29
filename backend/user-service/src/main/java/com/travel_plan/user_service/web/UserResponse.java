@@ -14,7 +14,10 @@ public record UserResponse(
         Role role,
         AddressResponse address,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        // fix/audit-gaps (troubleshooting.md #41) : expose le consentement RGPD dans l'export
+        // /api/users/me (droit d'acces/portabilite) - null pour les profils crees par un ADMIN.
+        Instant privacyAcceptedAt) {
 
     public static UserResponse from(User user) {
         AddressResponse addressResponse = user.getAddress() == null ? null : AddressResponse.from(user.getAddress());
@@ -27,6 +30,7 @@ public record UserResponse(
                 user.getRole(),
                 addressResponse,
                 user.getCreatedAt(),
-                user.getUpdatedAt());
+                user.getUpdatedAt(),
+                user.getPrivacyAcceptedAt());
     }
 }

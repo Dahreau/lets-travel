@@ -16,7 +16,7 @@ public record DestinationRequest(
         List<@Valid ActivityRequest> activities,
         @Valid AccommodationRequest accommodation) {
 
-    @AssertTrue(message = "departureDate must not be before arrivalDate")
+    @AssertTrue(message = "departureDate ne doit pas etre anterieure a arrivalDate")
     public boolean isDateRangeValid() {
         return arrivalDate == null || departureDate == null || !departureDate.isBefore(arrivalDate);
     }

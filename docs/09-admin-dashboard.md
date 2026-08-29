@@ -60,8 +60,10 @@ pendant la construction de cette page.
   (destinations → activités/hébergement, transports).
 - `@fontsource/jetbrains-mono` — police auto-hébergée (pas de CDN à
   l'exécution), déclarée dans `angular.json` (`styles`), pas via `@import` CSS.
-- Tests : Vitest (builder `@angular/build:unit-test`, défaut d'Angular 21 —
-  plus de Karma/Jasmine).
+- Tests : Karma/Jasmine (builder `@angular/build:unit-test`, option
+  `runner: karma` — Vitest, le défaut Angular 21, provoquait des timeouts
+  de démarrage de worker sur l'environnement WSL2/DrvFs du poste de dev,
+  voir troubleshooting.md).
 
 ## Ce qui est construit
 
@@ -96,7 +98,7 @@ maison, pour un projet de cette taille.
 
 ## Tests
 
-`ng test` (Vitest) : `auth`, `auth-guard`, `auth-interceptor`, `jwt-util`,
+`ng test` (Karma/Jasmine) : `auth`, `auth-guard`, `auth-interceptor`, `jwt-util`,
 les 3 services CRUD (`UsersService`, `TravelsService`, `PaymentsService`,
 `PaymentMethodsService`) via `HttpTestingController`, `Login` (validation,
 login + `/me` enchaînés) et `TravelForm` (ajout/suppression dynamique de

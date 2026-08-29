@@ -121,7 +121,7 @@ Deux comportements différents à pointer dans ces fichiers : `destinations`/`ac
 **Neo4j ne stocke pas les voyages** : c'est un graphe séparé de "quelles villes sont reliées entre elles par au moins un voyage" (`PlaceNode`/`ROUTE_TO`), utile pour suggérer des destinations, indépendant de la durée de vie d'un `Travel` précis — une ville reste dans le graphe même si le voyage qui l'a créée est supprimé (décision assumée, voir `audit-findings.md`) :
 
 ```bash
-docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7688 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
+docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7687 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
   "MATCH (a:Place)-[r:ROUTE_TO]->(b:Place) RETURN a.city, b.city, r.tripCount;"
 ```
 
@@ -211,7 +211,7 @@ TRAVEL_ID=$(curl -k -s -X POST https://localhost:8443/api/travels -H "Authorizat
 curl -k -s -w "\nHTTP: %{http_code}\n" https://localhost:8443/api/travels/$TRAVEL_ID -H "Authorization: Bearer $TOKEN"
 
 # Preuve que la route est aussi écrite dans Neo4j (pas juste Postgres), et que ce hop est bien en bolt+ssc (TLS)
-docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7688 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
+docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7687 -u neo4j -p "$(grep ^NEO4J_PASSWORD= .env | cut -d= -f2-)" \
   "MATCH (a:Place)-[r:ROUTE_TO]->(b:Place) RETURN a.city, b.city, r.tripCount;"
 ```
 </details>

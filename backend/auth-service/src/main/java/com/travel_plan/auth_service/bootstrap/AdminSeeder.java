@@ -4,6 +4,7 @@ import com.travel_plan.auth_service.domain.Account;
 import com.travel_plan.auth_service.domain.Role;
 import com.travel_plan.auth_service.repository.AccountRepository;
 import java.time.Instant;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
@@ -14,6 +15,9 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 public class AdminSeeder implements CommandLineRunner {
+
+    // Doit rester identique a ADMIN_USER_ID dans user-service.AdminProfileSeeder.
+    private static final UUID ADMIN_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
@@ -41,7 +45,7 @@ public class AdminSeeder implements CommandLineRunner {
                 .username(defaultUsername)
                 .passwordHash(passwordEncoder.encode(defaultPassword))
                 .role(Role.ADMIN)
-                .userId(null)
+                .userId(ADMIN_USER_ID)
                 .createdAt(Instant.now())
                 .build();
 

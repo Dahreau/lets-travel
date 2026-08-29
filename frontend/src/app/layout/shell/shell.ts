@@ -11,6 +11,10 @@ interface NavItem {
 // Sonar S1192 (New Code) : ces literals apparaissaient dans plusieurs des 3 tableaux ci-dessous.
 const DASHBOARD_NAV_ITEM: NavItem = { path: '/dashboard', label: 'dashboard' };
 const BROWSE_NAV_ITEM: NavItem = { path: '/browse', label: 'voyages' };
+// fix/audit-gaps (troubleshooting.md #41) : self-service RGPD, meme route pour les 3 roles
+// (GET/DELETE /api/users/me resolvent l'appelant via le JWT, jamais un id) - seul item commun
+// aux 3 tableaux ci-dessous plutot que duplique en fin de chacun.
+const ACCOUNT_NAV_ITEM: NavItem = { path: '/mon-compte', label: 'mon compte' };
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
   DASHBOARD_NAV_ITEM,
@@ -19,6 +23,7 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { path: '/travels', label: 'travels' },
   { path: '/payments', label: 'payments' },
   { path: '/payment-methods', label: 'payment-methods' },
+  ACCOUNT_NAV_ITEM,
 ];
 
 // fix/audit-gaps : /payment-methods manquait alors que le backend l'autorise deja (scope
@@ -27,6 +32,7 @@ const MANAGER_NAV_ITEMS: NavItem[] = [
   DASHBOARD_NAV_ITEM,
   BROWSE_NAV_ITEM,
   { path: '/payment-methods', label: 'payment-methods' },
+  ACCOUNT_NAV_ITEM,
 ];
 
 // feat/traveler-frontend : parcourir/s'abonner (browse) et gerer ses moyens de paiement
@@ -36,6 +42,7 @@ const TRAVELER_NAV_ITEMS: NavItem[] = [
   DASHBOARD_NAV_ITEM,
   BROWSE_NAV_ITEM,
   { path: '/payment-methods', label: 'payment-methods' },
+  ACCOUNT_NAV_ITEM,
 ];
 
 @Component({

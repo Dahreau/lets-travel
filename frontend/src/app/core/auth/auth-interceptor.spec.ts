@@ -2,7 +2,6 @@ import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 import { AuthService } from './auth';
 import { authInterceptor } from './auth-interceptor';
 
@@ -33,7 +32,7 @@ describe('authInterceptor', () => {
   });
 
   it('attaches the bearer token to /api requests when a token is present', () => {
-    vi.spyOn(authService, 'token', 'get').mockReturnValue('the-token');
+    spyOnProperty(authService, 'token', 'get').and.returnValue('the-token');
 
     http.get('/api/users').subscribe();
 
@@ -51,9 +50,9 @@ describe('authInterceptor', () => {
   });
 
   it('logs out and redirects to /login on a 401 response', () => {
-    vi.spyOn(authService, 'token', 'get').mockReturnValue('the-token');
-    const logoutSpy = vi.spyOn(authService, 'logout');
-    const navigateSpy = vi.spyOn(router, 'navigate');
+    spyOnProperty(authService, 'token', 'get').and.returnValue('the-token');
+    const logoutSpy = spyOn(authService, 'logout');
+    const navigateSpy = spyOn(router, 'navigate');
 
     http.get('/api/users').subscribe({ error: () => {} });
 

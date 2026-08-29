@@ -17,6 +17,9 @@ export interface User {
   address: Address | null;
   createdAt: string;
   updatedAt: string;
+  // fix/audit-gaps (troubleshooting.md #41) : date du consentement RGPD donne a l'inscription
+  // publique - null pour les profils crees par un ADMIN (voir UserResponse cote backend).
+  privacyAcceptedAt: string | null;
 }
 
 export interface UserRequest {
@@ -26,6 +29,10 @@ export interface UserRequest {
   phone: string | null;
   role: UserRole;
   address: Address | null;
+  // fix/audit-gaps : optionnels - permettent de provisionner un compte de connexion en meme
+  // temps que le profil (voir UserForm), jamais utilises pour role=ADMIN.
+  username?: string;
+  password?: string;
 }
 
 // feat/traveler-frontend : 1ere etape de l'inscription publique (POST /api/users/register),
@@ -36,4 +43,13 @@ export interface UserRegistrationRequest {
   email: string;
   phone: string | null;
   address: Address | null;
+  // fix/audit-gaps (troubleshooting.md #41) : consentement RGPD obligatoire, @AssertTrue cote
+  // backend (UserRegistrationRequest.acceptedPrivacyPolicy) - rejette (400) toute inscription
+  // ou la case n'est pas cochee.
+  acceptedPrivacyPolicy: boolean;
+}
+
+export interface RegistrationResponse {
+  user: User;
+  registrationToken: string;
 }

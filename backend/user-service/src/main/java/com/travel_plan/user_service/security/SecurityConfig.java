@@ -31,6 +31,14 @@ public class SecurityConfig {
                         // la gestion de sa liste d'abonnes (enonce, section Travel Manager). Il ne peut
                         // pas lister TOUS les users pour autant : GET /api/users (sans id) reste
                         // couvert par anyRequest ci-dessous, reserve a l'Admin.
+                        // fix/audit-gaps (troubleshooting.md #41) : DOIT etre declare AVANT le
+                        // matcher generique GET /api/users/* juste en dessous, sinon "me" serait
+                        // interprete comme un {id} et tomberait sous la regle ADMIN/TRAVEL_MANAGER
+                        // (et un TRAVEL_MANAGER pourrait alors se faire passer pour son propre
+                        // "abonne" - pas le cas ici puisque authenticated() suffit, mais l'ordre des
+                        // regles Spring Security est first-match donc la precision compte).
+                        .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/users/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/*").hasAnyRole("ADMIN", "TRAVEL_MANAGER")
                         .anyRequest().hasRole("ADMIN"))
                 .addFilterBefore(

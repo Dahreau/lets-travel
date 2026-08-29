@@ -30,14 +30,18 @@ describe('ManagerPublic', () => {
 
   afterEach(() => httpMock.verify());
 
-  it('loads the public stats for the manager in the route', () => {
+  it('loads the public stats for the manager in the route, including the per-travel ratings', () => {
     fixture.detectChanges();
 
+    const travelRatings = [
+      { travelId: 't1', title: 'Trip 1', averageRating: 4.5, feedbackCount: 2 },
+      { travelId: 't2', title: 'Trip 2', averageRating: null, feedbackCount: 0 },
+    ];
     httpMock
       .expectOne('/api/travels/managers/m1/public-stats')
-      .flush({ travelCount: 3, averageRating: 4.2, reportCount: 1 });
+      .flush({ travelCount: 3, averageRating: 4.2, reportCount: 1, travelRatings });
 
-    expect(component['stats']()).toEqual({ travelCount: 3, averageRating: 4.2, reportCount: 1 });
+    expect(component['stats']()).toEqual({ travelCount: 3, averageRating: 4.2, reportCount: 1, travelRatings });
     expect(component['loading']()).toBe(false);
   });
 
@@ -46,7 +50,7 @@ describe('ManagerPublic', () => {
 
     httpMock
       .expectOne('/api/travels/managers/m1/public-stats')
-      .flush({ travelCount: 0, averageRating: null, reportCount: 0 });
+      .flush({ travelCount: 0, averageRating: null, reportCount: 0, travelRatings: [] });
 
     expect(component['stats']()?.averageRating).toBeNull();
   });

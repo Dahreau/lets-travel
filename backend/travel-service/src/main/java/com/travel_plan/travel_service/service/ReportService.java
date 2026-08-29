@@ -35,7 +35,7 @@ public class ReportService {
         UUID reporterId = requireTravelerId(caller);
 
         if (!subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, reporterId)) {
-            throw new ForbiddenException("You can only report someone from a travel you were subscribed to");
+            throw new ForbiddenException("Vous ne pouvez signaler que quelqu'un d'un voyage auquel vous etiez abonne");
         }
 
         requireConsistentTarget(travel, request, reporterId);
@@ -66,22 +66,22 @@ public class ReportService {
     private void requireConsistentTarget(Travel travel, ReportRequest request, UUID reporterId) {
         if (request.reportedType() == ReportedType.MANAGER) {
             if (!travel.getManagerId().equals(request.reportedId())) {
-                throw new InvalidReportRequestException("reportedId must be the manager of this travel");
+                throw new InvalidReportRequestException("reportedId doit etre le manager de ce voyage");
             }
             return;
         }
 
         if (request.reportedId().equals(reporterId)) {
-            throw new InvalidReportRequestException("You cannot report yourself");
+            throw new InvalidReportRequestException("Vous ne pouvez pas vous signaler vous-meme");
         }
         if (!subscriptionRepository.existsByTravel_IdAndTravelerId(travel.getId(), request.reportedId())) {
-            throw new InvalidReportRequestException("reportedId must be another traveler subscribed to this travel");
+            throw new InvalidReportRequestException("reportedId doit etre un autre traveler abonne a ce voyage");
         }
     }
 
     private UUID requireTravelerId(AuthenticatedUser caller) {
         if (caller.userId() == null) {
-            throw new InvalidReportRequestException("A linked user profile is required to submit a report");
+            throw new InvalidReportRequestException("Un profil utilisateur lie est requis pour soumettre un signalement");
         }
         return caller.userId();
     }

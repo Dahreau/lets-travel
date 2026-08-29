@@ -6,6 +6,8 @@ import com.travel_plan.travel_service.repository.FeedbackRepository;
 import com.travel_plan.travel_service.repository.ReportRepository;
 import com.travel_plan.travel_service.repository.SubscriptionRepository;
 import com.travel_plan.travel_service.security.AuthenticatedUser;
+import com.travel_plan.travel_service.web.FeedbackResponse;
+import com.travel_plan.travel_service.web.ReportResponse;
 import com.travel_plan.travel_service.web.SubscriptionResponse;
 import com.travel_plan.travel_service.web.TravelerStatsResponse;
 import java.util.List;
@@ -47,11 +49,32 @@ public class TravelerStatsService {
                 .toList();
     }
 
+    // fix/audit-gaps (troubleshooting.md #40) : jusqu'ici un Traveler ne pouvait relire ni le
+    // contenu de son propre feedback ni celui de ses propres signalements (les GET dedies sont
+    // reserves ADMIN/TRAVEL_MANAGER resp. ADMIN) - seuls les COMPTES (feedbackCount/reportCount
+    // de myStats) lui etaient visibles. Meme garde-fou que mySubscriptions ci-dessus :
+    // requireTravelerId force le caller.userId(), jamais un ID arbitraire.
+    public List<FeedbackResponse> myFeedbacks(AuthenticatedUser caller) {
+        UUID travelerId = requireTravelerId(caller);
+
+        return feedbackRepository.findByTravelerId(travelerId).stream()
+                .map(FeedbackResponse::from)
+                .toList();
+    }
+
+    public List<ReportResponse> myReports(AuthenticatedUser caller) {
+        UUID travelerId = requireTravelerId(caller);
+
+        return reportRepository.findByReporterId(travelerId).stream()
+                .map(ReportResponse::from)
+                .toList();
+    }
+
     // Un compte ADMIN par defaut n'a pas de fiche User (userId null), meme raisonnement que
     // SubscriptionService.requireTravelerId.
     private UUID requireTravelerId(AuthenticatedUser caller) {
         if (caller.userId() == null) {
-            throw new InvalidTravelRequestException("A linked traveler profile is required for this dashboard");
+            throw new InvalidTravelRequestException("Un profil traveler lie est requis pour ce tableau de bord");
         }
         return caller.userId();
     }

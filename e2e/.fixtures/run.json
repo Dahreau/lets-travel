@@ -1,0 +1,12 @@
+{
+  "runId": 1787914667045,
+  "adminUsername": "admin",
+  "adminPassword": "changeme_dev_only",
+  "adminToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJBRE1JTiIsImlhdCI6MTc4NzkxNDY2NywiZXhwIjoxNzg3OTE4MjY3fQ.57ghFGFHum2W7o_hjKjidmvMRlpllNSYM4hkMQl6Gkk",
+  "managerUsername": "e2e-manager-1787914667045",
+  "managerPassword": "E2e-test-pass-1!",
+  "managerToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJlMmUtbWFuYWdlci0xNzg3OTE0NjY3MDQ1Iiwicm9sZSI6IlRSQVZFTF9NQU5BR0VSIiwiaWF0IjoxNzg3OTE0NjY3LCJleHAiOjE3ODc5MTgyNjcsInVzZXJJZCI6IjYxNTk0ODQyLTkxZDItNGNjMy1hOGU3LTc5NjkwOTk2Y2JiOSJ9.KuAGNT4W2xILgRojcWbJiDdQ2ntvlEU6xcR7Gb-vKiw",
+  "managerId": "61594842-91d2-4cc3-a8e7-79690996cbb9",
+  "travelId": "bbc1425f-d6cc-4e4e-ab0b-6f4b5869b69f",
+  "travelTitle": "E2E Voyage fixture 1787914667045"
+}

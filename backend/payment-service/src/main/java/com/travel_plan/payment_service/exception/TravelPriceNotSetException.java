@@ -9,6 +9,6 @@ import java.util.UUID;
 public class TravelPriceNotSetException extends RuntimeException {
 
     public TravelPriceNotSetException(UUID travelId) {
-        super("Travel " + travelId + " does not have a price set yet");
+        super("Le voyage " + travelId + " n'a pas encore de prix defini");
     }
 }

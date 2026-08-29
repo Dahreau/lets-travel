@@ -1,5 +1,5 @@
 <app-page-header title="travels" subtitle="Destinations, dates, activités, transports">
-  <a routerLink="/travels/new" class="btn btn-primary">+ new travel</a>
+  <a routerLink="/travels/new" class="btn btn-primary">+ nouveau voyage</a>
 </app-page-header>
 
 @if (loading()) {
@@ -34,9 +34,9 @@
             <td>{{ travel.destinations.length }}</td>
             <td><app-badge [value]="travel.status" /></td>
             <td class="actions">
-              <a [routerLink]="['/travels', travel.id, 'edit']" class="btn btn-ghost btn-sm">edit</a>
+              <a [routerLink]="['/travels', travel.id, 'edit']" class="btn btn-ghost btn-sm">modifier</a>
               <button type="button" class="btn btn-danger btn-sm" (click)="deleteTarget.set(travel)">
-                delete
+                supprimer
               </button>
             </td>
           </tr>

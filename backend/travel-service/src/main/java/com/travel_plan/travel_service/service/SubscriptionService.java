@@ -44,7 +44,7 @@ public class SubscriptionService {
         subscriptionRepository
                 .findByTravel_IdAndTravelerIdAndStatus(travelId, travelerId, SubscriptionStatus.ACTIVE)
                 .ifPresent(existing -> {
-                    throw new DuplicateSubscriptionException("Already subscribed to this travel");
+                    throw new DuplicateSubscriptionException("Deja abonne a ce voyage");
                 });
 
         Subscription subscription = Subscription.builder()
@@ -76,8 +76,8 @@ public class SubscriptionService {
 
         if (isPastCancellationCutoff(travel.getStartDate())) {
             throw new SubscriptionCutoffException(
-                    "Subscriptions can no longer be cancelled less than "
-                            + CANCELLATION_CUTOFF_DAYS + " days before departure");
+                    "Les abonnements ne peuvent plus etre annules moins de "
+                            + CANCELLATION_CUTOFF_DAYS + " jours avant le depart");
         }
 
         subscription.setStatus(SubscriptionStatus.CANCELLED);
@@ -101,7 +101,7 @@ public class SubscriptionService {
         getTravelOrThrow(travelId);
         UUID travelerId = requireTravelerId(caller);
         if (!subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, travelerId)) {
-            throw new ForbiddenException("You can only view co-travelers of a travel you participated in");
+            throw new ForbiddenException("Vous ne pouvez consulter les co-voyageurs que d'un voyage auquel vous avez participe");
         }
 
         return subscriptionRepository.findByTravel_Id(travelId).stream()
@@ -111,12 +111,12 @@ public class SubscriptionService {
                 .toList();
     }
 
-    // Un compte ADMIN par defaut n'a pas de fiche User (userId null) : il ne peut pas
-    // etre "le" traveler d'un abonnement, il n'y a rien a rattacher.
+    // Filet de securite : tout compte authentifie a desormais un profil lie (voir
+    // user-service.AdminProfileSeeder pour l'admin par defaut).
     private UUID requireTravelerId(AuthenticatedUser caller) {
         if (caller.userId() == null) {
             throw new InvalidSubscriptionRequestException(
-                    "A linked user profile is required to subscribe to a travel");
+                    "Un profil utilisateur lie est requis pour s'abonner a un voyage");
         }
         return caller.userId();
     }
@@ -130,7 +130,7 @@ public class SubscriptionService {
                 TRAVEL_MANAGER_ROLE.equals(caller.role()) && travel.getManagerId().equals(caller.userId());
         boolean isSubscriber = subscription.getTravelerId().equals(caller.userId());
         if (!isOwningManager && !isSubscriber) {
-            throw new ForbiddenException("You can only cancel your own subscription");
+            throw new ForbiddenException("Vous ne pouvez annuler que votre propre abonnement");
         }
     }
 
@@ -139,7 +139,7 @@ public class SubscriptionService {
             return;
         }
         if (!travel.getManagerId().equals(caller.userId())) {
-            throw new ForbiddenException("You can only view subscribers of your own travels");
+            throw new ForbiddenException("Vous ne pouvez consulter les abonnes que de vos propres voyages");
         }
     }
 

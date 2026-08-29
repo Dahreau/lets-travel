@@ -54,7 +54,13 @@ class TravelerStatsControllerTest {
     void mySubscriptionsReturnsOwnHistory() throws Exception {
         AuthenticatedTraveler traveler = travelerAuth();
         SubscriptionResponse subscription = new SubscriptionResponse(
-                UUID.randomUUID(), UUID.randomUUID(), travelerUserId, SubscriptionStatus.ACTIVE, Instant.now(), null);
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "Test Travel",
+                travelerUserId,
+                SubscriptionStatus.ACTIVE,
+                Instant.now(),
+                null);
         when(travelerStatsService.mySubscriptions(traveler.user())).thenReturn(List.of(subscription));
 
         mockMvc.perform(get("/api/travels/travelers/me/subscriptions").principal(traveler.token()))

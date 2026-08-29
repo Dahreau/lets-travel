@@ -114,6 +114,22 @@
         </div>
       }
 
+      <!-- fix/audit-gaps (troubleshooting.md #41) : consentement RGPD obligatoire, jamais coche
+           par defaut - requiredTrue cote client (register.ts), @AssertTrue cote backend
+           (UserRegistrationRequest.acceptedPrivacyPolicy). -->
+      <div class="checkbox-row" style="margin: 8px 0 16px">
+        <input
+          type="checkbox"
+          id="acceptedPrivacyPolicy"
+          formControlName="acceptedPrivacyPolicy"
+          [class.invalid]="form.controls.acceptedPrivacyPolicy.invalid && form.controls.acceptedPrivacyPolicy.touched"
+        />
+        <label for="acceptedPrivacyPolicy">
+          j'ai lu et j'accepte la
+          <a routerLink="/politique-de-confidentialite" target="_blank" rel="noopener">politique de confidentialité</a><span class="req">*</span>
+        </label>
+      </div>
+
       @if (errorMessage()) {
         <p class="error-text login-error">{{ errorMessage() }}</p>
       }

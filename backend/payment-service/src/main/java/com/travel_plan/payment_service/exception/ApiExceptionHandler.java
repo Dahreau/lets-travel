@@ -44,6 +44,13 @@ public class ApiExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage());
     }
 
+    // Circuit breaker ouvert ou travel-service injoignable apres retries (voir
+    // client.TravelServiceClient) - 503 clair plutot qu'une erreur de connexion brute.
+    @ExceptionHandler(TravelServiceUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleTravelServiceUnavailable(TravelServiceUnavailableException ex) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+    }
+
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<Map<String, Object>> handleForbidden(ForbiddenException ex) {
         return build(HttpStatus.FORBIDDEN, ex.getMessage());
@@ -61,7 +68,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<Map<String, Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        return build(HttpStatus.CONFLICT, "Data integrity violation");
+        return build(HttpStatus.CONFLICT, "Violation d'integrite des donnees");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -69,7 +76,7 @@ public class ApiExceptionHandler {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .reduce((first, second) -> first + ", " + second)
-                .orElse("Validation failed");
+                .orElse("Echec de la validation");
         return build(HttpStatus.BAD_REQUEST, message);
     }
 
@@ -81,7 +88,7 @@ public class ApiExceptionHandler {
         log.warn("Upstream service call failed: {}", ex.getMessage());
         return build(
                 HttpStatus.BAD_GATEWAY,
-                "An upstream service (payment provider or travel-service) rejected the request or was unreachable");
+                "Un service externe (fournisseur de paiement ou travel-service) a rejete la requete ou etait injoignable");
     }
 
     // @RequestHeader obligatoire absent (ex: Authorization manquant sur POST /api/payments) ->
@@ -92,27 +99,27 @@ public class ApiExceptionHandler {
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<Map<String, Object>> handleMissingRequestHeader(MissingRequestHeaderException ex) {
         log.warn("Missing required header '{}': {}", ex.getHeaderName(), ex.getMessage());
-        return build(HttpStatus.BAD_REQUEST, "Missing required header '" + ex.getHeaderName() + "'");
+        return build(HttpStatus.BAD_REQUEST, "En-tete requis manquant : '" + ex.getHeaderName() + "'");
     }
 
     // JSON invalide ou enum inconnue echoue avant Bean Validation -> 400, pas 500.
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleMalformedRequest(HttpMessageNotReadableException ex) {
         log.warn("Malformed request body: {}", ex.getMessage());
-        return build(HttpStatus.BAD_REQUEST, "Malformed or invalid request body");
+        return build(HttpStatus.BAD_REQUEST, "Corps de requete invalide ou mal forme");
     }
 
     // ID d'URL non-UUID (ex: /payments/null) -> 400, pas 500.
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         log.warn("Invalid path parameter '{}': {}", ex.getName(), ex.getMessage());
-        return build(HttpStatus.BAD_REQUEST, "Invalid value for parameter '" + ex.getName() + "'");
+        return build(HttpStatus.BAD_REQUEST, "Valeur invalide pour le parametre '" + ex.getName() + "'");
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
         log.error("Unhandled exception while processing request", ex);
-        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error");
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Erreur inattendue");
     }
 
     private ResponseEntity<Map<String, Object>> build(HttpStatus status, String message) {

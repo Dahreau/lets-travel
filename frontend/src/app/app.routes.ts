@@ -13,6 +13,13 @@ export const routes: Routes = [
     loadComponent: () => import('./features/register/register').then((m) => m.Register),
   },
   {
+    // fix/audit-gaps (troubleshooting.md #41) : publique, comme /login et /register - la case a
+    // cocher obligatoire de l'inscription doit pouvoir y renvoyer avant meme d'avoir un compte.
+    path: 'politique-de-confidentialite',
+    loadComponent: () =>
+      import('./features/legal/privacy-policy/privacy-policy').then((m) => m.PrivacyPolicy),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./layout/shell/shell').then((m) => m.Shell),
@@ -73,6 +80,16 @@ export const routes: Routes = [
           ),
       },
       {
+        // "view profiles" des abonnés (énoncé, role Travel Manager) - lecture seule, réservé
+        // au manager/admin comme manager/travels/:id ci-dessus.
+        path: 'manager/travelers/:id',
+        canActivate: [managerGuard],
+        loadComponent: () =>
+          import('./features/manager/traveler-profile/traveler-profile').then(
+            (m) => m.TravelerProfile,
+          ),
+      },
+      {
         // Page publique (enoncé, section Traveler) : ouverte à tout utilisateur authentifié,
         // pas de guard dédié au-delà de authGuard (déjà appliqué au Shell parent).
         path: 'manager/:managerId',
@@ -109,6 +126,13 @@ export const routes: Routes = [
           import('./features/payments/payment-method-form/payment-method-form').then(
             (m) => m.PaymentMethodForm,
           ),
+      },
+      {
+        // fix/audit-gaps (troubleshooting.md #41) : self-service RGPD (export + suppression de
+        // compte), ouvert a tout role authentifie - pas de guard dedie au-dela de authGuard
+        // (deja applique au Shell parent), meme raisonnement que /manager/:managerId ci-dessus.
+        path: 'mon-compte',
+        loadComponent: () => import('./features/account/my-data/my-data').then((m) => m.MyData),
       },
       { path: '**', redirectTo: 'dashboard' },
     ],

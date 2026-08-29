@@ -29,6 +29,17 @@ public class TravelerStatsController {
         return travelerStatsService.mySubscriptions(principal(authentication));
     }
 
+    // fix/audit-gaps (troubleshooting.md #40) : voir TravelerStatsService.myFeedbacks/myReports.
+    @GetMapping("/me/feedbacks")
+    public List<FeedbackResponse> myFeedbacks(Authentication authentication) {
+        return travelerStatsService.myFeedbacks(principal(authentication));
+    }
+
+    @GetMapping("/me/reports")
+    public List<ReportResponse> myReports(Authentication authentication) {
+        return travelerStatsService.myReports(principal(authentication));
+    }
+
     private AuthenticatedUser principal(Authentication authentication) {
         return (AuthenticatedUser) authentication.getPrincipal();
     }

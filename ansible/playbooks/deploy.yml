@@ -3,6 +3,7 @@
   hosts: travel_plan
   vars:
     project_dir: "{{ playbook_dir }}/../.."
+    unseal_key_file: "{{ project_dir }}/infra/vault/.unseal-key.txt"
 
   tasks:
     - name: Ensure .env exists (copied from .env.example on first run only)
@@ -134,6 +135,71 @@
       register: stale_mount_containers_rm
       changed_when: "'Removing' in stale_mount_containers_rm.stdout"
       failed_when: false
+
+    # Vault demarre TOUJOURS scelle sur un conteneur neuf (etat en memoire, pas persiste avec
+    # le volume) - la task de force-remove ci-dessus vient de le recreer, donc de defaire le
+    # descellement deja fait par vault-unseal.yml. Sans ce bloc, vault-init (qui depend de
+    # vault a l'etat "healthy") ne demarre jamais et toute la chaine derriere echoue en cascade.
+    - name: Restart Vault alone and re-unseal it before bringing up the rest of the stack
+      block:
+        - name: Start only the Vault container
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - up
+              - -d
+              - vault
+          changed_when: true
+
+        - name: Wait for the Vault CLI to respond
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - exec
+              - -T
+              - vault
+              - vault
+              - status
+              - -format=json
+          register: vault_status_raw
+          until: vault_status_raw.rc in [0, 2]
+          retries: 20
+          delay: 3
+          changed_when: false
+          failed_when: false
+
+        - name: Parse Vault status
+          ansible.builtin.set_fact:
+            vault_status: "{{ vault_status_raw.stdout | from_json }}"
+
+        - name: Read the stored unseal key
+          ansible.builtin.slurp:
+            src: "{{ unseal_key_file }}"
+          register: unseal_key_raw
+          when: vault_status.sealed | default(true)
+
+        - name: Unseal Vault using the stored key (safe to skip if already unsealed)
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - exec
+              - -T
+              - vault
+              - vault
+              - operator
+              - unseal
+              - "{{ unseal_key_raw.content | b64decode | trim }}"
+          when: vault_status.sealed | default(true)
+          no_log: true
 
     - name: Deploy infra, microservices and the reverse proxy (docker compose up)
       ansible.builtin.command:

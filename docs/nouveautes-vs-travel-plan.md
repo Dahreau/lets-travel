@@ -196,6 +196,18 @@ sans `Account` si le 2e appel échoue (ex : username déjà pris, détecté expl
 DB). Acceptable pour ce projet : pas de nettoyage automatique prévu, à traiter manuellement si
 ça arrive en pratique.
 
+**Correction a posteriori (troubleshooting.md #42)** : le raisonnement ci-dessus ("même niveau
+de confiance que l'existant") était fauté sur un point precis, decouvert bien plus tard lors
+d'une re-verification de securite. La comparaison avec `POST /api/auth/accounts` ignorait la
+difference determinante : cet endpoint est `ADMIN`-only (seul un appelant deja de confiance peut
+choisir un `userId` arbitraire), alors que `POST /api/auth/register` est **public** - n'importe
+qui, sans authentification, pouvait fournir n'importe quel `userId` existant et se faire creer un
+compte de connexion dessus (prise de controle de compte). Le flux en 2 appels reste conserve tel
+quel (toujours pas d'appel inter-service orchestre), mais `RegisterRequest.userId` a ete remplace
+par un jeton de preuve signe (`registrationToken`, voir #42) que seul `user-service` peut emettre
+suite a un `POST /api/users/register` reellement reussi - le client ne peut plus choisir le
+`userId` lui-meme.
+
 ## `feat/manager-frontend` — dashboard manager, gestion des abonnés, profil public
 
 ### Avant (travel-plan)
@@ -227,8 +239,10 @@ de propriété : c'est une fiche publique), volontairement sans vérifier que `m
 réellement — un id inconnu renvoie juste des compteurs à zéro/`null`, pas une 404, pour ne pas
 révéler par effet de bord si un id correspond ou non à un compte réel. `averageRating` reste
 `null` tant qu'aucun feedback n'existe, jamais `0` (qui laisserait croire à une mauvaise note
-plutôt qu'à une absence de donnée). C'est l'endpoint que `feat/traveler-experience` avait
-explicitement laissé de côté (voir section précédente).
+plutôt qu'à une absence de donnée). L'énoncé demandant les notes au pluriel ("past travel
+ratings"), la reponse inclut aussi `travelRatings` : le detail voyage par voyage, pas seulement
+la moyenne globale. C'est l'endpoint que `feat/traveler-experience` avait explicitement laissé
+de côté (voir section précédente).
 
 **Frontend : un même Angular admin-tool, maintenant partagé avec les Travel Managers.**
 Jusqu'ici, l'app Angular de ce repo n'était qu'un back-office `ADMIN` (badge "admin" en dur
@@ -418,10 +432,12 @@ exposait réellement. Cette branche les corrige tous, sans changement de permiss
 - `/payment-methods` ajouté à la navigation Manager (`Shell`), manquant alors que
   `PaymentMethodController.findAll` l'autorisait déjà (scope au caller).
 
-**Tests e2e et tests de charge k6 : gaps assumés, pas comblés.** L'énoncé demande des tests
-e2e et un dimensionnement pour la haute charge ; l'audit ne cite `end-to-end`/`e2e` nulle part
-et sa question de charge ("actions ... en moins de 5 secondes") reste vague. Décision prise
-consciemment de ne pas construire de suite Playwright/Cypress ni de scénario k6 (effort jugé
-disproportionné pour la suite du projet) — remplacés par un unique script `scripts/load-test.sh`
-(login réel + `ab` sur `GET /api/travels/search`) pour avoir un chiffre concret à citer à
-l'oral. À assumer clairement si la question est posée plutôt que de bluffer.
+**Tests e2e et tests de charge k6 : finalement construits.** Décision initiale : ne pas
+construire de suite Playwright/Cypress ni de scénario k6 (effort jugé disproportionné),
+remplacés par un unique script `scripts/load-test.sh` (login réel + `ab` sur
+`GET /api/travels/search`) pour avoir un chiffre concret à citer à l'oral. Revenu dessus une
+fois le reste du projet stabilisé : une vraie suite k6 (`k6/lets-travel-load-test.js`, seuil
+`p(95)<5000ms` sur le libellé exact de l'audit) et une suite Playwright (`e2e/`, parcours
+traveler/manager/admin réels) existent maintenant — détail : `12-e2e-et-k6.md`.
+`scripts/load-test.sh` en devient obsolète (à retirer ou garder en filet de secours, à
+trancher).

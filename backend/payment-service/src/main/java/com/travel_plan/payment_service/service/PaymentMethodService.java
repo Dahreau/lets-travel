@@ -82,7 +82,7 @@ public class PaymentMethodService {
         }
         if (requestedOwnerId == null) {
             throw new InvalidPaymentRequestException(
-                    "ownerId is required when an admin creates or updates a payment method on behalf of a traveler");
+                    "ownerId est obligatoire quand un admin cree ou modifie un moyen de paiement pour le compte d'un traveler");
         }
         return requestedOwnerId;
     }
@@ -92,7 +92,7 @@ public class PaymentMethodService {
             return;
         }
         if (!method.getOwnerId().equals(caller.userId())) {
-            throw new ForbiddenException("You can only manage your own payment methods");
+            throw new ForbiddenException("Vous ne pouvez gerer que vos propres moyens de paiement");
         }
     }
 

@@ -30,7 +30,7 @@ public record TravelRequest(
         @NotEmpty List<@Valid DestinationRequest> destinations,
         List<@Valid TransportationRequest> transportations) {
 
-    @AssertTrue(message = "endDate must not be before startDate")
+    @AssertTrue(message = "endDate ne doit pas etre anterieure a startDate")
     public boolean isDateRangeValid() {
         return startDate == null || endDate == null || !endDate.isBefore(startDate);
     }

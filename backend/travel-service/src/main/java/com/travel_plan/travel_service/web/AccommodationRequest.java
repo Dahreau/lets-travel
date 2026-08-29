@@ -13,7 +13,7 @@ public record AccommodationRequest(
         @NotNull LocalDate checkIn,
         @NotNull LocalDate checkOut) {
 
-    @AssertTrue(message = "checkOut must not be before checkIn")
+    @AssertTrue(message = "checkOut ne doit pas etre anterieur a checkIn")
     public boolean isDateRangeValid() {
         return checkIn == null || checkOut == null || !checkOut.isBefore(checkIn);
     }

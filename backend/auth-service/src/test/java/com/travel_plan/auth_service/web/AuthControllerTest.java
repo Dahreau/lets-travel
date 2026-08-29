@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.travel_plan.auth_service.domain.Account;
 import com.travel_plan.auth_service.domain.Role;
+import com.travel_plan.auth_service.exception.InvalidRegistrationTokenException;
 import com.travel_plan.auth_service.repository.AccountRepository;
 import com.travel_plan.auth_service.security.JwtService;
 import java.time.Clock;
@@ -92,17 +93,19 @@ class AuthControllerTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // feat/traveler-experience : inscription publique, 2e etape (identifiants).
     @Test
     void registerCreatesTravelerAccountAndReturnsToken() throws Exception {
         UUID userId = UUID.randomUUID();
+        String registrationToken = "valid-registration-token";
+        when(jwtService.validateRegistrationToken(registrationToken)).thenReturn(userId);
         when(accountRepository.findByUsername("traveler1")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("secret")).thenReturn("hashed");
         when(jwtService.generateToken("traveler1", "TRAVELER", userId)).thenReturn("a.b.c");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RegisterRequest("traveler1", "secret", userId))))
+                        .content(objectMapper.writeValueAsString(
+                                new RegisterRequest("traveler1", "secret", registrationToken))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.token").value("a.b.c"));
     }
@@ -110,6 +113,8 @@ class AuthControllerTest {
     @Test
     void registerReturns409WhenUsernameAlreadyTaken() throws Exception {
         UUID userId = UUID.randomUUID();
+        String registrationToken = "valid-registration-token";
+        when(jwtService.validateRegistrationToken(registrationToken)).thenReturn(userId);
         Account existing = Account.builder()
                 .username("traveler1")
                 .passwordHash("hashed")
@@ -121,7 +126,8 @@ class AuthControllerTest {
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RegisterRequest("traveler1", "secret", userId))))
+                        .content(objectMapper.writeValueAsString(
+                                new RegisterRequest("traveler1", "secret", registrationToken))))
                 .andExpect(status().isConflict());
     }
 
@@ -129,7 +135,21 @@ class AuthControllerTest {
     void registerReturns400ForBlankUsername() throws Exception {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RegisterRequest("", "secret", UUID.randomUUID()))))
+                        .content(objectMapper.writeValueAsString(
+                                new RegisterRequest("", "secret", "valid-registration-token"))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void registerReturns400ForInvalidRegistrationToken() throws Exception {
+        String registrationToken = "forged-or-expired-token";
+        when(jwtService.validateRegistrationToken(registrationToken))
+                .thenThrow(new InvalidRegistrationTokenException("Jeton d'inscription invalide ou expire"));
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RegisterRequest("traveler1", "secret", registrationToken))))
                 .andExpect(status().isBadRequest());
     }
 }

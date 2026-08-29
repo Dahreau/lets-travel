@@ -1,4 +1,4 @@
-<app-page-header [title]="isEdit() ? 'edit user' : 'new user'" />
+<app-page-header [title]="isEdit() ? 'modifier utilisateur' : 'nouvel utilisateur'" />
 
 @if (loading()) {
   <app-spinner />
@@ -56,6 +56,28 @@
       <label for="hasAddress">adresse renseignée</label>
     </div>
 
+    @if (canCreateAccount()) {
+      <div class="checkbox-row" style="margin: 8px 0 16px">
+        <input type="checkbox" [checked]="wantsAccount()" (change)="toggleWantsAccount()" id="wantsAccount" />
+        <label for="wantsAccount">créer un compte de connexion pour cet utilisateur</label>
+      </div>
+
+      @if (wantsAccount()) {
+        <div class="subcard">
+          <div class="form-grid">
+            <div class="field">
+              <label class="label" for="username">Nom d'utilisateur<span class="req">*</span></label>
+              <input id="username" class="input" formControlName="username" />
+            </div>
+            <div class="field">
+              <label class="label" for="password">Mot de passe<span class="req">*</span></label>
+              <input id="password" class="input" type="password" formControlName="password" />
+            </div>
+          </div>
+        </div>
+      }
+    }
+
     @if (hasAddress()) {
       <div class="subcard" [formGroup]="form.controls.address">
         <div class="form-grid">
@@ -101,9 +123,9 @@
 
     <div class="form-actions">
       <button type="submit" class="btn btn-primary" [disabled]="saving()">
-        {{ saving() ? 'saving...' : '$ save' }}
+        {{ saving() ? 'enregistrement...' : '$ enregistrer' }}
       </button>
-      <a routerLink="/users" class="btn btn-ghost">cancel</a>
+      <a routerLink="/users" class="btn btn-ghost">annuler</a>
     </div>
   </form>
 }

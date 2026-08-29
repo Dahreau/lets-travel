@@ -15,7 +15,7 @@ public record CreateAccountRequest(
         @NotNull Role role,
         UUID userId) {
 
-    @AssertTrue(message = "userId is required for TRAVELER/TRAVEL_MANAGER and must be absent for ADMIN")
+    @AssertTrue(message = "userId est obligatoire pour TRAVELER/TRAVEL_MANAGER et doit etre absent pour ADMIN")
     public boolean isUserIdConsistentWithRole() {
         if (role == null) {
             return true;

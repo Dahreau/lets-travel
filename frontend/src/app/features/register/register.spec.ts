@@ -5,7 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Register } from './register';
 
-@Component({ template: '' })
+@Component({ selector: 'app-test-dummy-register', template: '' })
 class DummyComponent {}
 
 describe('Register', () => {
@@ -50,6 +50,10 @@ describe('Register', () => {
       email: 'ada@example.com',
       username: 'ada',
       password: 'secretpw',
+      // fix/audit-gaps (troubleshooting.md #41) : requiredTrue depuis l'ajout du consentement
+      // RGPD - sans ca le formulaire resterait invalide meme sans adresse, independamment de
+      // ce que ce test veut verifier.
+      acceptedPrivacyPolicy: true,
     });
     expect(component['form'].valid).toBe(true);
 
@@ -73,6 +77,9 @@ describe('Register', () => {
       phone: '',
       username: 'ada',
       password: 'secretpw',
+      // fix/audit-gaps (troubleshooting.md #41) : setValue() exige TOUS les controles du groupe -
+      // sans ce champ, l'appel leve une erreur runtime depuis l'ajout du consentement RGPD.
+      acceptedPrivacyPolicy: true,
       address: { street: '', city: '', postalCode: '', country: '' },
     });
 
@@ -81,10 +88,15 @@ describe('Register', () => {
     const registerUserReq = httpMock.expectOne('/api/users/register');
     expect(registerUserReq.request.method).toBe('POST');
     expect(registerUserReq.request.body.address).toBeNull();
-    registerUserReq.flush({ id: 'u1' });
+    expect(registerUserReq.request.body.acceptedPrivacyPolicy).toBe(true);
+    registerUserReq.flush({ user: { id: 'u1' }, registrationToken: 'reg-token-abc' });
 
     const registerAccountReq = httpMock.expectOne('/api/auth/register');
-    expect(registerAccountReq.request.body).toEqual({ username: 'ada', password: 'secretpw', userId: 'u1' });
+    expect(registerAccountReq.request.body).toEqual({
+      username: 'ada',
+      password: 'secretpw',
+      registrationToken: 'reg-token-abc',
+    });
     registerAccountReq.flush({ token: fakeToken() });
 
     httpMock.expectOne('/api/auth/me').flush({ username: 'ada', role: 'TRAVELER' });

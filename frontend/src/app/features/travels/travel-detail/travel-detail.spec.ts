@@ -2,7 +2,6 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 import { AuthService } from '../../../core/auth/auth';
 import { TravelDetail } from './travel-detail';
 
@@ -108,7 +107,7 @@ describe('TravelDetail', () => {
 
   it('submits a payment for the connected traveler', () => {
     const authService = TestBed.inject(AuthService);
-    vi.spyOn(authService, 'userId').mockReturnValue('u1');
+    spyOn(authService, 'userId').and.returnValue('u1');
     flushInit([], [{ id: 'pm1', ownerId: 'u1', provider: 'STRIPE', type: 'CARD', brand: 'Visa', last4: '4242', isDefault: true, createdAt: '' }]);
 
     component['paymentForm'].patchValue({ paymentMethodId: 'pm1' });

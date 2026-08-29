@@ -21,7 +21,7 @@ describe('ManagerStatsService', () => {
     service.myStats().subscribe();
     const req = httpMock.expectOne('/api/travels/managers/me/stats');
     expect(req.request.method).toBe('GET');
-    req.flush({ travelCount: 2, travelerCount: 5, estimatedRevenue: 1000 });
+    req.flush({ travelCount: 2, travelerCount: 5, estimatedRevenue: 1000, travels: [] });
   });
 
   it('GETs the public stats of a manager', () => {

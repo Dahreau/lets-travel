@@ -77,11 +77,30 @@ describe('UsersService', () => {
       email: 'grace@example.com',
       phone: null,
       address: null,
+      // fix/audit-gaps (troubleshooting.md #41) : @AssertTrue cote backend, sans ce champ
+      // l'inscription est desormais rejetee en 400.
+      acceptedPrivacyPolicy: true,
     };
     service.register(request).subscribe();
     const req = httpMock.expectOne('/api/users/register');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual(request);
     req.flush({});
+  });
+
+  // fix/audit-gaps (troubleshooting.md #41) : droit d'acces/portabilite RGPD.
+  it('GETs the caller\'s own profile', () => {
+    service.me().subscribe();
+    const req = httpMock.expectOne('/api/users/me');
+    expect(req.request.method).toBe('GET');
+    req.flush({});
+  });
+
+  // fix/audit-gaps (troubleshooting.md #41) : droit a l'effacement RGPD.
+  it('DELETEs the caller\'s own account', () => {
+    service.deleteMe().subscribe();
+    const req = httpMock.expectOne('/api/users/me');
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null);
   });
 });

@@ -50,7 +50,7 @@ class FeedbackControllerTest {
     void submitReturns201() throws Exception {
         when(feedbackService.submit(travelId, new FeedbackRequest(4, "Nice"), travelerAuth().user()))
                 .thenReturn(new FeedbackResponse(
-                        UUID.randomUUID(), travelId, travelerId, 4, "Nice", Instant.now(Clock.systemUTC())));
+                        UUID.randomUUID(), travelId, "Test Travel", travelerId, 4, "Nice", Instant.now(Clock.systemUTC())));
 
         mockMvc.perform(post("/api/travels/{travelId}/feedbacks", travelId)
                         .principal(travelerAuth().token())
@@ -72,7 +72,7 @@ class FeedbackControllerTest {
     @Test
     void submitReturns403WhenNotParticipated() throws Exception {
         when(feedbackService.submit(travelId, new FeedbackRequest(4, null), travelerAuth().user()))
-                .thenThrow(new ForbiddenException("You can only leave feedback on a travel you were subscribed to"));
+                .thenThrow(new ForbiddenException("Vous ne pouvez laisser un avis que sur un voyage auquel vous etiez abonne"));
 
         mockMvc.perform(post("/api/travels/{travelId}/feedbacks", travelId)
                         .principal(travelerAuth().token())
@@ -84,7 +84,7 @@ class FeedbackControllerTest {
     @Test
     void submitReturns409WhenAlreadySubmitted() throws Exception {
         when(feedbackService.submit(travelId, new FeedbackRequest(4, null), travelerAuth().user()))
-                .thenThrow(new DuplicateFeedbackException("Feedback already submitted for this travel"));
+                .thenThrow(new DuplicateFeedbackException("Avis deja soumis pour ce voyage"));
 
         mockMvc.perform(post("/api/travels/{travelId}/feedbacks", travelId)
                         .principal(travelerAuth().token())
@@ -96,7 +96,7 @@ class FeedbackControllerTest {
     @Test
     void submitReturns400WhenTravelNotYetEnded() throws Exception {
         when(feedbackService.submit(travelId, new FeedbackRequest(4, null), travelerAuth().user()))
-                .thenThrow(new InvalidFeedbackRequestException("Feedback can only be submitted after the travel has ended"));
+                .thenThrow(new InvalidFeedbackRequestException("Un avis ne peut etre soumis qu'apres la fin du voyage"));
 
         mockMvc.perform(post("/api/travels/{travelId}/feedbacks", travelId)
                         .principal(travelerAuth().token())
@@ -110,7 +110,7 @@ class FeedbackControllerTest {
         AuthenticatedManager manager = managerAuth();
         when(feedbackService.listForTravel(travelId, manager.user()))
                 .thenReturn(List.of(new FeedbackResponse(
-                        UUID.randomUUID(), travelId, travelerId, 5, "Amazing", Instant.now(Clock.systemUTC()))));
+                        UUID.randomUUID(), travelId, "Test Travel", travelerId, 5, "Amazing", Instant.now(Clock.systemUTC()))));
 
         mockMvc.perform(get("/api/travels/{travelId}/feedbacks", travelId).principal(manager.token()))
                 .andExpect(status().isOk())
@@ -120,7 +120,7 @@ class FeedbackControllerTest {
     @Test
     void listForTravelReturns403WhenNotOwningManager() throws Exception {
         when(feedbackService.listForTravel(travelId, managerAuth().user()))
-                .thenThrow(new ForbiddenException("You can only view feedback for your own travels"));
+                .thenThrow(new ForbiddenException("Vous ne pouvez consulter les avis que de vos propres voyages"));
 
         mockMvc.perform(get("/api/travels/{travelId}/feedbacks", travelId).principal(managerAuth().token()))
                 .andExpect(status().isForbidden());

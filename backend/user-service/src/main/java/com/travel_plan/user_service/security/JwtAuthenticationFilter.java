@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -33,9 +34,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Claims claims = jwtService.validateAndParse(token);
                 String username = claims.getSubject();
                 String role = jwtService.extractRole(claims);
+                UUID userId = jwtService.extractUserId(claims);
 
+                // fix/audit-gaps (troubleshooting.md #41) : principal enrichi (username+role+userId),
+                // meme pattern que travel-service.AuthenticatedUser et auth-service.AuthenticatedUser -
+                // necessaire pour GET/DELETE /api/users/me (l'appelant resout SON PROPRE profil sans
+                // jamais recevoir d'id en parametre).
+                var principal = new AuthenticatedUser(username, role, userId);
                 var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
-                var authentication = new UsernamePasswordAuthenticationToken(username, null, authorities);
+                var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (JwtException | IllegalArgumentException e) {
                 SecurityContextHolder.clearContext();

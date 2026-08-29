@@ -2,7 +2,6 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 import { AuthService } from '../../core/auth/auth';
 import { Dashboard } from './dashboard';
 
@@ -34,7 +33,7 @@ describe('Dashboard (as ADMIN)', () => {
     }).compileComponents();
 
     const authService = TestBed.inject(AuthService);
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'admin', role: 'ADMIN' });
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'admin', role: 'ADMIN' });
 
     httpMock = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(Dashboard);
@@ -70,6 +69,17 @@ describe('Dashboard (as ADMIN)', () => {
       createdAt: '',
       updatedAt: '',
     });
+    httpMock.expectOne('/api/users/u1').flush({
+      id: 'u1',
+      firstName: 'John',
+      lastName: 'Smith',
+      email: '',
+      phone: null,
+      role: 'TRAVELER',
+      address: null,
+      createdAt: '',
+      updatedAt: '',
+    });
 
     expect(component['stats']()).toEqual({ users: 1, travels: 2, payments: 3, paymentMethods: 0 });
     expect(component['managerRankings']().map((m) => m.managerId)).toEqual(['m1']);
@@ -77,6 +87,7 @@ describe('Dashboard (as ADMIN)', () => {
     expect(component['monthlyRevenue']().map((m) => m.month)).toEqual(['2026-08']);
     expect(component['reports']().map((r) => r.id)).toEqual(['r1']);
     expect(component['reportedNames']().get('m1')).toBe('Jane Doe');
+    expect(component['reporterNames']().get('u1')).toBe('John Smith');
     expect(component['loading']()).toBe(false);
   });
 });
@@ -93,8 +104,8 @@ describe('Dashboard (as TRAVEL_MANAGER)', () => {
     }).compileComponents();
 
     const authService = TestBed.inject(AuthService);
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
-    vi.spyOn(authService, 'userId').mockReturnValue('m1');
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
+    spyOn(authService, 'userId').and.returnValue('m1');
 
     httpMock = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(Dashboard);
@@ -105,10 +116,17 @@ describe('Dashboard (as TRAVEL_MANAGER)', () => {
   afterEach(() => httpMock.verify());
 
   it('shows the manager stats and only the manager own travels, never calling the admin-only endpoints', () => {
-    httpMock.expectOne('/api/travels/managers/me/stats').flush({ travelCount: 2, travelerCount: 3, estimatedRevenue: 900 });
+    httpMock
+      .expectOne('/api/travels/managers/me/stats')
+      .flush({ travelCount: 2, travelerCount: 3, estimatedRevenue: 900, travels: [] });
     httpMock.expectOne('/api/travels').flush([TRAVEL('t1', 'm1'), TRAVEL('t2', 'other-manager')]);
 
-    expect(component['managerStats']()).toEqual({ travelCount: 2, travelerCount: 3, estimatedRevenue: 900 });
+    expect(component['managerStats']()).toEqual({
+      travelCount: 2,
+      travelerCount: 3,
+      estimatedRevenue: 900,
+      travels: [],
+    });
     expect(component['myTravels']().map((t) => t.id)).toEqual(['t1']);
 
     httpMock.expectNone('/api/users');
@@ -118,6 +136,19 @@ describe('Dashboard (as TRAVEL_MANAGER)', () => {
     httpMock.expectNone('/api/travels/admin/travel-rankings');
     httpMock.expectNone('/api/travels/admin/monthly-revenue');
     httpMock.expectNone('/api/reports');
+  });
+
+  it('exposes per-travel subscriber count and average rating keyed by travel id', () => {
+    httpMock.expectOne('/api/travels/managers/me/stats').flush({
+      travelCount: 1,
+      travelerCount: 3,
+      estimatedRevenue: 300,
+      travels: [{ travelId: 't1', title: 'Trip', subscriberCount: 3, averageRating: 4.5, feedbackCount: 2 }],
+    });
+    httpMock.expectOne('/api/travels').flush([TRAVEL('t1', 'm1')]);
+
+    expect(component['travelStatsById']().get('t1')?.subscriberCount).toBe(3);
+    expect(component['travelStatsById']().get('t1')?.averageRating).toBe(4.5);
   });
 });
 
@@ -133,7 +164,7 @@ describe('Dashboard (as TRAVELER)', () => {
     }).compileComponents();
 
     const authService = TestBed.inject(AuthService);
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'traveler1', role: 'TRAVELER' });
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'traveler1', role: 'TRAVELER' });
 
     httpMock = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(Dashboard);
@@ -165,6 +196,22 @@ describe('Dashboard (as TRAVELER)', () => {
         createdAt: '2026-01-01',
       },
     ]);
+    httpMock
+      .expectOne('/api/travels/travelers/me/feedbacks')
+      .flush([{ id: 'f1', travelId: 't1', travelerId: 'u1', rating: 5, comment: 'Super', createdAt: '2026-01-01' }]);
+    httpMock
+      .expectOne('/api/travels/travelers/me/reports')
+      .flush([
+        {
+          id: 'r1',
+          travelId: 't1',
+          reporterId: 'u1',
+          reportedType: 'TRAVELER',
+          reportedId: 'u2',
+          reason: 'Comportement inapproprié',
+          createdAt: '2026-01-01',
+        },
+      ]);
 
     expect(component['travelerStats']()).toEqual({
       participationCount: 4,
@@ -175,6 +222,8 @@ describe('Dashboard (as TRAVELER)', () => {
     expect(component['recommendations']().map((t) => t.id)).toEqual(['t1']);
     expect(component['mySubscriptions']().map((s) => s.id)).toEqual(['s1']);
     expect(component['myPaymentMethods']().map((m) => m.id)).toEqual(['pm1']);
+    expect(component['myFeedbacks']().map((f) => f.id)).toEqual(['f1']);
+    expect(component['myReports']().map((r) => r.id)).toEqual(['r1']);
 
     httpMock.expectNone('/api/users');
     httpMock.expectNone('/api/payments');

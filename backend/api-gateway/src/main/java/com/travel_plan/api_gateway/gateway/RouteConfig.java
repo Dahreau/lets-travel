@@ -58,11 +58,21 @@ public class RouteConfig {
 
     @Bean
     public RouterFunction<ServerResponse> travelServiceRoutes(JwtGatewayFilterFunction jwtFilter) {
-        return route(TRAVEL_SERVICE)
+        RouterFunction<ServerResponse> travels = route(TRAVEL_SERVICE)
                 .route(path("/api/travels/**"), http())
                 .filter(lb(TRAVEL_SERVICE))
                 .filter(jwtFilter)
                 .build();
+
+        // ReportController.listAll() vit dans travel-service mais expose /api/reports, hors du
+        // prefixe /api/travels/** - sans cette route separee, jamais atteignable via la gateway.
+        RouterFunction<ServerResponse> reports = route("travel-service-reports")
+                .route(path("/api/reports/**"), http())
+                .filter(lb(TRAVEL_SERVICE))
+                .filter(jwtFilter)
+                .build();
+
+        return travels.and(reports);
     }
 
     @Bean

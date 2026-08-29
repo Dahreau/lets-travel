@@ -21,4 +21,9 @@ public interface ReportRepository extends JpaRepository<Report, UUID> {
     // (TravelerStatsService.myStats), a ne pas confondre avec countByReportedTypeAndReportedId
     // ci-dessus qui compte les signalements RECUS par un manager.
     long countByReporterId(UUID reporterId);
+
+    // fix/audit-gaps (troubleshooting.md #40) : un Traveler ne pouvait jamais relire le contenu
+    // de ses propres signalements (GET /api/reports est Admin-only) - utilise par
+    // TravelerStatsService.myReports, portee au caller uniquement (jamais un reporterId arbitraire).
+    List<Report> findByReporterId(UUID reporterId);
 }

@@ -9,6 +9,6 @@ import java.util.UUID;
 public class TravelNotFoundException extends RuntimeException {
 
     public TravelNotFoundException(UUID id) {
-        super("Travel not found: " + id);
+        super("Voyage introuvable : " + id);
     }
 }

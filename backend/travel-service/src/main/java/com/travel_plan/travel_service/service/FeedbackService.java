@@ -41,15 +41,15 @@ public class FeedbackService {
         UUID travelerId = requireTravelerId(caller);
 
         if (!subscriptionRepository.existsByTravel_IdAndTravelerId(travelId, travelerId)) {
-            throw new ForbiddenException("You can only leave feedback on a travel you were subscribed to");
+            throw new ForbiddenException("Vous ne pouvez laisser un avis que sur un voyage auquel vous etiez abonne");
         }
 
         if (LocalDate.now(clock).isBefore(travel.getEndDate())) {
-            throw new InvalidFeedbackRequestException("Feedback can only be submitted after the travel has ended");
+            throw new InvalidFeedbackRequestException("Un avis ne peut etre soumis qu'apres la fin du voyage");
         }
 
         feedbackRepository.findByTravel_IdAndTravelerId(travelId, travelerId).ifPresent(existing -> {
-            throw new DuplicateFeedbackException("Feedback already submitted for this travel");
+            throw new DuplicateFeedbackException("Avis deja soumis pour ce voyage");
         });
 
         Feedback feedback = Feedback.builder()
@@ -78,11 +78,11 @@ public class FeedbackService {
                 .toList();
     }
 
-    // Un compte ADMIN par defaut n'a pas de fiche User (userId null) : il ne peut pas
-    // etre "le" traveler d'un feedback, il n'y a rien a rattacher.
+    // Filet de securite : tout compte authentifie a desormais un profil lie (voir
+    // user-service.AdminProfileSeeder pour l'admin par defaut).
     private UUID requireTravelerId(AuthenticatedUser caller) {
         if (caller.userId() == null) {
-            throw new InvalidFeedbackRequestException("A linked user profile is required to submit feedback");
+            throw new InvalidFeedbackRequestException("Un profil utilisateur lie est requis pour soumettre un avis");
         }
         return caller.userId();
     }
@@ -92,7 +92,7 @@ public class FeedbackService {
             return;
         }
         if (!TRAVEL_MANAGER_ROLE.equals(caller.role()) || !travel.getManagerId().equals(caller.userId())) {
-            throw new ForbiddenException("You can only view feedback for your own travels");
+            throw new ForbiddenException("Vous ne pouvez consulter les avis que de vos propres voyages");
         }
     }
 

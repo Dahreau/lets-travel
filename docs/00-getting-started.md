@@ -11,6 +11,8 @@ ne documente que ce qui existe réellement dans le repo au moment où tu la lis.
 - Docker Desktop (+ Docker Compose)
 - Node.js 22 (Angular 21 / `frontend/` — détail : `09-admin-dashboard.md`)
 - Ansible (`pip install ansible --break-system-packages`) + la collection `community.docker`, seulement si tu déploies via `ansible/playbooks/site.yml` (détail : `08-ansible-deploy-tls.md`)
+- k6 (`winget install k6` / `brew install k6` / binaire officiel), pour les tests de charge — détail : `12-e2e-et-k6.md`
+- Playwright s'installe tout seul (`npm install` dans `e2e/`), pour les tests e2e — détail : `12-e2e-et-k6.md`
 
 ## Ce qui tourne réellement aujourd'hui
 
@@ -41,6 +43,8 @@ Vault, Zipkin) — voir `02-app-infra.md`.
 - [`08-ansible-deploy-tls.md`](08-ansible-deploy-tls.md) — déploiement automatisé, replicas, TLS via Nginx (branche `chore/ansible-deploy-tls`).
 - [`09-admin-dashboard.md`](09-admin-dashboard.md) — Admin Dashboard Angular (branche `feat/admin-dashboard`).
 - [`10-audit-demo-guide.md`](10-audit-demo-guide.md) — pour chaque point de `travel-plan_audit.md`, la commande exacte à taper ou le point à savoir expliquer à l'oral.
+- [`11-audit-cheatsheet.md`](11-audit-cheatsheet.md) — la même chose que `10-audit-demo-guide.md`, juste les commandes à copier-coller.
+- [`12-e2e-et-k6.md`](12-e2e-et-k6.md) — tests end-to-end (Playwright) et tests de charge (k6), prérequis et commandes.
 - [`nouveautes-vs-buy02.md`](nouveautes-vs-buy02.md) — tout ce qui est vraiment nouveau par rapport à buy-02, mis à jour à chaque branche.
 - [`troubleshooting.md`](troubleshooting.md) — journal des problèmes réels rencontrés (infra, CI/CD, code), avec la cause et le correctif. Pas numéroté ni lié à une branche précise, mis à jour en continu.
 

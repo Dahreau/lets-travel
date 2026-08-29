@@ -21,6 +21,11 @@ services:
       - maven_repo:/var/jenkins_home/.m2
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOST_REPO_PATH}/infra/ci/deploy-workspace:${HOST_REPO_PATH}/infra/ci/deploy-workspace
+      # Sans ce mount, STATE_DIR (cf Jenkinsfile, stage Deploy) est ecrit dans la
+      # couche ecriture EPHEMERE du conteneur Jenkins, pas sur le disque hote : la
+      # sauvegarde de .unseal-key.txt/certs ne survit pas a une recreation du
+      # conteneur jenkins (rebuild, docker compose up --build, etc).
+      - ${HOST_REPO_PATH}/infra/ci/persistent-state:${HOST_REPO_PATH}/infra/ci/persistent-state
     networks:
       - ci
 

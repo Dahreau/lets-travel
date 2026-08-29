@@ -3,7 +3,6 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { Observable } from 'rxjs';
-import { vi } from 'vitest';
 import { AuthService } from './auth';
 import { authGuard } from './auth-guard';
 
@@ -23,7 +22,7 @@ describe('authGuard', () => {
   afterEach(() => httpMock.verify());
 
   it('redirects to /login with a returnUrl when not authenticated', () => {
-    vi.spyOn(authService, 'isAuthenticated').mockReturnValue(false);
+    spyOn(authService, 'isAuthenticated').and.returnValue(false);
 
     const result = TestBed.runInInjectionContext(() =>
       authGuard({} as never, { url: '/users' } as never),
@@ -35,8 +34,8 @@ describe('authGuard', () => {
   });
 
   it('allows navigation synchronously when authenticated and currentUser is already loaded', () => {
-    vi.spyOn(authService, 'isAuthenticated').mockReturnValue(true);
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'admin', role: 'ADMIN' });
+    spyOn(authService, 'isAuthenticated').and.returnValue(true);
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'admin', role: 'ADMIN' });
 
     const result = TestBed.runInInjectionContext(() =>
       authGuard({} as never, { url: '/users' } as never),
@@ -49,7 +48,7 @@ describe('authGuard', () => {
   // (voir commentaire dans auth-guard.ts) : le guard doit le repeupler lui-même avant de laisser
   // passer la navigation, sinon le filtrage par rôle (nav manager, managerGuard) casserait.
   it('calls /me and allows navigation when authenticated but currentUser is not yet loaded', () => {
-    vi.spyOn(authService, 'isAuthenticated').mockReturnValue(true);
+    spyOn(authService, 'isAuthenticated').and.returnValue(true);
     let resolved: unknown;
 
     const result = TestBed.runInInjectionContext(() =>
@@ -63,7 +62,7 @@ describe('authGuard', () => {
   });
 
   it('redirects to /login when authenticated but /me fails', () => {
-    vi.spyOn(authService, 'isAuthenticated').mockReturnValue(true);
+    spyOn(authService, 'isAuthenticated').and.returnValue(true);
     const router = TestBed.inject(Router);
     let resolved: unknown;
 

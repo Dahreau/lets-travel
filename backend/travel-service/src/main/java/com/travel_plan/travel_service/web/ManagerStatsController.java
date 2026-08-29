@@ -32,6 +32,14 @@ public class ManagerStatsController {
         return managerStatsService.publicStats(managerId);
     }
 
+    // fix/audit-gaps : endpoint interne, jamais appele par le frontend - consomme uniquement par
+    // user-service (TravelServiceClient) pour verifier qu'un traveler est bien abonne a l'un des
+    // voyages du manager appelant avant de lui exposer son profil (troubleshooting.md #38).
+    @GetMapping("/me/subscribers/{travelerId}")
+    public SubscriberCheckResponse isMySubscriber(@PathVariable UUID travelerId, Authentication authentication) {
+        return new SubscriberCheckResponse(managerStatsService.isMySubscriber(principal(authentication), travelerId));
+    }
+
     private AuthenticatedUser principal(Authentication authentication) {
         return (AuthenticatedUser) authentication.getPrincipal();
     }

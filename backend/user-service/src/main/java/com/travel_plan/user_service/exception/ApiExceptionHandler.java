@@ -24,10 +24,17 @@ public class ApiExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
+    // fix/audit-gaps : troubleshooting.md #38 - IDOR sur GET /api/users/{id}, un Travel Manager
+    // qui n'est pas le proprietaire du profil demande recoit desormais un 403 clair.
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<Map<String, Object>> handleForbidden(ForbiddenException ex) {
+        return build(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<Map<String, Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
-        return build(HttpStatus.CONFLICT, "Email already in use");
+        return build(HttpStatus.CONFLICT, "Email deja utilise");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -35,7 +42,7 @@ public class ApiExceptionHandler {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .reduce((first, second) -> first + ", " + second)
-                .orElse("Validation failed");
+                .orElse("Echec de la validation");
         return build(HttpStatus.BAD_REQUEST, message);
     }
 
@@ -43,21 +50,21 @@ public class ApiExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleMalformedRequest(HttpMessageNotReadableException ex) {
         log.warn("Malformed request body: {}", ex.getMessage());
-        return build(HttpStatus.BAD_REQUEST, "Malformed or invalid request body");
+        return build(HttpStatus.BAD_REQUEST, "Corps de requete invalide ou mal forme");
     }
 
     // ID d'URL non-UUID (ex: /users/null) -> 400, pas 500.
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         log.warn("Invalid path parameter '{}': {}", ex.getName(), ex.getMessage());
-        return build(HttpStatus.BAD_REQUEST, "Invalid value for parameter '" + ex.getName() + "'");
+        return build(HttpStatus.BAD_REQUEST, "Valeur invalide pour le parametre '" + ex.getName() + "'");
     }
 
     // Filet de securite : toute exception imprevue reste un 500 clair, pas un 403 trompeur.
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
         log.error("Unhandled exception while processing request", ex);
-        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error");
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Erreur inattendue");
     }
 
     private ResponseEntity<Map<String, Object>> build(HttpStatus status, String message) {

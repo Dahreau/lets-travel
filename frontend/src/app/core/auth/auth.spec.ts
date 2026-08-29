@@ -82,7 +82,9 @@ describe('AuthService', () => {
     const travelerId = '22222222-2222-2222-2222-222222222222';
     const token = fakeToken(futureExp, travelerId);
 
-    service.register({ username: 'traveler1', password: 'secret', userId: travelerId }).subscribe();
+    service
+      .register({ username: 'traveler1', password: 'secret', registrationToken: 'fake-registration-token' })
+      .subscribe();
     const req = httpMock.expectOne('/api/auth/register');
     expect(req.request.method).toBe('POST');
     req.flush({ token });
