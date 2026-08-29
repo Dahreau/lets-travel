@@ -5,15 +5,17 @@ def buildService(svc) {
     sh "cd backend/${svc} && ./mvnw -B clean verify -DforkCount=1 -DreuseForks=false"
 }
 
-// standalone=true : Build & Test a ete saute (SKIP_BUILD_TEST) - on (re)compile et (re)teste
-// nous-memes avant sonar:sonar, faute de target/ deja pret dans ce run.
+// standalone=true : Build & Test a ete saute - on (re)compile nous-memes avant sonar:sonar.
+// returnStatus (pas de throw) : chaque service doit etre analyse meme si un precedent a echoue.
 def sonarService(svc, boolean standalone) {
     def goal = standalone
         ? 'clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar'
         : 'org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar'
+    def status = 0
     withSonarQubeEnv('sonarqube') {
-        sh "cd backend/${svc} && ./mvnw -B ${goal} -DforkCount=1 -DreuseForks=false -Dsonar.projectKey=lets-travel-${svc} -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300"
+        status = sh(script: "cd backend/${svc} && ./mvnw -B ${goal} -DforkCount=1 -DreuseForks=false -Dsonar.projectKey=lets-travel-${svc} -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300", returnStatus: true)
     }
+    return status
 }
 
 def buildFrontend() {
@@ -31,9 +33,11 @@ def sonarFrontend(boolean standalone) {
     if (standalone) {
         buildFrontend()
     }
+    def status = 0
     withSonarQubeEnv('sonarqube') {
-        sh "cd frontend && npx --yes @sonar/scan -Dsonar.projectKey=lets-travel-frontend -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300"
+        status = sh(script: "cd frontend && npx --yes @sonar/scan -Dsonar.projectKey=lets-travel-frontend -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300", returnStatus: true)
     }
+    return status
 }
 
 pipeline {
@@ -95,9 +99,21 @@ pipeline {
             when { expression { !params.SKIP_SONAR } }
             steps {
                 script {
+                    // On analyse TOUT le monde d'abord, on ne bloque qu'a la fin - sinon le premier
+                    // service en echec masque l'etat des suivants (voir troubleshooting.md).
                     boolean standalone = params.SKIP_BUILD_TEST as boolean
-                    ALL_SERVICES.each { svc -> sonarService(svc, standalone) }
-                    sonarFrontend(standalone)
+                    def failed = []
+                    ALL_SERVICES.each { svc ->
+                        if (sonarService(svc, standalone) != 0) {
+                            failed << svc
+                        }
+                    }
+                    if (sonarFrontend(standalone) != 0) {
+                        failed << 'frontend'
+                    }
+                    if (failed) {
+                        error("Quality Gate Sonar en echec pour : ${failed.join(', ')}")
+                    }
                 }
             }
         }

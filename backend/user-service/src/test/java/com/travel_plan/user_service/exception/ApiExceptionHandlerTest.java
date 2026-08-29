@@ -29,7 +29,7 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleDataIntegrityViolation(exception);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody().get("message")).isEqualTo("Email deja utilise");
+        assertThat(response.getBody()).containsEntry("message", "Email deja utilise");
     }
 
     @Test
@@ -43,7 +43,7 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleValidation(exception);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("message")).isEqualTo("email: must not be blank");
+        assertThat(response.getBody()).containsEntry("message", "email: must not be blank");
     }
 
     @Test
@@ -54,7 +54,7 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleMalformedRequest(exception);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("message")).isEqualTo("Corps de requete invalide ou mal forme");
+        assertThat(response.getBody()).containsEntry("message", "Corps de requete invalide ou mal forme");
     }
 
     @Test
@@ -66,7 +66,7 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleTypeMismatch(exception);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("message")).isEqualTo("Valeur invalide pour le parametre 'id'");
+        assertThat(response.getBody()).containsEntry("message", "Valeur invalide pour le parametre 'id'");
     }
 
     @Test
@@ -74,6 +74,6 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleUnexpected(new RuntimeException("boom"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-        assertThat(response.getBody().get("message")).isEqualTo("Erreur inattendue");
+        assertThat(response.getBody()).containsEntry("message", "Erreur inattendue");
     }
 }

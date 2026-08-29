@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -273,14 +275,14 @@ class UserServiceTest {
         UUID id = UUID.randomUUID();
         User user = existingUser(null);
         when(userRepository.findById(id)).thenReturn(Optional.of(user));
-        org.mockito.Mockito.doThrow(new IllegalStateException("auth-service unreachable"))
+        doThrow(new IllegalStateException("auth-service unreachable"))
                 .when(authServiceClient)
                 .deleteAccountByUserId(id, "Bearer admin-token");
 
         assertThatThrownBy(() -> userService.delete(id, "Bearer admin-token"))
                 .isInstanceOf(IllegalStateException.class);
 
-        verify(userRepository, org.mockito.Mockito.never()).delete(any(User.class));
+        verify(userRepository, never()).delete(any(User.class));
     }
 
     // fix/audit-gaps (troubleshooting.md #41) : droit d'acces/portabilite RGPD - l'appelant
