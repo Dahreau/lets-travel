@@ -884,3 +884,13 @@ docker compose restart payment-service
 
 **A retenir** : sur un projet Angular recent utilisant `@angular/build:unit-test` avec un `karma.conf.js` custom (`runnerConfig: true`), les flags CLI historiques d'Angular CLI comme `--coverage-reporters` ne sont PAS transmis au runner - c'est la config `coverageReporter.reporters` du fichier karma qui fait foi. Verifier aussi la couverture "Overall Code" (pas seulement "New Code") sur Sonar pour distinguer un vrai probleme de generation de rapport (0% partout, tout le temps) d'un probleme ponctuel limite au code recent.
 
+## 70. `AuthServiceClientTest.createAccountCallsAuthService` : NullPointerException sur `.retrieve()`, `.body(Object)` renvoyait null
+
+**Probleme** : premiere execution reelle de ce nouveau test (ecrit cote assistant, jamais lance avant puisque `mvn test` reste toujours lance par toi) - `AuthServiceClient.createAccount` plante avec un NPE : `.body(new CreateAccountBody(...))` renvoie null, donc l'appel `.retrieve()` juste apres explose. Les 4 autres tests du meme fichier (basés sur `RequestHeadersSpec`, plus court : `uri` -> `header` -> `retrieve`) passaient sans probleme.
+
+**Cause** : le mock de `RestClient.RequestBodySpec` etait stubbe maillon par maillon (`contentType(...)`, `header(...)`, `body(any())` renvoient chacun explicitement `bodySpec`) - contrairement au reste du projet qui ne mocke jamais ce point precis de l'API RestClient (seulement `RequestHeadersSpec`/`ResponseSpec`, plus simples). Un des maillons de cette chaine plus longue ne matchait pas au runtime et Mockito appliquait son comportement par defaut pour un appel non stubbe : renvoyer null plutot que de lever une erreur explicite.
+
+**Solution** : le mock de `RequestBodySpec` est cree avec `Answers.RETURNS_SELF` (`mock(RestClient.RequestBodySpec.class, Answers.RETURNS_SELF)`) - toute methode de la chaine qui renvoie normalement le meme type se renvoie elle-meme par defaut, sans avoir besoin de stubber `contentType`/`header`/`body` individuellement. Seuls `uri(...)` (renvoie un objet different) et `retrieve()` (idem, renvoie `ResponseSpec`) restent stubbes explicitement.
+
+**A retenir** : pour mocker une chaine fluide (builder-style) dont la plupart des methodes se contentent de renvoyer `this`/le meme type, preferer `mock(Type.class, Answers.RETURNS_SELF)` plutot que de stubber chaque maillon un par un - plus court, et surtout plus robuste : un maillon oublie ou mal stubbe (mauvais matcher, mauvaise surcharge) renvoie silencieusement `this` au lieu de `null`, ce qui evite une `NullPointerException` sans rapport avec le vrai comportement teste.
+
