@@ -1,6 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { TestBed } from '@angular/core/testing';
+import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Travel } from '../../../core/models/travel';
 import { TravelBrowse } from './travel-browse';
@@ -79,31 +79,37 @@ describe('TravelBrowse', () => {
     req.flush([]);
   });
 
-  it('autocompletes suggestions while typing, debounced', async () => {
-    fixture.detectChanges();
-    httpMock.expectOne('/api/travels/travelers/me/subscriptions').flush([]);
-    httpMock.expectOne('/api/travels').flush([]);
+  it(
+    'autocompletes suggestions while typing, debounced',
+    fakeAsync(() => {
+      fixture.detectChanges();
+      httpMock.expectOne('/api/travels/travelers/me/subscriptions').flush([]);
+      httpMock.expectOne('/api/travels').flush([]);
 
-    component['searchForm'].controls.q.setValue('par');
-    await new Promise((resolve) => setTimeout(resolve, 300));
+      component['searchForm'].controls.q.setValue('par');
+      tick(250);
 
-    const req = httpMock.expectOne((r) => r.url === '/api/travels/autocomplete');
-    expect(req.request.params.get('q')).toBe('par');
-    req.flush([TRAVEL('t1')]);
+      const req = httpMock.expectOne((r) => r.url === '/api/travels/autocomplete');
+      expect(req.request.params.get('q')).toBe('par');
+      req.flush([TRAVEL('t1')]);
 
-    expect(component['suggestions']().map((t) => t.id)).toEqual(['t1']);
-  });
+      expect(component['suggestions']().map((t) => t.id)).toEqual(['t1']);
+    }),
+  );
 
-  it('does not autocomplete for queries shorter than 2 characters', async () => {
-    fixture.detectChanges();
-    httpMock.expectOne('/api/travels/travelers/me/subscriptions').flush([]);
-    httpMock.expectOne('/api/travels').flush([]);
+  it(
+    'does not autocomplete for queries shorter than 2 characters',
+    fakeAsync(() => {
+      fixture.detectChanges();
+      httpMock.expectOne('/api/travels/travelers/me/subscriptions').flush([]);
+      httpMock.expectOne('/api/travels').flush([]);
 
-    component['searchForm'].controls.q.setValue('p');
-    await new Promise((resolve) => setTimeout(resolve, 300));
+      component['searchForm'].controls.q.setValue('p');
+      tick(250);
 
-    httpMock.expectNone((r) => r.url === '/api/travels/autocomplete');
-    expect(component['suggestions']()).toHaveSize(0); // More specific assertion to ensure no suggestions are populated
-    expect(component['searchForm'].controls.q.value).toBe('p'); // Assertion to ensure the query value is correctly set
-  });
+      httpMock.expectNone((r) => r.url === '/api/travels/autocomplete');
+      expect(component['suggestions']()).toHaveSize(0);
+      expect(component['searchForm'].controls.q.value).toBe('p');
+    }),
+  );
 });

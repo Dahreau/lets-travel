@@ -89,8 +89,10 @@ pipeline {
             when { expression { !params.SKIP_BUILD_TEST } }
             steps {
                 script {
-                    ALL_SERVICES.each { svc -> buildService(svc) }
+                    // Frontend d'abord (~1min30) : un echec s'y voit tout de suite plutot
+                    // qu'apres les 5 services backend (voir troubleshooting.md #72).
                     buildFrontend()
+                    ALL_SERVICES.each { svc -> buildService(svc) }
                 }
             }
         }

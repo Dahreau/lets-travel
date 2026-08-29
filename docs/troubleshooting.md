@@ -894,3 +894,23 @@ docker compose restart payment-service
 
 **A retenir** : pour mocker une chaine fluide (builder-style) dont la plupart des methodes se contentent de renvoyer `this`/le meme type, preferer `mock(Type.class, Answers.RETURNS_SELF)` plutot que de stubber chaque maillon un par un - plus court, et surtout plus robuste : un maillon oublie ou mal stubbe (mauvais matcher, mauvaise surcharge) renvoie silencieusement `this` au lieu de `null`, ce qui evite une `NullPointerException` sans rapport avec le vrai comportement teste.
 
+## 71. `TravelBrowse` : test d'autocompletion debounce flaky (timer reel au lieu de temps simule)
+
+**Probleme** : `autocompletes suggestions while typing, debounced` echoue par intermittence dans Jenkins (premiere fois observee sur une machine deja chargee par les builds backend precedents) - `Expected one matching request... found none`, alors que le test passe generalement en local.
+
+**Cause** : le test attendait le debounce (250ms cote `TravelBrowse.watchAutocomplete()`) avec un vrai timer (`await new Promise(r => setTimeout(r, 300))`) au lieu d'un temps simule - sur une machine sous charge (CPU partage avec les 5 builds Maven/Testcontainers qui viennent de tourner), rien ne garantit qu'un `setTimeout(300)` reel se resout apres le timer RxJS de 250ms : ordonnancement du navigateur headless, throttling, boucle d'evenements ralentie peuvent inverser l'ordre.
+
+**Solution** : passage a `fakeAsync`/`tick(250)` (`@angular/core/testing`), le pattern standard Angular pour tester du code base sur `debounceTime` - `tick()` avance une horloge simulee de facon deterministe, sans dependre du vrai temps ecoule ni de la charge machine. Applique aux deux tests concernes (`autocompletes...` et `does not autocomplete for queries shorter than 2 characters`, qui utilisait le meme pattern fragile).
+
+**A retenir** : ne jamais tester un operateur RxJS base sur le temps (`debounceTime`, `throttleTime`, `delay`...) avec un vrai `setTimeout`/`await` cote test - le resultat depend de la charge de la machine qui execute les tests, donc fiable en local et flaky en CI des que la machine est sollicitee. `fakeAsync` + `tick()` est deterministe et insensible a la charge.
+
+## 72. Build & Test : le frontend (rapide) tournait apres les 5 services backend (lents) - un echec frontend ne se voyait qu'apres ~28min
+
+**Probleme** : `ALL_SERVICES.each { buildService(svc) }` puis `buildFrontend()` - un echec frontend (ex: test flaky, voir #71) n'apparaissait qu'apres avoir attendu la compilation+tests des 5 services backend, alors que le frontend seul prend ~1min30.
+
+**Cause** : simple ordre d'execution choisi sans se soucier du cout relatif de chaque etape - le frontend, bien plus rapide a rendre un verdict, passait en dernier.
+
+**Solution** : `buildFrontend()` appele en premier, avant la boucle sur `ALL_SERVICES`. Ne change rien a ce qui est teste ni au temps total d'un run qui reussit entierement - seulement l'ordre, pour qu'un echec sur la partie la moins chere a verifier se voie le plus tot possible.
+
+**A retenir** : dans une sequence de verifications independantes de couts tres differents, executer les moins cheres en premier (fail-fast trie par cout croissant) - ca ne reduit pas le temps total d'un run qui passe, mais ca minimise le temps perdu avant de decouvrir un echec sur la partie rapide. Ca ne resout pas le cas symetrique (un echec sur le DERNIER service backend reste decouvert tard) - seulement un reordonnancement complet ou une execution parallele changerait ca.
+
