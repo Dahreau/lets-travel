@@ -18,10 +18,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
   && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
   && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list \
   && apt-get update \
-  && apt-get install -y --no-install-recommends nodejs docker-ce-cli docker-compose-plugin python3-pip sudo \
+  && apt-get install -y --no-install-recommends nodejs docker-ce-cli docker-compose-plugin python3-pip sudo chromium \
   && rm -rf /var/lib/apt/lists/* \
   && pip install --break-system-packages ansible \
   && ansible-galaxy collection install community.docker
+
+# chromium ci-dessus : fournit les libs partagees (libgobject-2.0.so.0 et consorts) dont
+# le Chrome telecharge par Puppeteer a besoin pour ChromeHeadless pendant "ng test".
 
 ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
 ENV CASC_JENKINS_CONFIG="/var/jenkins_home/casc.yaml"
