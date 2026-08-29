@@ -1,24 +1,12 @@
 def ALL_SERVICES = ['api-gateway', 'auth-service', 'user-service', 'travel-service', 'payment-service']
-def ALL_TARGETS = ALL_SERVICES + ['frontend']
-
-def resolveTargets(String raw, List allTargets) {
-    if (!raw?.trim()) {
-        return allTargets
-    }
-    def requested = raw.split(',').collect { it.trim() }.findAll { it }
-    def invalid = requested - allTargets
-    if (invalid) {
-        error("TARGET_SERVICES invalide : ${invalid.join(', ')} (valeurs possibles : ${allTargets.join(', ')})")
-    }
-    return requested
-}
+def DEPLOYED_BASE_URL = 'https://host.docker.internal:8443'
 
 def buildService(svc) {
     sh "cd backend/${svc} && ./mvnw -B clean verify -DforkCount=1 -DreuseForks=false"
 }
 
-// standalone=true : ce service n'a pas ete construit par Build & Test dans ce run
-// (skip global ou hors TARGET_SERVICES) - on (re)compile et (re)teste avant sonar:sonar.
+// standalone=true : Build & Test a ete saute (SKIP_BUILD_TEST) - on (re)compile et (re)teste
+// nous-memes avant sonar:sonar, faute de target/ deja pret dans ce run.
 def sonarService(svc, boolean standalone) {
     def goal = standalone
         ? 'clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar'
@@ -52,10 +40,9 @@ pipeline {
     agent any
 
     parameters {
-        booleanParam(name: 'SKIP_BUILD_TEST', defaultValue: false, description: 'Saute la stage Build & Test. Sonar/Deploy se debrouillent seuls si besoin. Force le resultat en FAILURE.')
+        booleanParam(name: 'SKIP_BUILD_TEST', defaultValue: false, description: 'Saute la stage Build & Test. Sonar se debrouille seul si besoin. Force le resultat en FAILURE.')
         booleanParam(name: 'SKIP_SONAR', defaultValue: false, description: 'Saute la stage SonarQube Analysis & Quality Gate. Force le resultat en FAILURE.')
-        booleanParam(name: 'SKIP_DEPLOY', defaultValue: false, description: 'Saute la stage Deploy. Force le resultat en FAILURE.')
-        string(name: 'TARGET_SERVICES', defaultValue: '', description: 'Liste separee par des virgules parmi api-gateway,auth-service,user-service,travel-service,payment-service,frontend. Vide = tous. Restreint uniquement Build & Test (Sonar reste toujours global). Force le resultat en FAILURE si non vide.')
+        booleanParam(name: 'SKIP_DEPLOY', defaultValue: false, description: 'Saute Deploy ET les tests e2e/k6 (qui ont besoin du deploiement complet pour tourner). Force le resultat en FAILURE.')
     }
 
     options {
@@ -98,11 +85,8 @@ pipeline {
             when { expression { !params.SKIP_BUILD_TEST } }
             steps {
                 script {
-                    def targets = resolveTargets(params.TARGET_SERVICES, ALL_TARGETS)
-                    targets.findAll { it != 'frontend' }.each { svc -> buildService(svc) }
-                    if (targets.contains('frontend')) {
-                        buildFrontend()
-                    }
+                    ALL_SERVICES.each { svc -> buildService(svc) }
+                    buildFrontend()
                 }
             }
         }
@@ -111,11 +95,9 @@ pipeline {
             when { expression { !params.SKIP_SONAR } }
             steps {
                 script {
-                    // Sonar analyse toujours TOUS les services, meme si Build & Test a ete
-                    // restreint via TARGET_SERVICES - seul standalone varie par service.
-                    def builtTargets = (params.SKIP_BUILD_TEST as boolean) ? [] : resolveTargets(params.TARGET_SERVICES, ALL_TARGETS)
-                    ALL_SERVICES.each { svc -> sonarService(svc, !builtTargets.contains(svc)) }
-                    sonarFrontend(!builtTargets.contains('frontend'))
+                    boolean standalone = params.SKIP_BUILD_TEST as boolean
+                    ALL_SERVICES.each { svc -> sonarService(svc, standalone) }
+                    sonarFrontend(standalone)
                 }
             }
         }
@@ -162,17 +144,57 @@ pipeline {
                 '''
             }
         }
+
+        stage('Wait for stack ready') {
+            when { expression { !params.SKIP_DEPLOY } }
+            steps {
+                sh """
+                    set -e
+                    # Deploy attend deja les healthchecks Compose, mais nginx/les apps peuvent
+                    # finir de demarrer quelques secondes apres - filet de securite avant e2e/k6.
+                    for attempt in \$(seq 1 30); do
+                        code=\$(curl -sk -o /dev/null -w '%{http_code}' ${DEPLOYED_BASE_URL}/ || echo 000)
+                        [ "\$code" = "200" ] && { echo "Stack prete (HTTP \$code)."; exit 0; }
+                        echo "Stack pas prete (HTTP \$code), tentative \$attempt/30..."
+                        sleep 5
+                    done
+                    echo "Stack toujours pas prete apres 30 tentatives (2m30)." >&2
+                    exit 1
+                """
+            }
+        }
+
+        stage('E2E Tests (Playwright)') {
+            when { expression { !params.SKIP_DEPLOY } }
+            environment {
+                E2E_BASE_URL = "${DEPLOYED_BASE_URL}"
+            }
+            steps {
+                sh '''
+                    cd e2e
+                    npm ci
+                    npx playwright test
+                '''
+            }
+        }
+
+        stage('Load Tests (k6)') {
+            when { expression { !params.SKIP_DEPLOY } }
+            steps {
+                sh "docker run --rm -i --add-host=host.docker.internal:host-gateway grafana/k6 run -e BASE_URL=${DEPLOYED_BASE_URL} - < k6/lets-travel-load-test.js"
+            }
+        }
     }
 
     post {
         always {
             script {
-                // Un run partiel (stage sautee ou services cibles) ne peut jamais valoir comme
-                // pipeline complete, meme si tout ce qui a tourne est vert - voir troubleshooting.md.
-                boolean fullRun = !params.SKIP_BUILD_TEST && !params.SKIP_SONAR && !params.SKIP_DEPLOY && !params.TARGET_SERVICES?.trim()
+                // Un run partiel (une stage sautee) ne peut jamais valoir comme pipeline
+                // complete, meme si tout ce qui a tourne est vert - voir troubleshooting.md.
+                boolean fullRun = !params.SKIP_BUILD_TEST && !params.SKIP_SONAR && !params.SKIP_DEPLOY
                 if (!fullRun) {
                     currentBuild.result = 'FAILURE'
-                    currentBuild.description = "Run partiel (build=${!params.SKIP_BUILD_TEST}, sonar=${!params.SKIP_SONAR}, deploy=${!params.SKIP_DEPLOY}, cibles=${params.TARGET_SERVICES?.trim() ?: 'toutes'}) - FAILURE forcee, ce n'est pas un resultat de pipeline complet."
+                    currentBuild.description = "Run partiel (build=${!params.SKIP_BUILD_TEST}, sonar=${!params.SKIP_SONAR}, deploy+e2e+k6=${!params.SKIP_DEPLOY}) - FAILURE forcee, ce n'est pas un resultat de pipeline complet."
                 }
             }
         }

@@ -834,12 +834,22 @@ docker compose restart payment-service
 
 **A retenir** : tout artefact genere une seule fois et garde par une condition `creates:`/`exists` doit etre explicitement documente comme "a regenerer si X change" - sinon la deprecation est invisible jusqu'a ce que le TLS interne echoue avec une erreur SAN mismatch, loin de la cause reelle.
 
-## 65. Params Jenkins granulaires (skip par stage, cibler des services) : un run partiel doit rester FAILURE meme si tout ce qu'il a teste est vert
+## 65. Params Jenkins granulaires (skip par stage) : un run partiel doit rester FAILURE meme si tout ce qu'il a teste est vert
 
-**Probleme** : `SKIP_BUILD_TEST` etait le seul param existant et sautait Build & Test ET Sonar ensemble, sans moyen de cibler un service precis ni de lancer Sonar seul quand on sait deja que Build & Test passe - or un run partiel qui affiche SUCCESS pourrait etre confondu avec une vraie validation complete du pipeline.
+**Probleme** : `SKIP_BUILD_TEST` etait le seul param existant et sautait Build & Test ET Sonar ensemble, sans moyen de lancer Sonar seul quand on sait deja que Build & Test passe - or un run partiel qui affiche SUCCESS pourrait etre confondu avec une vraie validation complete du pipeline.
 
 **Cause** : les stages Build & Test et SonarQube partageaient le meme `when { !params.SKIP_BUILD_TEST }`, et rien ne forcait le resultat final quand une portion du pipeline n'avait pas tourne.
 
-**Solution** : ajout de `SKIP_SONAR`, `SKIP_DEPLOY` (independants) et `TARGET_SERVICES` (liste de services/frontend, vide = tous) qui ne restreint QUE Build & Test - Sonar analyse toujours tous les services, avec un flag `standalone` calcule par service (`true` si ce service n'a pas ete construit dans ce run) pour savoir s'il doit se recompiler lui-meme (`clean verify sonar:sonar`) avant l'analyse. Le bloc `post.always` calcule `fullRun` (aucun skip, `TARGET_SERVICES` vide) et force `currentBuild.result = 'FAILURE'` des que ce n'est pas le cas, quel que soit le resultat des stages qui ont reellement tourne.
+**Solution** : ajout de `SKIP_SONAR` et `SKIP_DEPLOY`, independants de `SKIP_BUILD_TEST`. La stage Sonar sait se debrouiller seule (`clean verify sonar:sonar` complet via un flag `standalone`) si Build & Test a ete saute. Un param `TARGET_SERVICES` pour cibler un service precis a ete envisage puis retire (juge inutile en pratique - voir aussi #66) : Sonar doit toujours rester une analyse globale, et cibler Build & Test seul n'apportait pas assez de valeur pour la complexite ajoutee. Le bloc `post.always` calcule `fullRun` (aucun skip) et force `currentBuild.result = 'FAILURE'` des que ce n'est pas le cas, quel que soit le resultat des stages qui ont reellement tourne.
 
 **A retenir** : un param qui permet de sauter une partie du pipeline doit toujours s'accompagner d'une regle qui empeche le build de finir en SUCCESS tant que le pipeline entier n'a pas tourne - sinon un run de debug/cible fini vert peut etre pris a tort pour une validation complete.
+
+## 66. Tests e2e (Playwright) et k6 jamais integres a Jenkins - restaient a lancer manuellement apres deploiement
+
+**Probleme** : `e2e/` et `k6/` existaient et fonctionnaient (voir `docs/12-e2e-et-k6.md`) mais aucune stage Jenkins ne les lancait - ils repondent pourtant a deux items explicites de l'enonce/audit (tests end-to-end, tenue en charge), restes non automatises faute de pouvoir tourner avant qu'une stack complete soit deployee.
+
+**Cause** : contrairement a Build & Test/Sonar (qui ne dependent que du code source), e2e et k6 tapent sur de vraies URLs HTTP d'une stack deployee - ils ne peuvent donc logiquement s'inserer qu'apres la stage Deploy, jamais avant, et ont ete laisses de cote lors de la premiere version du Jenkinsfile pour cette raison.
+
+**Solution** : deux nouvelles stages `E2E Tests (Playwright)` et `Load Tests (k6)` ajoutees apres Deploy, plus une stage `Wait for stack ready` avant elles (boucle `curl` sur `https://host.docker.internal:8443/` jusqu'a HTTP 200, 30 tentatives x 5s) en filet de securite - Compose attend deja ses healthchecks pendant `docker compose up`, mais les apps peuvent finir de demarrer quelques secondes apres. Playwright tourne directement dans le conteneur Jenkins (`npm ci` + `npx playwright test`, `E2E_BASE_URL=https://host.docker.internal:8443`) ; k6 tourne via `docker run --rm -i grafana/k6` (image officielle, meme pattern que le reste du pipeline qui pilote deja Docker via le socket monte) plutot que d'installer le binaire k6 en plus dans l'image Jenkins. Les trois nouvelles stages partagent le `when { !params.SKIP_DEPLOY }` de Deploy : skip Deploy = rien a tester dessus, donc elles se sautent ensemble.
+
+**A retenir** : une suite de tests qui a besoin d'un environnement deploye (pas seulement du code source compile) doit toujours etre placee apres la stage de deploiement dans le pipeline, jamais en parallele ni avant - et merite son propre filet d'attente de disponibilite (health-check en boucle) plutot que de supposer que "le deploiement a fini" veut dire "l'application repond deja aux requetes HTTP".
