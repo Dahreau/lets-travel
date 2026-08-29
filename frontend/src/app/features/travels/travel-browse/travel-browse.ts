@@ -2,7 +2,7 @@ import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angula
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { debounceTime, distinctUntilChanged, finalize, of, switchMap } from 'rxjs';
+import { SchedulerLike, asyncScheduler, debounceTime, distinctUntilChanged, finalize, of, switchMap } from 'rxjs';
 import { extractErrorMessage } from '../../../core/http/api-error';
 import { Travel } from '../../../core/models/travel';
 import { ToastService } from '../../../core/notifications/toast';
@@ -29,6 +29,10 @@ export class TravelBrowse implements OnInit {
 
   protected readonly searchForm = this.fb.nonNullable.group({ q: [''] });
 
+  // Overridable en test (VirtualTimeScheduler) - fakeAsync/jasmine.clock() ne marchent pas de
+  // facon fiable ici (projet zoneless, voir troubleshooting.md #71).
+  protected debounceScheduler: SchedulerLike = asyncScheduler;
+
   protected readonly loading = signal(true);
   protected readonly travels = signal<Travel[]>([]);
   protected readonly suggestions = signal<Travel[]>([]);
@@ -51,7 +55,7 @@ export class TravelBrowse implements OnInit {
   private watchAutocomplete(): void {
     this.searchForm.controls.q.valueChanges
       .pipe(
-        debounceTime(250),
+        debounceTime(250, this.debounceScheduler),
         distinctUntilChanged(),
         switchMap((query) => (query.trim().length >= 2 ? this.travelsService.autocomplete(query.trim()) : of([]))),
         takeUntilDestroyed(this.destroyRef),
