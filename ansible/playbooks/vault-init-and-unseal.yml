@@ -1,0 +1,87 @@
+---
+# Sequence extraite de vault-unseal.yml (troubleshooting.md #77) : initialise Vault si besoin puis
+# le descelle avec la cle stockee. Rejouable telle quelle - vault-unseal.yml l'inclut une 2e fois
+# apres un reset si la cle stockee s'est averee perimee (vault_unseal_result.rc != 0).
+- name: Initialize Vault (first run only — single key share, justified for a single-operator/demo deployment, not a multi-party production cluster)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ project_dir }}"
+      - exec
+      - -T
+      - vault
+      - vault
+      - operator
+      - init
+      - -key-shares=1
+      - -key-threshold=1
+      - -format=json
+  register: vault_init_raw
+  when: not (vault_status.initialized | default(false))
+
+- name: Persist the root token into .env (idempotent, updates the existing line)
+  ansible.builtin.lineinfile:
+    path: "{{ project_dir }}/.env"
+    regexp: "^VAULT_ROOT_TOKEN="
+    line: "VAULT_ROOT_TOKEN={{ (vault_init_raw.stdout | from_json).root_token }}"
+  when: vault_init_raw is not skipped
+  no_log: true
+
+- name: Persist the unseal key in a dedicated, restricted file (never in .env, never committed)
+  ansible.builtin.copy:
+    content: "{{ (vault_init_raw.stdout | from_json).unseal_keys_b64[0] }}"
+    dest: "{{ unseal_key_file }}"
+    mode: "0600"
+  when: vault_init_raw is not skipped
+  no_log: true
+
+- name: Re-check seal status after a possible fresh init
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ project_dir }}"
+      - exec
+      - -T
+      - vault
+      - vault
+      - status
+      - -format=json
+  register: vault_status_after_raw
+  changed_when: false
+  failed_when: false
+
+- name: Parse Vault status after init
+  ansible.builtin.set_fact:
+    vault_status_after: "{{ vault_status_after_raw.stdout | from_json }}"
+
+- name: Read the stored unseal key
+  ansible.builtin.slurp:
+    src: "{{ unseal_key_file }}"
+  register: unseal_key_raw
+  when: vault_status_after.sealed | default(true)
+
+# failed_when: false + register (au lieu d'un echec direct) : permet a vault-unseal.yml de
+# detecter une cle perimee (rc != 0) et de retenter un reset complet au lieu de planter direct
+# (troubleshooting.md #18/#77 - recidive du 31/08 causee par un reset Vault hors du flux Jenkins).
+- name: Unseal Vault using the stored key (safe to skip if already unsealed)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ project_dir }}"
+      - exec
+      - -T
+      - vault
+      - vault
+      - operator
+      - unseal
+      - "{{ unseal_key_raw.content | b64decode | trim }}"
+  register: vault_unseal_result
+  failed_when: false
+  when: vault_status_after.sealed | default(true)
+  no_log: true
