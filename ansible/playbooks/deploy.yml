@@ -57,6 +57,38 @@
         state: directory
         mode: "0755"
 
+    - name: Resolve the current Docker Compose project name (le SAN d'internal.crt en depend - #64)
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, "{{ project_dir }}", config, --format, json]
+      register: compose_config_raw
+      changed_when: false
+
+    - name: Parse the current Compose project name
+      ansible.builtin.set_fact:
+        compose_project_name: "{{ (compose_config_raw.stdout | from_json).name }}"
+
+    - name: Check whether internal.crt exists already
+      ansible.builtin.stat:
+        path: "{{ project_dir }}/infra/internal-tls/certs/internal.crt"
+      register: internal_crt_stat
+
+    - name: Read the SAN list of the existing internal.crt (if any)
+      ansible.builtin.command:
+        argv: [openssl, x509, -in, "{{ project_dir }}/infra/internal-tls/certs/internal.crt", -noout, -ext, subjectAltName]
+      register: internal_crt_san
+      changed_when: false
+      failed_when: false
+      when: internal_crt_stat.stat.exists
+
+    - name: Self-heal - internal.crt vient d'un projet Compose renomme depuis sa generation (SAN perime, cf. #64)
+      ansible.builtin.file:
+        path: "{{ project_dir }}/infra/internal-tls/certs/{{ item }}"
+        state: absent
+      loop: [internal.crt, internal.key]
+      when:
+        - internal_crt_stat.stat.exists
+        - (compose_project_name ~ '-auth-service-1') not in internal_crt_san.stdout
+
     - name: Generate a self-signed TLS certificate for internal service-to-service traffic (skipped if it already exists)
       ansible.builtin.command:
         argv:
@@ -74,10 +106,10 @@
           - "365"
           - -subj
           - /CN=lets-travel-internal
-          # SAN requis (pas juste CN) ; noms DNS lies au nom de projet Compose - a regenerer
-          # si ce nom change (troubleshooting.md #64).
+          # SAN requis (pas juste CN) ; noms DNS lies au nom de projet Compose - regenere
+          # automatiquement si perime, cf. self-heal ci-dessus et troubleshooting.md #64.
           - -addext
-          - "subjectAltName=DNS:api-gateway,DNS:lets-travel-app-auth-service-1,DNS:lets-travel-app-auth-service-2,DNS:lets-travel-app-user-service-1,DNS:lets-travel-app-user-service-2,DNS:lets-travel-app-travel-service-1,DNS:lets-travel-app-travel-service-2,DNS:lets-travel-app-payment-service-1,DNS:lets-travel-app-payment-service-2"
+          - "subjectAltName=DNS:api-gateway,DNS:{{ compose_project_name }}-auth-service-1,DNS:{{ compose_project_name }}-auth-service-2,DNS:{{ compose_project_name }}-user-service-1,DNS:{{ compose_project_name }}-user-service-2,DNS:{{ compose_project_name }}-travel-service-1,DNS:{{ compose_project_name }}-travel-service-2,DNS:{{ compose_project_name }}-payment-service-1,DNS:{{ compose_project_name }}-payment-service-2"
         creates: "{{ project_dir }}/infra/internal-tls/certs/internal.crt"
 
     - name: Pre-pull third-party images explicitly for linux/amd64
