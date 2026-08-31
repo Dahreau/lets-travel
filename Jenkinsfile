@@ -172,10 +172,16 @@ pipeline {
                     set -e
                     # Deploy attend deja les healthchecks Compose, mais nginx/les apps peuvent
                     # finir de demarrer quelques secondes apres - filet de securite avant e2e/k6.
+                    # Verifie aussi un chemin traversant api-gateway, pas juste nginx->frontend
+                    # (healthcheck TCP d'api-gateway pas fiable pour son routage HTTP interne, cf. #78).
                     for attempt in \$(seq 1 30); do
-                        code=\$(curl -sk -o /dev/null -w '%{http_code}' ${DEPLOYED_BASE_URL}/ || echo 000)
-                        [ "\$code" = "200" ] && { echo "Stack prete (HTTP \$code)."; exit 0; }
-                        echo "Stack pas prete (HTTP \$code), tentative \$attempt/30..."
+                        frontend_code=\$(curl -sk -o /dev/null -w '%{http_code}' ${DEPLOYED_BASE_URL}/ || echo 000)
+                        gateway_code=\$(curl -sk -o /dev/null -w '%{http_code}' ${DEPLOYED_BASE_URL}/api/__stack_ready_probe__ || echo 000)
+                        if [ "\$frontend_code" = "200" ] && [ "\$gateway_code" != "000" ] && [ "\$gateway_code" != "502" ] && [ "\$gateway_code" != "503" ] && [ "\$gateway_code" != "504" ]; then
+                            echo "Stack prete (frontend=\$frontend_code, gateway=\$gateway_code)."
+                            exit 0
+                        fi
+                        echo "Stack pas prete (frontend=\$frontend_code, gateway=\$gateway_code), tentative \$attempt/30..."
                         sleep 5
                     done
                     echo "Stack toujours pas prete apres 30 tentatives (2m30)." >&2
