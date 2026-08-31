@@ -31,7 +31,7 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleDataIntegrityViolation(exception);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody().get("message")).isEqualTo("Violation d'integrite des donnees");
+        assertThat(response.getBody()).containsEntry("message", "Violation d'integrite des donnees");
     }
 
     @Test
@@ -45,7 +45,7 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleValidation(exception);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("message")).isEqualTo("amount: must not be null");
+        assertThat(response.getBody()).containsEntry("message", "amount: must not be null");
     }
 
     @Test
@@ -56,7 +56,7 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleMalformedRequest(exception);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("message")).isEqualTo("Corps de requete invalide ou mal forme");
+        assertThat(response.getBody()).containsEntry("message", "Corps de requete invalide ou mal forme");
     }
 
     @Test
@@ -68,7 +68,7 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleTypeMismatch(exception);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("message")).isEqualTo("Valeur invalide pour le parametre 'id'");
+        assertThat(response.getBody()).containsEntry("message", "Valeur invalide pour le parametre 'id'");
     }
 
     @Test
@@ -79,7 +79,7 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleMissingRequestHeader(exception);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("message")).isEqualTo("En-tete requis manquant : 'Authorization'");
+        assertThat(response.getBody()).containsEntry("message", "En-tete requis manquant : 'Authorization'");
     }
 
     @Test
@@ -89,8 +89,10 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleUpstreamCallFailure(exception);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
-        assertThat(response.getBody().get("message"))
-                .isEqualTo("Un service externe (fournisseur de paiement ou travel-service) a rejete la requete ou etait injoignable");
+        assertThat(response.getBody())
+                .containsEntry(
+                        "message",
+                        "Un service externe (fournisseur de paiement ou travel-service) a rejete la requete ou etait injoignable");
     }
 
     @Test
@@ -98,6 +100,6 @@ class ApiExceptionHandlerTest {
         ResponseEntity<Map<String, Object>> response = handler.handleUnexpected(new RuntimeException("boom"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-        assertThat(response.getBody().get("message")).isEqualTo("Erreur inattendue");
+        assertThat(response.getBody()).containsEntry("message", "Erreur inattendue");
     }
 }

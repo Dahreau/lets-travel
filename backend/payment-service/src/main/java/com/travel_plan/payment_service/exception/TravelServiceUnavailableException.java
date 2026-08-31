@@ -7,4 +7,8 @@ public class TravelServiceUnavailableException extends RuntimeException {
     public TravelServiceUnavailableException() {
         super("Le service voyages est temporairement indisponible, reessayez dans quelques instants");
     }
+
+    public TravelServiceUnavailableException(Throwable cause) {
+        super("Le service voyages est temporairement indisponible, reessayez dans quelques instants", cause);
+    }
 }

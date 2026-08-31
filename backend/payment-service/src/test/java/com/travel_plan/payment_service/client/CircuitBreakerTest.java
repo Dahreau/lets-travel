@@ -4,9 +4,36 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import org.junit.jupiter.api.Test;
 
 class CircuitBreakerTest {
+
+    // Horloge manuelle : avance sur commande plutot que d'attendre un vrai Thread.sleep()
+    // (flaky et lent) pour tester le passage OPEN -> HALF_OPEN une fois openDuration ecoulee.
+    private static final class MutableClock extends Clock {
+        private Instant instant = Instant.EPOCH;
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneId.of("UTC");
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Instant instant() {
+            return instant;
+        }
+
+        void advance(Duration duration) {
+            instant = instant.plus(duration);
+        }
+    }
 
     @Test
     void staysClosedAndAllowsRequestsBelowFailureThreshold() {
@@ -45,24 +72,26 @@ class CircuitBreakerTest {
     }
 
     @Test
-    void allowsATrialRequestOnceOpenDurationHasElapsed() throws InterruptedException {
-        CircuitBreaker breaker = new CircuitBreaker(1, Duration.ofMillis(5), Clock.systemUTC());
+    void allowsATrialRequestOnceOpenDurationHasElapsed() {
+        MutableClock clock = new MutableClock();
+        CircuitBreaker breaker = new CircuitBreaker(1, Duration.ofMillis(5), clock);
 
         breaker.recordFailure();
         assertThat(breaker.allowsRequest()).isFalse();
 
-        Thread.sleep(20);
+        clock.advance(Duration.ofMillis(10));
 
         assertThat(breaker.allowsRequest()).isTrue();
         assertThat(breaker.state()).isEqualTo(CircuitBreaker.State.HALF_OPEN);
     }
 
     @Test
-    void trialFailureInHalfOpenReopensImmediately() throws InterruptedException {
-        CircuitBreaker breaker = new CircuitBreaker(1, Duration.ofMillis(5), Clock.systemUTC());
+    void trialFailureInHalfOpenReopensImmediately() {
+        MutableClock clock = new MutableClock();
+        CircuitBreaker breaker = new CircuitBreaker(1, Duration.ofMillis(5), clock);
 
         breaker.recordFailure();
-        Thread.sleep(20);
+        clock.advance(Duration.ofMillis(10));
         breaker.allowsRequest();
         breaker.recordFailure();
 
@@ -71,11 +100,12 @@ class CircuitBreakerTest {
     }
 
     @Test
-    void trialSuccessInHalfOpenClosesTheCircuit() throws InterruptedException {
-        CircuitBreaker breaker = new CircuitBreaker(1, Duration.ofMillis(5), Clock.systemUTC());
+    void trialSuccessInHalfOpenClosesTheCircuit() {
+        MutableClock clock = new MutableClock();
+        CircuitBreaker breaker = new CircuitBreaker(1, Duration.ofMillis(5), clock);
 
         breaker.recordFailure();
-        Thread.sleep(20);
+        clock.advance(Duration.ofMillis(10));
         breaker.allowsRequest();
         breaker.recordSuccess();
 

@@ -84,7 +84,7 @@ public class TravelServiceClient {
             }
         }
         circuitBreaker.recordFailure();
-        throw new TravelServiceUnavailableException();
+        throw new TravelServiceUnavailableException(lastError);
     }
 
     private static boolean isTransient(int status) {

@@ -1,5 +1,6 @@
 package com.travel_plan.user_service.client;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,9 +28,10 @@ class AuthServiceClientTest {
 
     @Test
     void deleteAccountByUserIdThrowsWhenAuthorizationHeaderIsMissing() {
-        assertThatThrownBy(() -> client.deleteAccountByUserId(UUID.randomUUID(), null))
+        UUID userId = UUID.randomUUID();
+        assertThatThrownBy(() -> client.deleteAccountByUserId(userId, null))
                 .isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> client.deleteAccountByUserId(UUID.randomUUID(), " "))
+        assertThatThrownBy(() -> client.deleteAccountByUserId(userId, " "))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -49,7 +51,8 @@ class AuthServiceClientTest {
         RestClient.ResponseSpec responseSpec = stubDelete(userId);
         when(responseSpec.toBodilessEntity()).thenThrow(new HttpClientErrorException(HttpStatusCode.valueOf(404)));
 
-        client.deleteAccountByUserId(userId, "Bearer admin-token");
+        assertThatCode(() -> client.deleteAccountByUserId(userId, "Bearer admin-token"))
+                .doesNotThrowAnyException();
     }
 
     @Test

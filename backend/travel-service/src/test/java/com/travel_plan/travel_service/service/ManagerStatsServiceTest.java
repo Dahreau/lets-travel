@@ -168,7 +168,7 @@ class ManagerStatsServiceTest {
         assertThat(response.travelRatings().get(0).averageRating()).isEqualTo(4.5);
         assertThat(response.travelRatings().get(0).feedbackCount()).isEqualTo(2);
         assertThat(response.travelRatings().get(1).averageRating()).isNull();
-        assertThat(response.travelRatings().get(1).feedbackCount()).isEqualTo(0);
+        assertThat(response.travelRatings().get(1).feedbackCount()).isZero();
     }
 
     @Test
