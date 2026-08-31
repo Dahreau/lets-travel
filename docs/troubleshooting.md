@@ -998,3 +998,13 @@ docker compose restart payment-service
 
 **A retenir** : un 502 ne veut pas toujours dire "probleme reseau/TLS" comme en #78 - toujours lire le log du service qui a echoue avant de chercher plus loin, l'erreur reelle (401 Stripe) etait deja dans les logs payment-service depuis le debut. Un garde "si absent" (`creates:` Ansible ou `if ! vault kv get`) est correct pour une valeur GENEREE (JWT aleatoire), mais dangereux pour une valeur qui doit toujours REFLETER une source externe (`.env`) - dans ce second cas, ecrire sans condition est la seule facon qu'un reset ne fige pas une valeur perimee.
 
+
+## 80. k6 "setup: travel created" 0/4 en cascade : le burst du rate-limiter login (#40) trop bas pour e2e+k6 encoures
+
+**Probleme** : premier run complet e2e+k6 depuis longtemps, k6 echouait sur son seuil `checks rate>0.9` (74%) - `setup: travel created` a 0/4, puis tout ce qui depend d'un voyage fixture (browse:detail, subscribe, manager:stats, payment:created) en cascade a 0%. Un run precedent identique avait pourtant reussi entierement.
+
+**Cause** : `setup()` du script k6 fait un login admin puis un login manager fraichement cree ; le second determine `managerToken`, utilise pour les 4 creations de voyage - s'il echoue, les 4 `POST /api/travels` recoivent un token invalide et echouent, d'ou la cascade. Log nginx confirmant la vraie cause : `limiting requests, excess: 3.077 by zone "login_zone"` puis `429` sur ce login precis. Les 4 logins Playwright (e2e, juste avant) plus les 2 logins k6 arrivent tous de la meme IP apparente (`172.18.0.1`, via `host.docker.internal`) en moins de 30 secondes - le `burst=3` fixe en #40 pour bloquer le brute-force est loin de couvrir ce volume pourtant tout a fait legitime. Le succes du run precedent n'est pas contradictoire : le timing exact entre la fin d'e2e et le debut de k6 varie d'un run a l'autre, un souci de burst epuise est par nature dependant du timing, pas un bug deterministe.
+
+**Solution** : `limit_req zone=login_zone burst=3 nodelay;` devient `burst=50 nodelay;` dans `infra/nginx/nginx.conf` (volontairement large pour ne pas avoir a y revenir si la suite de tests grossit). Le taux de fond (`rate=5r/m`) reste inchange - un vrai brute-force (des centaines de tentatives) reste bloque durement une fois le burst epuise, seule la tolerance aux pics courts et legitimes augmente.
+
+**A retenir** : un rate-limiter dimensionne en pensant seulement a un utilisateur humain isole peut etre trop strict des qu'une suite de tests automatises (e2e + k6, qui partagent la meme IP apparente via `host.docker.internal`) genere plusieurs logins legitimes en peu de temps - le `burst` doit couvrir le trafic de test reel, pas juste l'usage nominal d'une seule personne.
