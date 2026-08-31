@@ -267,6 +267,10 @@ services:
         condition: service_healthy
       vault-init:
         condition: service_completed_successfully
+      # Appel direct a travel-service (TravelServiceClient) : sans cette ligne, rien ne
+      # garantissait travel-service pret avant payment-service (contrairement a api-gateway).
+      travel-service:
+        condition: service_healthy
     environment:
       DB_HOST: postgres
       DB_USERNAME: payment_user
