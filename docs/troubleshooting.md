@@ -948,3 +948,23 @@ docker compose restart payment-service
 
 **A retenir** : face a un rapport Sonar qui semble soudainement enorme, regarder les horodatages par issue avant de soupconner un bug d'outillage - un rapport peut agreger plusieurs scans successifs. Toujours verifier une issue contre le fichier reel avant de la corriger : un "commented-out code" peut etre un faux positif sur un commentaire dont la forme ressemble a du code, et une regle d'accessibilite peut viser des occurrences precises (13 sur 19 champs non-labelises ici) sans forcement couvrir tous les cas identiques - ne pas supposer que "corriger ce qui est signale" = "corriger tout ce qui devrait l'etre".
 
+## 76. Stage "SonarQube Analysis & Quality Gate" : le frontend etait verifie APRES les 5 services backend, alors que c'est lui qui a fait echouer tout le run
+
+**Probleme** : un run a echoue avec "Quality Gate Sonar en echec pour : frontend" apres avoir attendu les scans Sonar des 5 services backend (chacun ~1-2min, compile+sonar:sonar), alors que le frontend (le plus rapide a verifier, ~1min) etait analyse en dernier dans cette stage.
+
+**Cause** : le reordonnancement de #72 ne portait que sur la stage "Build & Test" (buildFrontend() avant ALL_SERVICES.each). La stage separee "SonarQube Analysis & Quality Gate" (qui, elle, ne bloque qu'a la toute fin - voir #67) gardait encore l'ordre backend-d'abord, frontend-en-dernier.
+
+**Solution** : `sonarFrontend(standalone)` appele avant `ALL_SERVICES.each { sonarService(...) }` dans cette stage, meme logique fail-cheap-first que #72. Ca ne change rien au resultat final du run (tous les projets sont toujours analyses, la stage ne bloque toujours qu'a la fin), seulement l'ordre dans lequel les echecs deviennent visibles en suivant le log en direct.
+
+**A retenir** : un principe de reordonnancement (ici "le moins cher d'abord") applique a une stage ne se propage pas automatiquement aux autres stages qui ont la meme structure - `Build & Test` et `SonarQube Analysis & Quality Gate` sont deux boucles ALL_SERVICES+frontend independantes dans ce Jenkinsfile, chacune a du etre reordonnee separement.
+
+## 77. Duplication Sonar frontend (register/user-form ~50%, manager-travel-detail/travel-detail ~20-30%) : extraction de composants partages
+
+**Probleme** : 4 templates signales par la duplication CPD de Sonar - `register.html` (50.0%, 75 lignes), `user-form.html` (49.0%, 24 lignes), `manager-travel-detail.html` (30.1%, 44 lignes), `travel-detail.html` (21.9%, 43 lignes).
+
+**Cause** : deux paires de pages copiaient litteralement le meme bloc de template. `register.html`/`user-form.html` partageaient a l'identique les champs Prenom/Nom/Email/Telephone (35 lignes) et tout le sous-formulaire adresse (Rue/Ville/Code postal/Pays, ~38 lignes). `manager-travel-detail.html`/`travel-detail.html` partageaient a l'identique la carte resume (dates/prix/statut/nombre de destinations, ~18 lignes) et la liste des destinations avec son `@for` (~23 lignes).
+
+**Solution** : 4 nouveaux composants partages dans `frontend/src/app/shared/ui/` : `NameContactFields` (prend les `FormControl` firstName/lastName/email/phone directement, les deux formulaires ayant des formes differentes par ailleurs), `AddressFields` (prend le `FormGroup` adresse, le `[formGroup]` est pose sur un `ng-container` pour ne pas ajouter de div et laisser chaque page garder son propre wrapper - `register.html` n'avait pas de `form-grid` sur l'adresse, `user-form.html` si, les deux comportements sont preserves), `TravelSummaryCard` et `TravelDestinationsList` (composants d'affichage purs, prennent respectivement un `Travel` et un tableau de `Destination`). Chaque page importe ces composants et remplace le bloc duplique par une balise.
+
+**A retenir** : avant d'extraire un composant partage entre deux templates, verifier que les CONTROLES sous-jacents ont vraiment la meme forme (ici, `firstName`/`address` sont construits a l'identique via `fb.nonNullable.group(...)` dans les deux composants) - sinon le composant partage devient un faux partage qui force artificiellement deux formulaires differents a converger. Poser un `[formGroup]` sur un `ng-container` plutot que sur une nouvelle div evite d'alterer la structure DOM (et donc le CSS/layout) des pages appelantes.
+

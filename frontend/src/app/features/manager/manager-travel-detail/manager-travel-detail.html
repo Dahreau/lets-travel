@@ -6,50 +6,10 @@
   <app-spinner />
 } @else if (travel(); as t) {
   <div class="card">
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-label">dates</div>
-        <div class="stat-value" style="font-size: 16px">{{ t.startDate }} → {{ t.endDate }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">prix</div>
-        <div class="stat-value">{{ t.price !== null ? t.price + ' ' + t.currency : 'gratuit' }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">statut</div>
-        <div class="stat-value"><app-badge [value]="t.status" /></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">destinations</div>
-        <div class="stat-value">{{ t.destinations.length }}</div>
-      </div>
-    </div>
+    <app-travel-summary-card [travel]="t" />
   </div>
 
-  <h2 class="section-title">destinations</h2>
-  @for (destination of t.destinations; track destination.id; let dIndex = $index) {
-    <div class="subcard">
-      <div class="subcard-head">
-        <span class="subcard-index">#{{ dIndex + 1 }}</span>
-      </div>
-      <div class="stat-grid">
-        <div class="stat-card">
-          <div class="stat-label">ville</div>
-          <div class="stat-value" style="font-size: 16px">{{ destination.city }}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">pays</div>
-          <div class="stat-value" style="font-size: 16px">{{ destination.country }}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">dates</div>
-          <div class="stat-value" style="font-size: 16px">
-            {{ destination.arrivalDate }} → {{ destination.departureDate }}
-          </div>
-        </div>
-      </div>
-    </div>
-  }
+  <app-travel-destinations-list [destinations]="t.destinations" />
 
   <h2 class="section-title">abonnés</h2>
 

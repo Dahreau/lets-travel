@@ -103,15 +103,17 @@ pipeline {
                 script {
                     // On analyse TOUT le monde d'abord, on ne bloque qu'a la fin - sinon le premier
                     // service en echec masque l'etat des suivants (voir troubleshooting.md).
+                    // Frontend en premier ici aussi (~1min, contre ~1-2min par service backend) :
+                    // meme logique fail-cheap-first que Build & Test (troubleshooting.md #72/#76).
                     boolean standalone = params.SKIP_BUILD_TEST as boolean
                     def failed = []
+                    if (sonarFrontend(standalone) != 0) {
+                        failed << 'frontend'
+                    }
                     ALL_SERVICES.each { svc ->
                         if (sonarService(svc, standalone) != 0) {
                             failed << svc
                         }
-                    }
-                    if (sonarFrontend(standalone) != 0) {
-                        failed << 'frontend'
                     }
                     if (failed) {
                         error("Quality Gate Sonar en echec pour : ${failed.join(', ')}")

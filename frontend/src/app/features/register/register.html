@@ -7,41 +7,12 @@
     </div>
 
     <form [formGroup]="form" (ngSubmit)="submit()">
-      <div class="field">
-        <label class="label" for="firstName">Prénom<span class="req">*</span></label>
-        <input
-          id="firstName"
-          class="input"
-          formControlName="firstName"
-          [class.invalid]="form.controls.firstName.invalid && form.controls.firstName.touched"
-        />
-      </div>
-
-      <div class="field">
-        <label class="label" for="lastName">Nom<span class="req">*</span></label>
-        <input
-          id="lastName"
-          class="input"
-          formControlName="lastName"
-          [class.invalid]="form.controls.lastName.invalid && form.controls.lastName.touched"
-        />
-      </div>
-
-      <div class="field">
-        <label class="label" for="email">Email<span class="req">*</span></label>
-        <input
-          id="email"
-          class="input"
-          type="email"
-          formControlName="email"
-          [class.invalid]="form.controls.email.invalid && form.controls.email.touched"
-        />
-      </div>
-
-      <div class="field">
-        <label class="label" for="phone">Téléphone</label>
-        <input id="phone" class="input" formControlName="phone" />
-      </div>
+      <app-name-contact-fields
+        [firstName]="form.controls.firstName"
+        [lastName]="form.controls.lastName"
+        [email]="form.controls.email"
+        [phone]="form.controls.phone"
+      />
 
       <div class="field">
         <label class="label" for="username">login<span class="req">*</span></label>
@@ -74,43 +45,8 @@
       </div>
 
       @if (hasAddress()) {
-        <div class="subcard" [formGroup]="form.controls.address">
-          <div class="field">
-            <label class="label" for="street">Rue<span class="req">*</span></label>
-            <input
-              id="street"
-              class="input"
-              formControlName="street"
-              [class.invalid]="form.controls.address.controls.street.invalid && form.controls.address.controls.street.touched"
-            />
-          </div>
-          <div class="field">
-            <label class="label" for="city">Ville<span class="req">*</span></label>
-            <input
-              id="city"
-              class="input"
-              formControlName="city"
-              [class.invalid]="form.controls.address.controls.city.invalid && form.controls.address.controls.city.touched"
-            />
-          </div>
-          <div class="field">
-            <label class="label" for="postalCode">Code postal<span class="req">*</span></label>
-            <input
-              id="postalCode"
-              class="input"
-              formControlName="postalCode"
-              [class.invalid]="form.controls.address.controls.postalCode.invalid && form.controls.address.controls.postalCode.touched"
-            />
-          </div>
-          <div class="field">
-            <label class="label" for="country">Pays<span class="req">*</span></label>
-            <input
-              id="country"
-              class="input"
-              formControlName="country"
-              [class.invalid]="form.controls.address.controls.country.invalid && form.controls.address.controls.country.touched"
-            />
-          </div>
+        <div class="subcard">
+          <app-address-fields [group]="form.controls.address" />
         </div>
       }
 

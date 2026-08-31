@@ -7,12 +7,14 @@ import { extractErrorMessage } from '../../../core/http/api-error';
 import { ToastService } from '../../../core/notifications/toast';
 import { PageHeader } from '../../../shared/ui/page-header';
 import { Spinner } from '../../../shared/ui/spinner';
+import { AddressFields } from '../../../shared/ui/address-fields';
+import { NameContactFields } from '../../../shared/ui/name-contact-fields';
 import { UserRequest, UserRole } from '../../../core/models/user';
 import { UsersService } from '../users';
 
 @Component({
   selector: 'app-user-form',
-  imports: [ReactiveFormsModule, RouterLink, PageHeader, Spinner],
+  imports: [ReactiveFormsModule, RouterLink, PageHeader, Spinner, NameContactFields, AddressFields],
   templateUrl: './user-form.html',
 })
 export class UserForm implements OnInit {

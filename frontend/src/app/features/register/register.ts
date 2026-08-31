@@ -5,13 +5,15 @@ import { finalize, switchMap } from 'rxjs';
 import { AuthService } from '../../core/auth/auth';
 import { extractErrorMessage } from '../../core/http/api-error';
 import { UserRegistrationRequest } from '../../core/models/user';
+import { AddressFields } from '../../shared/ui/address-fields';
+import { NameContactFields } from '../../shared/ui/name-contact-fields';
 import { UsersService } from '../users/users';
 
 // Inscription en 2 appels : POST /api/users/register cree le profil, puis POST /api/auth/register
 // cree le compte avec le registrationToken renvoye par le 1er, et connecte immediatement.
 @Component({
   selector: 'app-register',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, NameContactFields, AddressFields],
   templateUrl: './register.html',
   styleUrl: './register.scss',
 })

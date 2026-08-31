@@ -9,9 +9,10 @@ import { Travel } from '../../../core/models/travel';
 import { User } from '../../../core/models/user';
 import { AuthService } from '../../../core/auth/auth';
 import { ToastService } from '../../../core/notifications/toast';
-import { Badge } from '../../../shared/ui/badge';
 import { PageHeader } from '../../../shared/ui/page-header';
 import { Spinner } from '../../../shared/ui/spinner';
+import { TravelDestinationsList } from '../../../shared/ui/travel-destinations-list';
+import { TravelSummaryCard } from '../../../shared/ui/travel-summary-card';
 import { PaymentMethodsService } from '../../payments/payment-methods';
 import { PaymentsService } from '../../payments/payments';
 import { TravelerStatsService } from '../../travelers/traveler-stats';
@@ -27,7 +28,14 @@ const MANAGER_TARGET = 'MANAGER';
 // avis, signalement, paiement. Distincte de TravelForm (edition Admin/Manager).
 @Component({
   selector: 'app-travel-detail',
-  imports: [ReactiveFormsModule, RouterLink, Badge, PageHeader, Spinner],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    PageHeader,
+    Spinner,
+    TravelSummaryCard,
+    TravelDestinationsList,
+  ],
   templateUrl: './travel-detail.html',
 })
 export class TravelDetail implements OnInit {
