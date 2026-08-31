@@ -8,7 +8,12 @@
       @if (!isTraveler()) {
         <div class="field">
           <label class="label" for="ownerId">Owner<span class="req">*</span></label>
-          <select id="ownerId" class="select" formControlName="ownerId">
+          <select
+            id="ownerId"
+            class="select"
+            formControlName="ownerId"
+            [class.invalid]="form.controls.ownerId.invalid && form.controls.ownerId.touched"
+          >
             <option value="" disabled>— sélectionner —</option>
             @for (user of users(); track user.id) {
               <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
@@ -37,7 +42,12 @@
 
       <div class="field">
         <label class="label" for="providerToken">Token provider<span class="req">*</span></label>
-        <input id="providerToken" class="input" formControlName="providerToken" />
+        <input
+          id="providerToken"
+          class="input"
+          formControlName="providerToken"
+          [class.invalid]="form.controls.providerToken.invalid && form.controls.providerToken.touched"
+        />
       </div>
 
       <div class="field">

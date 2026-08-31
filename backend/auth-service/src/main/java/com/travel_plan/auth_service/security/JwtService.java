@@ -1,5 +1,6 @@
 package com.travel_plan.auth_service.security;
 
+import com.travel_plan.auth_service.exception.InvalidRegistrationTokenException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -16,6 +17,9 @@ public class JwtService {
 
     private static final String ROLE_CLAIM = "role";
     private static final String USER_ID_CLAIM = "userId";
+    // Distingue un jeton d'inscription d'un JWT de session normal.
+    private static final String PURPOSE_CLAIM = "purpose";
+    private static final String REGISTRATION_PURPOSE = "user-registration";
 
     private final SecretKey signingKey;
     private final long expirationMinutes;
@@ -54,5 +58,24 @@ public class JwtService {
     public UUID extractUserId(Claims claims) {
         String raw = claims.get(USER_ID_CLAIM, String.class);
         return raw == null ? null : UUID.fromString(raw);
+    }
+
+    // Signe par user-service avec la meme cle partagee : la signature prouve que le userId
+    // vient d'un POST /api/users/register reussi, jamais d'une valeur choisie par le client.
+    public UUID validateRegistrationToken(String token) {
+        Claims claims;
+        try {
+            claims = validateAndParse(token);
+        } catch (JwtException e) {
+            throw new InvalidRegistrationTokenException("Jeton d'inscription invalide ou expire");
+        }
+        if (!REGISTRATION_PURPOSE.equals(claims.get(PURPOSE_CLAIM, String.class))) {
+            throw new InvalidRegistrationTokenException("Le jeton fourni n'est pas un jeton d'inscription valide");
+        }
+        try {
+            return UUID.fromString(claims.getSubject());
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRegistrationTokenException("Jeton d'inscription invalide ou expire");
+        }
     }
 }

@@ -7,29 +7,22 @@
     </div>
 
     <form [formGroup]="form" (ngSubmit)="submit()">
-      <div class="field">
-        <label class="label" for="firstName">Prénom<span class="req">*</span></label>
-        <input id="firstName" class="input" formControlName="firstName" />
-      </div>
-
-      <div class="field">
-        <label class="label" for="lastName">Nom<span class="req">*</span></label>
-        <input id="lastName" class="input" formControlName="lastName" />
-      </div>
-
-      <div class="field">
-        <label class="label" for="email">Email<span class="req">*</span></label>
-        <input id="email" class="input" type="email" formControlName="email" />
-      </div>
-
-      <div class="field">
-        <label class="label" for="phone">Téléphone</label>
-        <input id="phone" class="input" formControlName="phone" />
-      </div>
+      <app-name-contact-fields
+        [firstName]="form.controls.firstName"
+        [lastName]="form.controls.lastName"
+        [email]="form.controls.email"
+        [phone]="form.controls.phone"
+      />
 
       <div class="field">
         <label class="label" for="username">login<span class="req">*</span></label>
-        <input id="username" class="input" formControlName="username" autocomplete="username" />
+        <input
+          id="username"
+          class="input"
+          formControlName="username"
+          autocomplete="username"
+          [class.invalid]="form.controls.username.invalid && form.controls.username.touched"
+        />
       </div>
 
       <div class="field">
@@ -40,7 +33,10 @@
           type="password"
           formControlName="password"
           autocomplete="new-password"
+          [class.invalid]="form.controls.password.invalid && form.controls.password.touched"
         />
+        <!-- minLength(6) invisible dans un champ masque : seul champ requerant un indice permanent. -->
+        <p class="login-subtitle" style="margin-top: 4px">6 caractères minimum</p>
       </div>
 
       <div class="checkbox-row" style="margin: 8px 0 16px">
@@ -49,25 +45,25 @@
       </div>
 
       @if (hasAddress()) {
-        <div class="subcard" [formGroup]="form.controls.address">
-          <div class="field">
-            <label class="label" for="street">Rue<span class="req">*</span></label>
-            <input id="street" class="input" formControlName="street" />
-          </div>
-          <div class="field">
-            <label class="label" for="city">Ville<span class="req">*</span></label>
-            <input id="city" class="input" formControlName="city" />
-          </div>
-          <div class="field">
-            <label class="label" for="postalCode">Code postal<span class="req">*</span></label>
-            <input id="postalCode" class="input" formControlName="postalCode" />
-          </div>
-          <div class="field">
-            <label class="label" for="country">Pays<span class="req">*</span></label>
-            <input id="country" class="input" formControlName="country" />
-          </div>
+        <div class="subcard">
+          <app-address-fields [group]="form.controls.address" />
         </div>
       }
+
+      <!-- fix/audit-gaps (troubleshooting.md #41) : consentement RGPD obligatoire, jamais
+           coche par defaut cote client (register.ts) et cote backend (@AssertTrue). -->
+      <div class="checkbox-row" style="margin: 8px 0 16px">
+        <input
+          type="checkbox"
+          id="acceptedPrivacyPolicy"
+          formControlName="acceptedPrivacyPolicy"
+          [class.invalid]="form.controls.acceptedPrivacyPolicy.invalid && form.controls.acceptedPrivacyPolicy.touched"
+        />
+        <label for="acceptedPrivacyPolicy">
+          j'ai lu et j'accepte la
+          <a routerLink="/politique-de-confidentialite" target="_blank" rel="noopener">politique de confidentialité</a><span class="req">*</span>
+        </label>
+      </div>
 
       @if (errorMessage()) {
         <p class="error-text login-error">{{ errorMessage() }}</p>

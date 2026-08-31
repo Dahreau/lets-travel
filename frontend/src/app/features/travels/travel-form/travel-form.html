@@ -1,4 +1,4 @@
-<app-page-header [title]="isEdit() ? 'edit travel' : 'new travel'" />
+<app-page-header [title]="isEdit() ? 'modifier le voyage' : 'nouveau voyage'" />
 
 @if (loading()) {
   <app-spinner />
@@ -7,13 +7,23 @@
     <div class="form-grid">
       <div class="field">
         <label class="label" for="title">Titre<span class="req">*</span></label>
-        <input id="title" class="input" formControlName="title" />
+        <input
+          id="title"
+          class="input"
+          formControlName="title"
+          [class.invalid]="form.controls.title.invalid && form.controls.title.touched"
+        />
       </div>
 
       @if (isAdmin()) {
         <div class="field">
           <label class="label" for="managerId">Travel Manager<span class="req">*</span></label>
-          <select id="managerId" class="select" formControlName="managerId">
+          <select
+            id="managerId"
+            class="select"
+            formControlName="managerId"
+            [class.invalid]="form.controls.managerId.invalid && form.controls.managerId.touched"
+          >
             <option value="" disabled>— sélectionner —</option>
             @for (manager of managers(); track manager.id) {
               <option [value]="manager.id">{{ manager.firstName }} {{ manager.lastName }} — {{ manager.email }}</option>
@@ -24,12 +34,24 @@
 
       <div class="field">
         <label class="label" for="startDate">Date de début<span class="req">*</span></label>
-        <input id="startDate" class="input" type="date" formControlName="startDate" />
+        <input
+          id="startDate"
+          class="input"
+          type="date"
+          formControlName="startDate"
+          [class.invalid]="form.controls.startDate.invalid && form.controls.startDate.touched"
+        />
       </div>
 
       <div class="field">
         <label class="label" for="endDate">Date de fin<span class="req">*</span></label>
-        <input id="endDate" class="input" type="date" formControlName="endDate" />
+        <input
+          id="endDate"
+          class="input"
+          type="date"
+          formControlName="endDate"
+          [class.invalid]="form.controls.endDate.invalid && form.controls.endDate.touched"
+        />
       </div>
 
       <div class="field">
@@ -43,12 +65,26 @@
 
       <div class="field">
         <label class="label" for="price">Prix<span class="req">*</span></label>
-        <input id="price" class="input" type="number" step="0.01" min="0.01" formControlName="price" />
+        <input
+          id="price"
+          class="input"
+          type="number"
+          step="0.01"
+          min="0.01"
+          formControlName="price"
+          [class.invalid]="form.controls.price.invalid && form.controls.price.touched"
+        />
       </div>
 
       <div class="field">
         <label class="label" for="currency">Devise<span class="req">*</span></label>
-        <input id="currency" class="input" formControlName="currency" maxlength="3" />
+        <input
+          id="currency"
+          class="input"
+          formControlName="currency"
+          maxlength="3"
+          [class.invalid]="form.controls.currency.invalid && form.controls.currency.touched"
+        />
       </div>
     </div>
 
@@ -65,20 +101,42 @@
 
         <div class="form-grid">
           <div class="field">
-            <label class="label">Ville<span class="req">*</span></label>
-            <input class="input" formControlName="city" />
+            <label class="label" [for]="'dest-city-' + dIndex">Ville<span class="req">*</span></label>
+            <input
+              [id]="'dest-city-' + dIndex"
+              class="input"
+              formControlName="city"
+              [class.invalid]="destination.controls.city.invalid && destination.controls.city.touched"
+            />
           </div>
           <div class="field">
-            <label class="label">Pays<span class="req">*</span></label>
-            <input class="input" formControlName="country" />
+            <label class="label" [for]="'dest-country-' + dIndex">Pays<span class="req">*</span></label>
+            <input
+              [id]="'dest-country-' + dIndex"
+              class="input"
+              formControlName="country"
+              [class.invalid]="destination.controls.country.invalid && destination.controls.country.touched"
+            />
           </div>
           <div class="field">
-            <label class="label">Arrivée<span class="req">*</span></label>
-            <input class="input" type="date" formControlName="arrivalDate" />
+            <label class="label" [for]="'dest-arrival-' + dIndex">Arrivée<span class="req">*</span></label>
+            <input
+              [id]="'dest-arrival-' + dIndex"
+              class="input"
+              type="date"
+              formControlName="arrivalDate"
+              [class.invalid]="destination.controls.arrivalDate.invalid && destination.controls.arrivalDate.touched"
+            />
           </div>
           <div class="field">
-            <label class="label">Départ<span class="req">*</span></label>
-            <input class="input" type="date" formControlName="departureDate" />
+            <label class="label" [for]="'dest-departure-' + dIndex">Départ<span class="req">*</span></label>
+            <input
+              [id]="'dest-departure-' + dIndex"
+              class="input"
+              type="date"
+              formControlName="departureDate"
+              [class.invalid]="destination.controls.departureDate.invalid && destination.controls.departureDate.touched"
+            />
           </div>
         </div>
 
@@ -96,8 +154,13 @@
           <div class="subcard" [formGroup]="destination.controls.accommodation">
             <div class="form-grid">
               <div class="field">
-                <label class="label">Nom<span class="req">*</span></label>
-                <input class="input" formControlName="name" />
+                <label class="label" [for]="'accom-name-' + dIndex">Nom<span class="req">*</span></label>
+                <input
+                  [id]="'accom-name-' + dIndex"
+                  class="input"
+                  formControlName="name"
+                  [class.invalid]="destination.controls.accommodation.controls.name.invalid && destination.controls.accommodation.controls.name.touched"
+                />
               </div>
               <div class="field">
                 <label class="label">Type<span class="req">*</span></label>
@@ -108,16 +171,32 @@
                 </select>
               </div>
               <div class="field">
-                <label class="label">Adresse<span class="req">*</span></label>
-                <input class="input" formControlName="address" />
+                <label class="label" [for]="'accom-address-' + dIndex">Adresse<span class="req">*</span></label>
+                <input
+                  [id]="'accom-address-' + dIndex"
+                  class="input"
+                  formControlName="address"
+                  [class.invalid]="destination.controls.accommodation.controls.address.invalid && destination.controls.accommodation.controls.address.touched"
+                />
               </div>
               <div class="field">
-                <label class="label">Check-in<span class="req">*</span></label>
-                <input class="input" type="date" formControlName="checkIn" />
+                <label class="label" [for]="'accom-checkin-' + dIndex">Check-in<span class="req">*</span></label>
+                <input
+                  [id]="'accom-checkin-' + dIndex"
+                  class="input"
+                  type="date"
+                  formControlName="checkIn"
+                  [class.invalid]="destination.controls.accommodation.controls.checkIn.invalid && destination.controls.accommodation.controls.checkIn.touched"
+                />
               </div>
               <div class="field">
                 <label class="label">Check-out<span class="req">*</span></label>
-                <input class="input" type="date" formControlName="checkOut" />
+                <input
+                  class="input"
+                  type="date"
+                  formControlName="checkOut"
+                  [class.invalid]="destination.controls.accommodation.controls.checkOut.invalid && destination.controls.accommodation.controls.checkOut.touched"
+                />
               </div>
             </div>
           </div>
@@ -128,12 +207,23 @@
           <div class="subcard" [formGroup]="activity">
             <div class="form-grid">
               <div class="field">
-                <label class="label">Nom<span class="req">*</span></label>
-                <input class="input" formControlName="name" />
+                <label class="label" [for]="'activity-name-' + dIndex + '-' + aIndex">Nom<span class="req">*</span></label>
+                <input
+                  [id]="'activity-name-' + dIndex + '-' + aIndex"
+                  class="input"
+                  formControlName="name"
+                  [class.invalid]="activity.controls.name.invalid && activity.controls.name.touched"
+                />
               </div>
               <div class="field">
-                <label class="label">Date<span class="req">*</span></label>
-                <input class="input" type="date" formControlName="date" />
+                <label class="label" [for]="'activity-date-' + dIndex + '-' + aIndex">Date<span class="req">*</span></label>
+                <input
+                  [id]="'activity-date-' + dIndex + '-' + aIndex"
+                  class="input"
+                  type="date"
+                  formControlName="date"
+                  [class.invalid]="activity.controls.date.invalid && activity.controls.date.touched"
+                />
               </div>
               <div class="field">
                 <label class="label">Coût</label>
@@ -175,20 +265,42 @@
             <input class="input" formControlName="provider" />
           </div>
           <div class="field">
-            <label class="label">De<span class="req">*</span></label>
-            <input class="input" formControlName="fromLocation" />
+            <label class="label" [for]="'transport-from-' + tIndex">De<span class="req">*</span></label>
+            <input
+              [id]="'transport-from-' + tIndex"
+              class="input"
+              formControlName="fromLocation"
+              [class.invalid]="transportation.controls.fromLocation.invalid && transportation.controls.fromLocation.touched"
+            />
           </div>
           <div class="field">
-            <label class="label">Vers<span class="req">*</span></label>
-            <input class="input" formControlName="toLocation" />
+            <label class="label" [for]="'transport-to-' + tIndex">Vers<span class="req">*</span></label>
+            <input
+              [id]="'transport-to-' + tIndex"
+              class="input"
+              formControlName="toLocation"
+              [class.invalid]="transportation.controls.toLocation.invalid && transportation.controls.toLocation.touched"
+            />
           </div>
           <div class="field">
-            <label class="label">Départ<span class="req">*</span></label>
-            <input class="input" type="datetime-local" formControlName="departureTime" />
+            <label class="label" [for]="'transport-departure-' + tIndex">Départ<span class="req">*</span></label>
+            <input
+              [id]="'transport-departure-' + tIndex"
+              class="input"
+              type="datetime-local"
+              formControlName="departureTime"
+              [class.invalid]="transportation.controls.departureTime.invalid && transportation.controls.departureTime.touched"
+            />
           </div>
           <div class="field">
-            <label class="label">Arrivée<span class="req">*</span></label>
-            <input class="input" type="datetime-local" formControlName="arrivalTime" />
+            <label class="label" [for]="'transport-arrival-' + tIndex">Arrivée<span class="req">*</span></label>
+            <input
+              [id]="'transport-arrival-' + tIndex"
+              class="input"
+              type="datetime-local"
+              formControlName="arrivalTime"
+              [class.invalid]="transportation.controls.arrivalTime.invalid && transportation.controls.arrivalTime.touched"
+            />
           </div>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" (click)="removeTransportation(tIndex)">
@@ -206,6 +318,26 @@
         {{ saving() ? 'saving...' : '$ save' }}
       </button>
       <a routerLink="/travels" class="btn btn-ghost">cancel</a>
+      @if (isEdit()) {
+        <button
+          type="button"
+          class="btn btn-danger"
+          [disabled]="deleting()"
+          (click)="confirmingDelete.set(true)"
+        >
+          $ delete
+        </button>
+      }
     </div>
   </form>
+}
+
+@if (confirmingDelete()) {
+  <app-confirm-dialog
+    title="Supprimer ce voyage"
+    message="Cette action est irréversible : le voyage, ses abonnements et son historique seront supprimés."
+    confirmLabel="Supprimer"
+    (confirmed)="confirmDelete()"
+    (cancelled)="confirmingDelete.set(false)"
+  />
 }

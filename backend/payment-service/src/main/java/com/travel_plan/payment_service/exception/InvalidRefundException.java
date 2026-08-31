@@ -5,6 +5,6 @@ import java.util.UUID;
 public class InvalidRefundException extends RuntimeException {
 
     public InvalidRefundException(UUID id) {
-        super("Payment " + id + " cannot be refunded from its current status");
+        super("Le paiement " + id + " ne peut pas etre rembourse dans son statut actuel");
     }
 }

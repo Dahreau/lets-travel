@@ -9,9 +9,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// feat/traveler-frontend : couvert par la regle generique GET /api/travels/** de SecurityConfig
-// (TRAVELER minimum) - pas de regle dediee necessaire, ces routes sont deja privees au caller
-// (verifie dans TravelerStatsService, pas seulement via l'URL).
+// Couvert par la regle generique GET /api/travels/** de SecurityConfig (TRAVELER minimum) -
+// deja prive au caller, verifie dans TravelerStatsService.
 @RestController
 @RequestMapping("/api/travels/travelers")
 @RequiredArgsConstructor
@@ -27,6 +26,17 @@ public class TravelerStatsController {
     @GetMapping("/me/subscriptions")
     public List<SubscriptionResponse> mySubscriptions(Authentication authentication) {
         return travelerStatsService.mySubscriptions(principal(authentication));
+    }
+
+    // fix/audit-gaps (troubleshooting.md #40) : voir TravelerStatsService.myFeedbacks/myReports.
+    @GetMapping("/me/feedbacks")
+    public List<FeedbackResponse> myFeedbacks(Authentication authentication) {
+        return travelerStatsService.myFeedbacks(principal(authentication));
+    }
+
+    @GetMapping("/me/reports")
+    public List<ReportResponse> myReports(Authentication authentication) {
+        return travelerStatsService.myReports(principal(authentication));
     }
 
     private AuthenticatedUser principal(Authentication authentication) {

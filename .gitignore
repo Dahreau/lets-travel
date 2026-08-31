@@ -71,5 +71,9 @@ infra/internal-tls/certs/*.key
 # Clé de déscellement Vault (générée une seule fois par vault-unseal.yml, jamais commitée)
 infra/vault/.unseal-key.txt
 
+# Miroir de secours des secrets Jenkins (STATE_FILES du Jenkinsfile, stage Deploy) - memes
+# fichiers que ci-dessus, jamais commites non plus (cf. troubleshooting.md #18).
+infra/ci/persistent-state/
+
 # Scratch/transfert (session Claude, jamais destine a etre commite)
 _to_delete/

@@ -1,0 +1,92 @@
+---
+# Sequence extraite de vault-unseal.yml (troubleshooting.md #18/#77) : reinitialise le volume
+# Vault a zero. Reutilisee par les DEUX cas de self-heal (cle absente, cle presente mais perimee)
+# pour ne pas dupliquer cette sequence deux fois dans le playbook principal.
+- name: Stop and remove the Vault container
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ project_dir }}"
+      - rm
+      - -f
+      - -s
+      - vault
+  changed_when: true
+
+- name: Resolve the real vault_data volume name (never hardcoded)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ project_dir }}"
+      - config
+      - --format
+      - json
+  register: compose_config_raw
+  changed_when: false
+
+- name: Remove Vault's data volume so it reinitializes clean
+  ansible.builtin.command:
+    argv:
+      - docker
+      - volume
+      - rm
+      - "{{ (compose_config_raw.stdout | from_json).volumes.vault_data.name }}"
+  changed_when: true
+
+- name: Fix ownership of the fresh Vault data volume
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ project_dir }}"
+      - run
+      - --rm
+      - --user
+      - root
+      - --entrypoint
+      - sh
+      - vault
+      - -c
+      - mkdir -p /vault/data && chown -R vault:vault /vault/data
+  changed_when: true
+
+- name: Restart Vault on the fresh volume
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ project_dir }}"
+      - up
+      - -d
+      - vault
+  changed_when: true
+
+- name: Wait for the Vault CLI to respond after the reset
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ project_dir }}"
+      - exec
+      - -T
+      - vault
+      - vault
+      - status
+      - -format=json
+  register: vault_status_raw
+  until: vault_status_raw.rc in [0, 2]
+  retries: 20
+  delay: 3
+  changed_when: false
+  failed_when: false
+
+- name: Re-parse Vault status after the reset
+  ansible.builtin.set_fact:
+    vault_status: "{{ vault_status_raw.stdout | from_json }}"

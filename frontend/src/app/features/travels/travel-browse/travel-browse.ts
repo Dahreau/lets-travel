@@ -1,7 +1,8 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { finalize } from 'rxjs';
+import { SchedulerLike, asyncScheduler, debounceTime, distinctUntilChanged, finalize, of, switchMap } from 'rxjs';
 import { extractErrorMessage } from '../../../core/http/api-error';
 import { Travel } from '../../../core/models/travel';
 import { ToastService } from '../../../core/notifications/toast';
@@ -11,9 +12,8 @@ import { TravelerStatsService } from '../../travelers/traveler-stats';
 import { SubscriptionsService } from '../subscriptions';
 import { TravelsService } from '../travels';
 
-// feat/traveler-frontend : composant DEDIE au parcours Traveler (recherche + abonnement),
-// volontairement distinct de TravelList (table CRUD reservee Admin/Manager) - un Traveler ne
-// doit ni editer ni supprimer un voyage.
+// Composant dedie au parcours Traveler (recherche + abonnement), distinct de TravelList
+// (CRUD reserve Admin/Manager).
 @Component({
   selector: 'app-travel-browse',
   imports: [ReactiveFormsModule, RouterLink, PageHeader, Spinner],
@@ -25,11 +25,17 @@ export class TravelBrowse implements OnInit {
   private readonly subscriptionsService = inject(SubscriptionsService);
   private readonly travelerStatsService = inject(TravelerStatsService);
   private readonly toastService = inject(ToastService);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly searchForm = this.fb.nonNullable.group({ q: [''] });
 
+  // Overridable en test (VirtualTimeScheduler) - fakeAsync/jasmine.clock() ne marchent pas de
+  // facon fiable ici (projet zoneless, voir troubleshooting.md #71).
+  protected debounceScheduler: SchedulerLike = asyncScheduler;
+
   protected readonly loading = signal(true);
   protected readonly travels = signal<Travel[]>([]);
+  protected readonly suggestions = signal<Travel[]>([]);
   protected readonly subscribingId = signal<string | null>(null);
   private readonly activeSubscriptionByTravelId = signal<Map<string, string>>(new Map());
 
@@ -41,6 +47,24 @@ export class TravelBrowse implements OnInit {
   ngOnInit(): void {
     this.loadSubscriptions();
     this.search();
+    this.watchAutocomplete();
+  }
+
+  // feat/search-and-recommendations (backend) restait inutilisee cote UI - suggestions
+  // live pendant la frappe, distinctes de la recherche "validee" par search() ci-dessous.
+  private watchAutocomplete(): void {
+    this.searchForm.controls.q.valueChanges
+      .pipe(
+        debounceTime(250, this.debounceScheduler),
+        distinctUntilChanged(),
+        switchMap((query) => (query.trim().length >= 2 ? this.travelsService.autocomplete(query.trim()) : of([]))),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((suggestions) => this.suggestions.set(suggestions));
+  }
+
+  protected selectSuggestion(): void {
+    this.suggestions.set([]);
   }
 
   private loadSubscriptions(): void {

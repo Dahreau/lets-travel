@@ -30,4 +30,18 @@ describe('TravelerStatsService', () => {
     expect(req.request.method).toBe('GET');
     req.flush([]);
   });
+
+  it('GETs the connected traveler own feedback', () => {
+    service.myFeedbacks().subscribe();
+    const req = httpMock.expectOne('/api/travels/travelers/me/feedbacks');
+    expect(req.request.method).toBe('GET');
+    req.flush([]);
+  });
+
+  it('GETs the connected traveler own reports', () => {
+    service.myReports().subscribe();
+    const req = httpMock.expectOne('/api/travels/travelers/me/reports');
+    expect(req.request.method).toBe('GET');
+    req.flush([]);
+  });
 });

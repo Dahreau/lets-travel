@@ -1,0 +1,38 @@
+<ng-container [formGroup]="group()">
+  <div class="field">
+    <label class="label" for="street">Rue<span class="req">*</span></label>
+    <input
+      id="street"
+      class="input"
+      formControlName="street"
+      [class.invalid]="group().controls.street.invalid && group().controls.street.touched"
+    />
+  </div>
+  <div class="field">
+    <label class="label" for="city">Ville<span class="req">*</span></label>
+    <input
+      id="city"
+      class="input"
+      formControlName="city"
+      [class.invalid]="group().controls.city.invalid && group().controls.city.touched"
+    />
+  </div>
+  <div class="field">
+    <label class="label" for="postalCode">Code postal<span class="req">*</span></label>
+    <input
+      id="postalCode"
+      class="input"
+      formControlName="postalCode"
+      [class.invalid]="group().controls.postalCode.invalid && group().controls.postalCode.touched"
+    />
+  </div>
+  <div class="field">
+    <label class="label" for="country">Pays<span class="req">*</span></label>
+    <input
+      id="country"
+      class="input"
+      formControlName="country"
+      [class.invalid]="group().controls.country.invalid && group().controls.country.touched"
+    />
+  </div>
+</ng-container>

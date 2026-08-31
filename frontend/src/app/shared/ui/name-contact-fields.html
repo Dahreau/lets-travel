@@ -1,0 +1,35 @@
+<div class="field">
+  <label class="label" for="firstName">Prénom<span class="req">*</span></label>
+  <input
+    id="firstName"
+    class="input"
+    [formControl]="firstName()"
+    [class.invalid]="firstName().invalid && firstName().touched"
+  />
+</div>
+
+<div class="field">
+  <label class="label" for="lastName">Nom<span class="req">*</span></label>
+  <input
+    id="lastName"
+    class="input"
+    [formControl]="lastName()"
+    [class.invalid]="lastName().invalid && lastName().touched"
+  />
+</div>
+
+<div class="field">
+  <label class="label" for="email">Email<span class="req">*</span></label>
+  <input
+    id="email"
+    class="input"
+    type="email"
+    [formControl]="email()"
+    [class.invalid]="email().invalid && email().touched"
+  />
+</div>
+
+<div class="field">
+  <label class="label" for="phone">Téléphone</label>
+  <input id="phone" class="input" [formControl]="phone()" />
+</div>

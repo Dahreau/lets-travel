@@ -32,16 +32,14 @@ if ! vault kv get secret/shared/jwt >/dev/null 2>&1; then
 	echo "Secret JWT partage cree dans secret/shared/jwt"
 fi
 
-if ! vault kv get secret/payment-service/stripe >/dev/null 2>&1; then
-	vault kv put secret/payment-service/stripe secret_key="${STRIPE_SECRET_KEY:-sk_test_changeme_dev_only}"
-	echo "Secret Stripe cree dans secret/payment-service/stripe"
-fi
+# Ecrits a CHAQUE run (pas de garde "si absent" comme le JWT ci-dessus) : .env reste la
+# source de verite, un reset Vault ne doit jamais faire regresser ces secrets (cf. #79).
+vault kv put secret/payment-service/stripe secret_key="${STRIPE_SECRET_KEY:-sk_test_changeme_dev_only}"
+echo "Secret Stripe synchronise dans secret/payment-service/stripe"
 
-if ! vault kv get secret/payment-service/paypal >/dev/null 2>&1; then
-	vault kv put secret/payment-service/paypal \
-		client_id="${PAYPAL_CLIENT_ID:-changeme_dev_only}" \
-		client_secret="${PAYPAL_CLIENT_SECRET:-changeme_dev_only}"
-	echo "Secret PayPal cree dans secret/payment-service/paypal"
-fi
+vault kv put secret/payment-service/paypal \
+	client_id="${PAYPAL_CLIENT_ID:-changeme_dev_only}" \
+	client_secret="${PAYPAL_CLIENT_SECRET:-changeme_dev_only}"
+echo "Secret PayPal synchronise dans secret/payment-service/paypal"
 
 echo "Vault bootstrap done: AppRole enabled, one policy + one role per service, shared JWT/Stripe/PayPal secrets seeded."

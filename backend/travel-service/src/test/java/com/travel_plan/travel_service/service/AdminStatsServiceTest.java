@@ -1,11 +1,14 @@
 package com.travel_plan.travel_service.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.travel_plan.travel_service.domain.Feedback;
 import com.travel_plan.travel_service.domain.ReportedType;
+import com.travel_plan.travel_service.domain.Subscription;
 import com.travel_plan.travel_service.domain.SubscriptionStatus;
 import com.travel_plan.travel_service.domain.Travel;
 import com.travel_plan.travel_service.domain.TravelStatus;
@@ -13,10 +16,15 @@ import com.travel_plan.travel_service.repository.FeedbackRepository;
 import com.travel_plan.travel_service.repository.ReportRepository;
 import com.travel_plan.travel_service.repository.SubscriptionRepository;
 import com.travel_plan.travel_service.repository.TravelRepository;
+import com.travel_plan.travel_service.repository.TravelSubscriberCount;
 import com.travel_plan.travel_service.web.AdminManagerRankingResponse;
+import com.travel_plan.travel_service.web.AdminMonthlyRevenueResponse;
 import com.travel_plan.travel_service.web.AdminTravelRankingResponse;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -27,8 +35,9 @@ class AdminStatsServiceTest {
     private final SubscriptionRepository subscriptionRepository = mock(SubscriptionRepository.class);
     private final FeedbackRepository feedbackRepository = mock(FeedbackRepository.class);
     private final ReportRepository reportRepository = mock(ReportRepository.class);
-    private final AdminStatsService adminStatsService =
-            new AdminStatsService(travelRepository, subscriptionRepository, feedbackRepository, reportRepository);
+    private final Clock clock = Clock.fixed(Instant.parse("2026-08-15T00:00:00Z"), ZoneOffset.UTC);
+    private final AdminStatsService adminStatsService = new AdminStatsService(
+            travelRepository, subscriptionRepository, feedbackRepository, reportRepository, clock);
 
     private final UUID managerA = UUID.randomUUID();
     private final UUID managerB = UUID.randomUUID();
@@ -38,10 +47,10 @@ class AdminStatsServiceTest {
         Travel travelA = travel(managerA, BigDecimal.valueOf(100));
         Travel travelB = travel(managerB, BigDecimal.valueOf(100));
         when(travelRepository.findAll()).thenReturn(List.of(travelA, travelB));
-        when(subscriptionRepository.countByTravel_IdAndStatus(travelA.getId(), SubscriptionStatus.ACTIVE))
-                .thenReturn(2L);
-        when(subscriptionRepository.countByTravel_IdAndStatus(travelB.getId(), SubscriptionStatus.ACTIVE))
-                .thenReturn(2L);
+        List<TravelSubscriberCount> counts =
+                List.of(subscriberCount(travelA.getId(), 2L), subscriberCount(travelB.getId(), 2L));
+        when(subscriptionRepository.countActiveSubscribersGroupedByTravelIds(anyList(), eq(SubscriptionStatus.ACTIVE)))
+                .thenReturn(counts);
         when(subscriptionRepository.countDistinctTravelersByManagerIdAndStatus(managerA, SubscriptionStatus.ACTIVE))
                 .thenReturn(2L);
         when(subscriptionRepository.countDistinctTravelersByManagerIdAndStatus(managerB, SubscriptionStatus.ACTIVE))
@@ -65,8 +74,6 @@ class AdminStatsServiceTest {
     void managerRankingsPenalizesReportsAndReturnsNullRatingWithoutFeedback() {
         Travel solo = travel(managerA, null);
         when(travelRepository.findAll()).thenReturn(List.of(solo));
-        when(subscriptionRepository.countByTravel_IdAndStatus(solo.getId(), SubscriptionStatus.ACTIVE))
-                .thenReturn(0L);
         when(subscriptionRepository.countDistinctTravelersByManagerIdAndStatus(managerA, SubscriptionStatus.ACTIVE))
                 .thenReturn(0L);
         when(feedbackRepository.findByTravel_ManagerId(managerA)).thenReturn(List.of());
@@ -86,12 +93,10 @@ class AdminStatsServiceTest {
         Travel cheap = travel(managerA, BigDecimal.valueOf(50));
         Travel expensive = travel(managerA, BigDecimal.valueOf(200));
         when(travelRepository.findAll()).thenReturn(List.of(cheap, expensive));
-        when(subscriptionRepository.countByTravel_IdAndStatus(cheap.getId(), SubscriptionStatus.ACTIVE))
-                .thenReturn(1L);
-        when(subscriptionRepository.countByTravel_IdAndStatus(expensive.getId(), SubscriptionStatus.ACTIVE))
-                .thenReturn(1L);
-        when(feedbackRepository.findByTravel_Id(cheap.getId())).thenReturn(List.of());
-        when(feedbackRepository.findByTravel_Id(expensive.getId())).thenReturn(List.of());
+        List<TravelSubscriberCount> counts =
+                List.of(subscriberCount(cheap.getId(), 1L), subscriberCount(expensive.getId(), 1L));
+        when(subscriptionRepository.countActiveSubscribersGroupedByTravelIds(anyList(), eq(SubscriptionStatus.ACTIVE)))
+                .thenReturn(counts);
 
         List<AdminTravelRankingResponse> rankings = adminStatsService.travelRankings();
 
@@ -114,5 +119,39 @@ class AdminStatsServiceTest {
 
     private Feedback feedbackWithRating(int rating) {
         return Feedback.builder().id(UUID.randomUUID()).rating(rating).build();
+    }
+
+    private TravelSubscriberCount subscriberCount(UUID travelId, long activeCount) {
+        TravelSubscriberCount projection = mock(TravelSubscriberCount.class);
+        when(projection.getTravelId()).thenReturn(travelId);
+        when(projection.getActiveCount()).thenReturn(activeCount);
+        return projection;
+    }
+
+    @Test
+    void monthlyRevenueSumsActiveSubscriptionsIntoTheirSubscribedMonthOverTheLastSixMonths() {
+        Travel travel = travel(managerA, BigDecimal.valueOf(100));
+        Subscription august = subscription(travel, Instant.parse("2026-08-01T00:00:00Z"));
+        Subscription july = subscription(travel, Instant.parse("2026-07-15T00:00:00Z"));
+        when(subscriptionRepository.findByStatus(SubscriptionStatus.ACTIVE)).thenReturn(List.of(august, july));
+
+        List<AdminMonthlyRevenueResponse> revenue = adminStatsService.monthlyRevenue();
+
+        assertThat(revenue).hasSize(6);
+        assertThat(revenue.get(5).month()).isEqualTo("2026-08");
+        assertThat(revenue.get(5).revenue()).isEqualByComparingTo(BigDecimal.valueOf(100));
+        assertThat(revenue.get(4).month()).isEqualTo("2026-07");
+        assertThat(revenue.get(4).revenue()).isEqualByComparingTo(BigDecimal.valueOf(100));
+        assertThat(revenue.get(0).revenue()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    private Subscription subscription(Travel travel, Instant subscribedAt) {
+        return Subscription.builder()
+                .id(UUID.randomUUID())
+                .travel(travel)
+                .travelerId(UUID.randomUUID())
+                .status(SubscriptionStatus.ACTIVE)
+                .subscribedAt(subscribedAt)
+                .build();
     }
 }

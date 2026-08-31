@@ -4,6 +4,8 @@
 >
   @if (isTraveler()) {
     <a routerLink="/browse" class="btn btn-primary">parcourir les voyages</a>
+  } @else if (isManager()) {
+    <a routerLink="/travels/new" class="btn btn-primary">+ nouveau voyage</a>
   }
 </app-page-header>
 
@@ -40,6 +42,8 @@
             <th>Dates</th>
             <th>Prix</th>
             <th>Statut</th>
+            <th>Abonnés</th>
+            <th>Note moyenne</th>
             <th></th>
           </tr>
         </thead>
@@ -50,11 +54,19 @@
               <td>{{ travel.startDate }} → {{ travel.endDate }}</td>
               <td>{{ travel.price !== null ? travel.price + ' ' + travel.currency : '—' }}</td>
               <td><app-badge [value]="travel.status" /></td>
+              <td>{{ travelStatsById().get(travel.id)?.subscriberCount ?? 0 }}</td>
+              <td>
+                @if (travelStatsById().get(travel.id)?.averageRating; as rating) {
+                  {{ rating | number: '1.1-1' }} / 5
+                } @else {
+                  —
+                }
+              </td>
               <td class="actions">
                 <a [routerLink]="['/manager/travels', travel.id]" class="btn btn-ghost btn-sm">
                   abonnés & feedback
                 </a>
-                <a [routerLink]="['/travels', travel.id, 'edit']" class="btn btn-ghost btn-sm">edit</a>
+                <a [routerLink]="['/travels', travel.id, 'edit']" class="btn btn-ghost btn-sm">modifier</a>
               </td>
             </tr>
           }
@@ -135,12 +147,74 @@
         <tbody>
           @for (subscription of mySubscriptions(); track subscription.id) {
             <tr>
-              <td>{{ subscription.travelId | slice: 0 : 8 }}…</td>
+              <td>{{ subscription.travelTitle }}</td>
               <td><app-badge [value]="subscription.status" /></td>
               <td>{{ subscription.subscribedAt }}</td>
               <td class="actions">
                 <a [routerLink]="['/browse', subscription.travelId]" class="btn btn-ghost btn-sm">voir</a>
               </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <h2 class="section-title">mes avis</h2>
+
+  @if (myFeedbacks().length === 0) {
+    <div class="empty-state">Aucun avis laissé pour l'instant</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Voyage</th>
+            <th>Note</th>
+            <th>Commentaire</th>
+            <th>Laissé le</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (feedback of myFeedbacks(); track feedback.id) {
+            <tr>
+              <td>
+                <a [routerLink]="['/browse', feedback.travelId]">{{ feedback.travelTitle }}</a>
+              </td>
+              <td>{{ feedback.rating }} / 5</td>
+              <td>{{ feedback.comment }}</td>
+              <td>{{ feedback.createdAt }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <h2 class="section-title">mes signalements</h2>
+
+  @if (myReports().length === 0) {
+    <div class="empty-state">Aucun signalement pour l'instant</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Voyage</th>
+            <th>Type</th>
+            <th>Motif</th>
+            <th>Signalé le</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (report of myReports(); track report.id) {
+            <tr>
+              <td>
+                <a [routerLink]="['/browse', report.travelId]">{{ report.travelTitle }}</a>
+              </td>
+              <td><app-badge [value]="report.reportedType" /></td>
+              <td>{{ report.reason }}</td>
+              <td>{{ report.createdAt }}</td>
             </tr>
           }
         </tbody>
@@ -204,6 +278,27 @@
     </p>
   </div>
 
+  <h2 class="section-title">revenu des derniers mois</h2>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          @for (m of monthlyRevenue(); track m.month) {
+            <th>{{ m.month }}</th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          @for (m of monthlyRevenue(); track m.month) {
+            <td>{{ m.revenue }}</td>
+          }
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
   <h2 class="section-title">top managers</h2>
 
   @if (managerRankings().length === 0) {
@@ -241,7 +336,7 @@
     </div>
   }
 
-  <h2 class="section-title">top voyages</h2>
+  <h2 class="section-title">voyages</h2>
 
   @if (travelRankings().length === 0) {
     <div class="empty-state">Aucun voyage pour l'instant</div>
@@ -258,14 +353,17 @@
           </tr>
         </thead>
         <tbody>
-          @for (travel of travelRankings() | slice: 0 : 5; track travel.travelId) {
+          @for (travel of travelRankings(); track travel.travelId) {
             <tr>
               <td>{{ travel.title }}</td>
               <td>{{ travel.activeSubscriberCount }}</td>
               <td>{{ travel.revenue }}</td>
               <td>{{ travel.averageRating !== null ? (travel.averageRating | number: '1.0-1') : '—' }}</td>
               <td class="actions">
-                <a [routerLink]="['/travels', travel.travelId, 'edit']" class="btn btn-ghost btn-sm">voir</a>
+                <a [routerLink]="['/manager/travels', travel.travelId]" class="btn btn-ghost btn-sm">
+                  abonnés & feedback
+                </a>
+                <a [routerLink]="['/travels', travel.travelId, 'edit']" class="btn btn-ghost btn-sm">modifier</a>
               </td>
             </tr>
           }
@@ -283,6 +381,7 @@
       <table class="table">
         <thead>
           <tr>
+            <th>Signalé par</th>
             <th>Cible</th>
             <th>Motif</th>
             <th>Déposé le</th>
@@ -292,7 +391,11 @@
         <tbody>
           @for (report of reports(); track report.id) {
             <tr>
-              <td><app-badge [value]="report.reportedType" /> {{ report.reportedId | slice: 0 : 8 }}…</td>
+              <td>{{ reporterNames().get(report.reporterId) ?? (report.reporterId | slice: 0 : 8) + '…' }}</td>
+              <td>
+                <app-badge [value]="report.reportedType" />
+                {{ reportedNames().get(report.reportedId) ?? (report.reportedId | slice: 0 : 8) + '…' }}
+              </td>
               <td>{{ report.reason }}</td>
               <td>{{ report.createdAt }}</td>
               <td class="actions">

@@ -9,9 +9,10 @@ import { Travel } from '../../../core/models/travel';
 import { User } from '../../../core/models/user';
 import { AuthService } from '../../../core/auth/auth';
 import { ToastService } from '../../../core/notifications/toast';
-import { Badge } from '../../../shared/ui/badge';
 import { PageHeader } from '../../../shared/ui/page-header';
 import { Spinner } from '../../../shared/ui/spinner';
+import { TravelDestinationsList } from '../../../shared/ui/travel-destinations-list';
+import { TravelSummaryCard } from '../../../shared/ui/travel-summary-card';
 import { PaymentMethodsService } from '../../payments/payment-methods';
 import { PaymentsService } from '../../payments/payments';
 import { TravelerStatsService } from '../../travelers/traveler-stats';
@@ -27,7 +28,14 @@ const MANAGER_TARGET = 'MANAGER';
 // avis, signalement, paiement. Distincte de TravelForm (edition Admin/Manager).
 @Component({
   selector: 'app-travel-detail',
-  imports: [ReactiveFormsModule, RouterLink, Badge, PageHeader, Spinner],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    PageHeader,
+    Spinner,
+    TravelSummaryCard,
+    TravelDestinationsList,
+  ],
   templateUrl: './travel-detail.html',
 })
 export class TravelDetail implements OnInit {
@@ -70,10 +78,10 @@ export class TravelDetail implements OnInit {
   });
 
   protected readonly paymentSubmitting = signal(false);
+  // amount/currency ne sont plus dans le formulaire : le montant reel vient de t.price/t.currency
+  // (affiche en lecture seule), le backend l'ignorerait de toute facon (voir PaymentRequest).
   protected readonly paymentForm = this.fb.nonNullable.group({
     paymentMethodId: ['', Validators.required],
-    amount: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
-    currency: ['EUR', Validators.required],
   });
 
   ngOnInit(): void {
@@ -91,10 +99,6 @@ export class TravelDetail implements OnInit {
           const mine = subscriptions.filter((s) => s.travelId === this.travelId);
           this.hasParticipated.set(mine.length > 0);
           this.activeSubscription.set(mine.find((s) => s.status === 'ACTIVE') ?? null);
-
-          if (travel.price !== null) {
-            this.paymentForm.patchValue({ amount: travel.price, currency: travel.currency ?? 'EUR' });
-          }
 
           if (this.hasParticipated()) {
             this.loadCoTravelers();
@@ -156,6 +160,7 @@ export class TravelDetail implements OnInit {
   protected submitFeedback(): void {
     if (this.feedbackForm.invalid) {
       this.feedbackForm.markAllAsTouched();
+      this.toastService.error('Note obligatoire entre 1 et 5.');
       return;
     }
 
@@ -177,6 +182,7 @@ export class TravelDetail implements OnInit {
     const travel = this.travel();
     if (this.reportForm.invalid || !travel) {
       this.reportForm.markAllAsTouched();
+      this.toastService.error('Le motif du signalement est obligatoire.');
       return;
     }
 
@@ -205,6 +211,7 @@ export class TravelDetail implements OnInit {
     const myUserId = this.authService.userId();
     if (this.paymentForm.invalid || !travel || !myUserId) {
       this.paymentForm.markAllAsTouched();
+      this.toastService.error('Sélectionnez un moyen de paiement.');
       return;
     }
 
@@ -213,8 +220,6 @@ export class TravelDetail implements OnInit {
       travelId: this.travelId,
       ownerId: myUserId,
       paymentMethodId: raw.paymentMethodId,
-      amount: raw.amount ?? 0,
-      currency: raw.currency,
     };
 
     this.paymentSubmitting.set(true);

@@ -73,7 +73,25 @@ Détail des commandes de vérification (réutilisables à l'oral) : [`10-audit-d
 
 Indépendance des microservices, API Gateway, policies Vault scopées, aucun secret en dur, idempotence Ansible, Quality Gate SonarQube bloquant, Docker multi-stage non-root, conventions Git/PR. Voir la version du 29/07 dans l'historique Git si le détail est utile à l'oral.
 
+## Clôture de l'audit du 2026-08 (branche `fix/audit-gaps`, dernière branche avant l'oral)
+
+Un second audit, mené mi-août avec 5 agents indépendants sur l'ensemble backend+frontend (pas seulement le backend comme le 30/07 ci-dessus), a trouvé 7 écarts fonctionnels réels — aucun n'était un bug de sécurité ou de données, tous étaient des trous de couverture fonctionnelle ou de cohérence UI/backend. Tous corrigés et vérifiés (`ng build` + `ng test` réels sur le frontend, `mvn test` réel côté `travel-service` par Daro : 176/176, BUILD SUCCESS) sur la branche `fix/audit-gaps`.
+
+| Écart trouvé | Fix |
+|---|---|
+| Le Manager ne pouvait ni créer ni supprimer un voyage depuis l'UI (routes backend déjà ouvertes, juste absentes du frontend) | Bouton "+ nouveau voyage" (dashboard Manager) + suppression avec confirmation dans `travel-form` |
+| L'Admin n'avait aucun lien vers les abonnés/signalements d'un voyage | Lien "abonnés & feedback" ajouté dans le tableau top-voyages du dashboard Admin |
+| Pas de vision du revenu mensuel côté Admin | `AdminStatsService.monthlyRevenue()` (6 derniers mois glissants, abonnements ACTIVE, même convention "estimée" que les rankings existants) + endpoint + tableau dashboard |
+| Autocomplétion de la recherche de voyages : code mort côté frontend (aucun appel réel au backend) | `travel-browse` câblé avec `debounceTime`/`distinctUntilChanged`/`switchMap` + dropdown de suggestions |
+| Les signalements du dashboard Admin affichaient des UUIDs bruts au lieu de noms | Résolution via `usersService.findById` (même pattern que `travel-detail.loadCoTravelers`) |
+| `PaymentRequest.amount`/`.currency` : supprimés côté backend il y a longtemps (le prix vient de `travel-service`, jamais du client), mais **encore éditables** dans 2 formulaires frontend (`travel-detail` Traveler, `payment-form` Admin) — champs fantômes, aucun effet réel | Champs retirés des 2 formulaires, remplacés par l'affichage lecture-seule du prix réel du voyage |
+| Lien `/payment-methods` absent de la nav Manager alors que la route et le composant existaient déjà | Ajouté à `MANAGER_NAV_ITEMS` |
+
+**Gap assumé, pas comblé** : tests e2e et tests de charge k6, toujours "non commencés" (voir Bonus ci-dessous, inchangé depuis le 30/07 sur ce point). Un script `scripts/load-test.sh` (`ab`, sans dépendance supplémentaire) a été ajouté pour une vérification de charge minimale sans introduire k6. Détail de la décision : [`nouveautes-vs-travel-plan.md`](nouveautes-vs-travel-plan.md#fix-audit-gaps--clôture-des-écarts-identifiés-lors-de-laudit-final).
+
+Aucun changement de sécurité, de données ou de contrat d'API public sur cette branche — uniquement des écarts fonctionnels frontend/backend déjà présents mais non exposés ou non câblés. `docs/troubleshooting.md` (#25-#27) documente les 3 problèmes techniques réels rencontrés en les corrigeant (désynchronisation de contrat DTO, `NG0203`, cascade de tests liée à une navigation réelle en test).
+
 ## Bonus — état
 
-- **Doc** : complète et à jour pour tout sauf `01-ci-cd.md` (point 4 ci-dessus).
-- **Kubernetes / E2E** : non commencés — à mentionner comme "non fait, priorisé après le cœur du sujet" si demandé.
+- **Doc** : complète et à jour, y compris cette clôture du 2026-08.
+- **Kubernetes / E2E** : non commencés — décision assumée et documentée (voir section ci-dessus et `nouveautes-vs-travel-plan.md`), à mentionner comme "non fait, priorisé après le cœur du sujet" si demandé.

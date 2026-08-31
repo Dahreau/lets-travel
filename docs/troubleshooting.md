@@ -167,7 +167,17 @@ Supprimer seulement l'une des deux copies ne suffit pas : le manège `mv` (avant
 **À retenir** :
 1. Le Vault CI (`infra/ci/deploy-workspace`) et le Vault dev local (racine du repo) sont deux instances distinctes, avec des clés stockées à des endroits différents — ne jamais confondre les deux en diagnostiquant un souci de scellement.
 2. Quand un fichier "persisté" par un script Jenkins semble introuvable sur le disque, vérifier D'ABORD le mapping `volumes:` du service Jenkins dans `infra/ci/docker-compose.yml` avant de soupçonner un souci de cache WSL2/DrvFs — un chemin qui ressemble à `/mnt/d/...` dans un log Jenkins n'est pas forcément monté sur le vrai disque si le `docker-compose.yml` du conteneur Jenkins ne le liste pas explicitement dans ses `volumes`.
-3. Reste un défaut de conception à corriger un jour (pas urgent) : monter aussi `infra/ci/persistent-state` (ou tout `infra/ci`) dans le conteneur Jenkins, pour que cette sauvegarde soit une vraie persistance sur disque et pas seulement une survie tant que le conteneur `lets-travel-jenkins` n'est pas recréé.
+3. **Corrige** : `infra/ci/persistent-state` est desormais monte dans le conteneur Jenkins (`infra/ci/docker-compose.yml`, service `jenkins`), au meme titre que `deploy-workspace` - la sauvegarde des secrets survit maintenant a une recreation du conteneur `lets-travel-jenkins`, pas seulement a sa duree de vie. Limite qui reste malgre ce fix : si Vault est reinitialise EN DEHORS du flux Jenkins (comme l'incident du meme jour ou `ansible-playbook site.yml` a ete relance en local), la copie de secours redevient perimee par rapport a la realite - ce n'est plus un bug de montage, juste le prix normal d'une sauvegarde qui ne peut refleter que le dernier etat connu.
+
+**Recidive du 31/08** : exactement la limite predite au point 3 ci-dessus. `docker compose ps` montre que tous les conteneurs applicatifs datent de "2 days ago" (tests manuels par l'utilisateur, hors flux Jenkins) SAUF `vault` recree il y a 22 minutes par ce run Deploy - `vault status` confirme `initialized: true` / `sealed: true` sur le volume `vault_data` partage. La cle persistee (`infra/ci/persistent-state/infra/vault/.unseal-key.txt`, non modifiee depuis le 28/08) ne correspond donc plus a l'etat reel du volume, initialise/reinitialise entre-temps par les tests manuels. Meme fix que la 1ere fois, plus simple maintenant que le montage est corrige - plus besoin de `docker exec`, les deux copies sont de vrais fichiers atteignables directement sur le disque :
+```
+rm -f infra/ci/deploy-workspace/infra/vault/.unseal-key.txt infra/ci/persistent-state/infra/vault/.unseal-key.txt
+```
+Puis relancer le stage Deploy - le self-heal deja present dans `vault-unseal.yml` fait le reste (reinitialise le volume, reseed via `bootstrap.sh`).
+
+**Fix definitif (31/08)** : la recidive ci-dessus a ete debloquee a la main, mais le point 3 du "A retenir" ci-dessus avait deja identifie que ce n'etait qu'une question de temps avant que ca revienne - `vault-unseal.yml` ne savait reagir qu'a "cle absente", pas a "cle presente mais perimee" (le cas reellement rencontre a chaque fois). Corrige : la sequence de reset (arret/suppression volume/redemarrage) est extraite dans `vault-reset.yml`, et la sequence init+persist+unseal dans `vault-init-and-unseal.yml` (toutes deux `include_tasks`, pour ne pas dupliquer deux fois la meme logique dans le playbook principal). La tache d'unseal devient non-bloquante (`register` + `failed_when: false`) : si elle echoue (cle perimee), un 2e bloc de self-heal refait un reset complet puis rejoue l'init+unseal une seconde fois - avec une reelle nouvelle cle cette fois, forcement a jour puisqu'elle vient d'etre generee sur le volume tout juste reinitialise. Une tache finale (`ansible.builtin.fail`) fait echouer le run proprement si Vault reste scelle meme apres cette 2e tentative (vrai probleme Vault, pas juste une cle perimee) - jamais de succes silencieux avec Vault scelle.
+
+**A retenir** : documenter une limite connue ("ca va revenir si X se produit") sans coder le self-heal correspondant revient a reporter le meme incident sur soi-meme plus tard - un `A retenir` qui decrit un mode d'echec previsible est un signal qu'il faut coder la reaction automatique tout de suite, pas juste noter la procedure manuelle de deblocage.
 
 ## 19. `mvn test` sur `travel-service` échoue à résoudre `org.testcontainers:elasticsearch` — l'artifact a changé de nom en Testcontainers 2.x
 
@@ -275,3 +285,716 @@ done
 Solution portable (dans le `Jenkinsfile` versionné, pas une bidouille locale). Le dossier `target/` bloquant a aussi été signalé à l'utilisateur pour suppression manuelle ponctuelle, la boucle de retry ne pouvant pas garantir qu'un verrou déjà posé au moment du run se libère en quelques secondes.
 
 **À retenir** : sur ce projet, tout `rm -rf` sur un chemin Windows monté via WSL2/DrvFs dans un script CI doit être encapsulé dans une boucle de retry courte plutôt que de faire échouer tout le stage sur un premier échec — cohérent avec les autres soucis de verrous transitoires déjà rencontrés sur ce repo (nginx, `internal.crt`). Éviter d'ouvrir un IDE ou de lancer une commande directement dans `infra/ci/deploy-workspace` (entièrement gitignored, reconstruit à chaque run) — un projet Maven importé là par erreur peut laisser un `target/` verrouillé. **Confirmé résolu** : stage Deploy passé au round CI suivant, pipeline entièrement vert.
+
+
+## 25. Formulaires de paiement frontend restés désynchronisés d'un changement de contrat backend déjà ancien (`amount`/`currency`)
+
+**Problème** : en creusant le point "amount/currency ignorés côté backend" pendant l'audit `fix/audit-gaps`, découverte que `payment-service`'s `PaymentRequest` avait déjà retiré `amount`/`currency` (le montant vient de `travel-service`, jamais du client — commentaire explicite dans le fichier) il y a plusieurs branches, mais DEUX formulaires Angular (`TravelDetail` côté Traveler et `PaymentForm` côté Admin) envoyaient encore ces deux champs en les laissant modifiables par l'utilisateur, sans le moindre effet réel (Spring ignore silencieusement les champs JSON inconnus d'un DTO, il ne les rejette pas).
+
+**Cause** : même famille que les points 14/15 — un changement de contrat backend non propagé au frontend, invisible faute de test e2e frontend↔backend et parce qu'aucune erreur ne se produit (le champ en trop est juste ignoré, pas rejeté en 400).
+
+**Solution** : retrait de `amount`/`currency` du modèle `PaymentRequest` frontend et des deux formulaires, remplacés par un affichage en lecture seule du prix réel du voyage sélectionné (`travel.price`/`travel.currency`).
+
+**À retenir** : un champ de DTO retiré côté backend doit être recherché explicitement côté frontend (`grep` du nom du champ) — contrairement à un champ ajouté et devenu obligatoire (qui casse bruyamment en 400, cas des points 14/15), un champ retiré ne casse jamais rien silencieusement, il reste juste inutile et trompeur pour l'utilisateur jusqu'à ce que quelqu'un le remarque en lisant le code des deux côtés.
+
+## 26. `NG0203` : `takeUntilDestroyed()` appelé hors contexte d'injection depuis une méthode invoquée par `ngOnInit`
+
+**Problème** : en branchant l'autocomplete Elasticsearch sur `TravelBrowse` (`fix/audit-gaps`), `ng test` échoue avec `NG0203: takeUntilDestroyed() can only be used within an injection context` — l'appel se trouvait dans une méthode privée (`watchAutocomplete()`) elle-même appelée depuis `ngOnInit()`, pas directement dans le constructeur/field initializer du composant.
+
+**Cause** : `takeUntilDestroyed()` sans argument résout son `DestroyRef` via `inject()` en interne, qui exige d'être appelé de façon synchrone pendant la construction du composant (constructeur, field initializer, ou une fonction factory) — un appel depuis `ngOnInit()`, même synchrone à l'exécution, n'est plus dans cette fenêtre d'injection implicite dès qu'il passe par une méthode intermédiaire.
+
+**Solution** : injecter `DestroyRef` explicitement en field initializer (`private readonly destroyRef = inject(DestroyRef);`) et le passer en argument : `takeUntilDestroyed(this.destroyRef)`.
+
+**À retenir** : sur ce projet, tout usage de `takeUntilDestroyed()` en dehors d'un appel direct dans le corps du constructeur ou d'un field initializer doit passer un `DestroyRef` injecté explicitement — ne jamais compter sur la résolution implicite dès que l'appel est fait depuis `ngOnInit()` ou toute méthode appelée après la construction.
+
+## 27. Un `router.navigate()` réellement déclenché dans un test avec `provideRouter([])` fait échouer des fichiers de test sans rapport
+
+**Problème** : en ajoutant un test qui va jusqu'au bout d'un flux delete (`TravelForm`, `fix/audit-gaps`) — flush de la requête HTTP puis `router.navigate(['/travels'])` réellement exécuté — `ng test` faisait échouer en cascade plusieurs fichiers de test sans rapport (`app.spec.ts`, `manager-public.spec.ts`, `manager-travel-detail.spec.ts`) avec `Cannot configure the test module when the test module has already been instantiated`, en plus d'un `NG04002: Cannot match any routes` listé séparément comme "Unhandled Rejection".
+
+**Cause** : les tests existants du projet ne laissaient jamais un flux `submit()`/`delete()` aller jusqu'au `router.navigate(...)` final avec `provideRouter([])` (aucune route enregistrée) — la navigation levait `NG04002` de façon asynchrone, après la fin du test lui-même, sous forme de rejet de promesse non intercepté qui pouvait corrompre l'exécution d'un fichier de test suivant dans le même worker Vitest.
+
+**Solution** : enregistrer une route factice pour la cible de la navigation (`provideRouter([{ path: 'travels', component: DummyComponent }])`, `DummyComponent` étant un composant vide déclaré dans le fichier de test) — pattern déjà utilisé par `login.spec.ts` pour le même besoin.
+
+**À retenir** : dès qu'un test de composant sur ce projet laisse un flux aller jusqu'à un `router.navigate(...)` réel (pas juste vérifié par un spy), `provideRouter([])` ne suffit pas — il faut enregistrer au moins une route factice pour la cible, sous peine d'un rejet de promesse non intercepté qui peut faire échouer des fichiers de test totalement sans rapport exécutés dans le même worker.
+
+## 28. Certificat TLS interne correct sur disque, mais 500 sur toute requete inter-services (login, inscription) — bind mount Docker Desktop/WSL2 perime
+
+**Probleme** : `POST /api/auth/login` et `/api/auth/register` renvoyaient systematiquement 500. Le log `api-gateway` montrait la vraie cause : `CertificateException: No subject alternative DNS name matching lets-travel-app-auth-service-1 found.` Pourtant `openssl x509 -in infra/internal-tls/certs/internal.crt -noout -text` confirmait que le certificat sur disque contenait bien ce SAN (ainsi que tous les autres noms de conteneurs attendus) — la config Ansible (`ansible/playbooks/deploy.yml`) est correcte et n'a pas bouge.
+
+**Cause** : les conteneurs `auth-service`/`api-gateway` etaient deja demarres (ou leur bind mount deja etabli) avant que le fichier `internal.crt` ne soit (re)genere sur le disque hote. Docker Desktop sur WSL2 peut servir une vue perimee d'un bind mount a un conteneur deja lance — meme bug de fond que celui deja documente pour `vault-init` dans `deploy.yml` (commentaire : "reusing a stopped one can hit a stale Docker Desktop/WSL2 bind-mount bug"), ici sur un montage different (`./infra/internal-tls/certs`).
+
+**Solution immediate** : recreer entierement les conteneurs concernes pour qu'ils relisent le contenu actuel du bind mount — `docker compose down` puis `docker compose up -d` (un simple `restart` ne suffit pas forcement, il faut la recreation du conteneur).
+
+**Solution definitive (pipeline)** : `docker compose up` seul ne recree jamais un conteneur juste parce qu'un fichier monte en bind mount a change sous ses pieds (seule la config declaree - env vars, image - est diffee). `deploy.yml` avait deja ce garde-fou pour `vault-init`/`postgres`/`neo4j`/`nginx` (task "Force-remove ... before recreate") mais pas pour les 5 microservices qui montent `infra/internal-tls/certs` : etendu a `auth-service`, `user-service`, `travel-service`, `payment-service`, `api-gateway` dans la meme task. En passant systematiquement par le pipeline Ansible (`ansible-playbook ... site.yml`, meme commande que Jenkins) plutot que par un `docker compose up` direct, ce bind-mount perime ne peut plus se reproduire sans intervention manuelle.
+
+**À retenir** : sur ce projet et cet environnement (WSL2), tout bug de type "le fichier sur disque est correct mais le conteneur ne le voit pas" doit faire suspecter en premier ce bind-mount perime avant de re-suspecter la config elle-meme. Et surtout : ce garde-fou doit couvrir TOUS les services qui montent un fichier regenerable, pas seulement ceux touches par le premier incident (vault-init) - la meme classe de bug peut resurgir sur n'importe quel autre bind mount tant que le service concerne n'est pas dans la liste de force-remove.
+
+## 29. Redirection HTTP→HTTPS nginx cassee quand les ports host ne sont pas 80/443
+
+**Probleme** : suivre un lien `http://localhost:8080/...` redirigeait vers une URL `https://localhost/...` qui ne repondait pas, obligeant a corriger l'URL a la main (port 8443 manquant).
+
+**Cause** : `infra/nginx/nginx.conf` redirigeait avec `return 301 https://$host$request_uri;` — la variable nginx `$host` ne contient jamais le port. Comme le projet mappe volontairement `8080`/`8443` (pas `80`/`443`, pour tourner en parallele d'une autre instance), la redirection retombait sur le 443 implicite, non mappe cote host.
+
+**Solution** : port HTTPS explicite dans la redirection (`https://$host:8443$request_uri`), avec un commentaire pointant vers `NGINX_HTTPS_HOST_PORT` si ce port est change dans `.env`.
+
+**À retenir** : `$host` seul ne suffit jamais pour une redirection HTTP→HTTPS des que les ports exposes ne sont pas les ports standards 80/443.
+
+## 30. Formulaires Login/Register : aucun retour visuel si le formulaire est invalide a la soumission
+
+**Probleme** : soumettre le formulaire d'inscription (ou de login) avec un champ obligatoire manquant ne produisait absolument aucun retour utilisateur — ni message d'erreur, ni style, ni log console. Difficile a distinguer d'un vrai bug backend au premier abord.
+
+**Cause** : `submit()` faisait `if (this.form.invalid) { this.form.markAllAsTouched(); return; }` sans jamais renseigner le signal `errorMessage` deja utilise et affiche par ces deux templates pour les erreurs HTTP — `markAllAsTouched()` seul ne suffit pas en l'absence de styles/messages par champ bases sur l'etat `touched+invalid`.
+
+**Solution** : `errorMessage.set(...)` ajoute dans la branche invalide de `Login.submit()` et `Register.submit()`, reutilisant le paragraphe d'erreur deja present dans les deux templates.
+
+**À retenir** : un signal d'erreur affiche seulement sur les erreurs HTTP (`error: (error) => ...`) laisse un trou silencieux sur le chemin de validation locale (`form.invalid`) si personne n'y pense explicitement — verifier les deux chemins a chaque nouveau formulaire.
+
+## 31. Register : message d'erreur present mais toujours pas exploitable - un champ invalide invisible (password trop court, masque)
+
+**Probleme** : formulaire d'inscription rempli en apparence dans tous les champs, soumission qui echoue quand meme avec le message generique "Certains champs obligatoires sont manquants ou invalides" (entree #30) - impossible de savoir quel champ pose probleme, en particulier `password` (masque par `type="password"`, sa longueur invisible a l'oeil).
+
+**Cause** : `register.html` n'avait aucun `[class.invalid]` sur ses champs (contrairement a son propre voisin `login.html`, qui a exactement ce binding sur `username`/`password`) - un champ invalide ne se distingue donc visuellement d'aucune facon des autres. Concretement ici : `password` a `Validators.minLength(6)`, et un mot de passe de moins de 6 caracteres ne montre aucun signe (pas de bordure rouge, pas d'indice de longueur requise).
+
+**Solution** : `[class.invalid]="form.controls.X.invalid && form.controls.X.touched"` ajoute sur les 9 champs requis de `register.html` (5 principaux + 4 de l'adresse), meme pattern que `login.html` deja etabli. Indice permanent "6 caracteres minimum" ajoute sous le champ password, seul champ dont la contrainte est invisible meme une fois le champ rempli.
+
+**À retenir** : un nouveau formulaire doit reprendre le binding `[class.invalid]` de ses voisins des sa creation, pas seulement le signal `errorMessage()` (entree #30) - un message generique sans mise en evidence du champ fautif reste quasi inexploitable des que le formulaire depasse 2-3 champs.
+
+## 32. 401 sur `/api/auth/register` et `/api/users/register` malgre un `permitAll()` correct cote service
+
+**Probleme** : inscription impossible en conditions reelles (branche `fix/audit-gaps`, verification finale avant oral) - `POST /api/users/register` renvoyait 401 avant meme d'atteindre `user-service`, alors que `SecurityConfig` de ce service autorise explicitement cette route en `permitAll()`.
+
+**Cause** : `api-gateway/RouteConfig.java` appliquait `jwtFilter` sans exception a toutes les routes `/api/users/**` et `/api/auth/**` (sauf `/api/auth/login`, deja isolee). Le filtre JWT de la gateway rejette une requete sans token avant meme qu'elle atteigne le microservice cible - la regle `permitAll()` de `user-service`/`auth-service` n'a donc jamais l'occasion de s'appliquer, la gateway bloquant en amont.
+
+**Solution** : `RouteConfig.java` scinde desormais chaque route de service en deux `RouterFunction` distincts - un groupe `*-public` (sans `jwtFilter`) pour `/api/auth/login`, `/api/auth/register` et `/api/users/register`, un groupe protege (`jwtFilter` applique) pour tout le reste.
+
+**À retenir** : sur une architecture a gateway, une route publique doit etre `permitAll()` a la fois cote microservice ET cote gateway (routing/filtres) - les deux couches font de l'auth independamment, et la premiere qui bloque a raison.
+
+## 33. `/api/auth/me` reserve a ADMIN empeche tout Traveler/Manager de recuperer son propre profil apres login
+
+**Probleme** : trouve lors de l'audit complet (pas encore reporte par un utilisateur) - `SecurityConfig` d'`auth-service` ne declarait aucune regle explicite pour `/api/auth/me`, route appelee par tous les roles juste apres login/register pour recuperer l'identite du compte connecte.
+
+**Cause** : en l'absence de regle dediee, `/api/auth/me` tombait dans le `anyRequest().hasRole("ADMIN")` final - seul un compte ADMIN pouvait donc s'authentifier lui-meme via cette route, ce qui aurait bloque tout Traveler/Manager en aval du login des que le frontend l'appelle.
+
+**Solution** : ajout d'une regle explicite `.requestMatchers("/api/auth/me").authenticated()` avant le `anyRequest().hasRole("ADMIN")`, ainsi qu'un `permitAll()` explicite sur `/api/auth/register` (deja public via la gateway mais sans regle propre cote service).
+
+**À retenir** : `anyRequest()` en regle de secours (fallback) cache facilement des routes appelees par tous les roles qui n'ont jamais recu de regle dediee - toute nouvelle route consommee par plusieurs roles doit avoir sa propre ligne explicite, jamais compter sur le fallback pour deviner l'intention.
+
+## 34. 500 intermittent sur login qui persiste apres le fix TLS, meme sur un compte cree avec le bon mot de passe
+
+**Probleme** : apres correction du bug de bind-mount TLS (entree #28), le login restait intermittemment en 500 malgre un mot de passe correct sur un compte fraichement cree.
+
+**Cause** : `AdminSeeder` (execute au demarrage de chaque replica `auth-service`, `deploy.replicas: 2`) tente de creer le compte admin par defaut sans protection contre la concurrence. Le force-remove ajoute en #28 fait qu'un `docker compose up` recree desormais systematiquement les deux replicas ensemble a chaque deploiement - ils demarrent alors en meme temps, et le second `accountRepository.save(admin)` leve une `DataIntegrityViolationException` non rattrapee dans le `CommandLineRunner`, ce qui fait planter la JVM de ce replica. Le replica redemarre (`restart: unless-stopped`) mais pendant la fenetre de crash/redemarrage, le load balancer statique de la gateway (`SimpleDiscoveryClient`, sans connaissance de l'etat de sante) continue de router une partie du trafic - dont des logins legitimes - vers l'instance en train de planter.
+
+**Solution** : `accountRepository.save(admin)` entoure d'un `try/catch(DataIntegrityViolationException)` dans `AdminSeeder` - le second replica log simplement qu'un autre replica a deja cree l'admin, au lieu de planter.
+
+**À retenir** : tout `CommandLineRunner`/code de bootstrap qui ecrit en base doit etre idempotent et tolerant a la concurrence des que le service tourne en plusieurs replicas - un simple `count() == 0` avant insertion (deja en place ici) ne protege pas contre une course entre deux instances qui demarrent au meme instant. Gap connu, non traite faute de temps/perimetre : la gateway n'a pas de load balancing conscient de l'etat de sante (pas de retrait automatique d'un replica en train de planter/redemarrer).
+
+## 35. `auth-service` seul service sans gestion complete des exceptions - un 500 sur exception inattendue ne donnait aucune information exploitable
+
+**Probleme** : trouve lors de l'audit complet - `auth-service` etait le seul des 5 microservices sans `ApiExceptionHandler` couvrant `DataIntegrityViolationException`, `MethodArgumentNotValidException`, `HttpMessageNotReadableException` et `MethodArgumentTypeMismatchException` ; une exception dans ce perimetre remontait en 500 brut sans message exploitable ni log structure, contrairement aux autres services deja audites.
+
+**Solution** : `ApiExceptionHandler.java` d'`auth-service` complete avec les memes handlers que `user-service` (409 message explicite sur doublon, 400 sur validation/JSON malforme/type invalide, 500 avec `log.error` sur le reste), en conservant le format `ErrorResponse{message}` deja utilise par ce service plutot que de changer de format.
+
+**À retenir** : une gestion d'erreur consistante doit etre verifiee service par service et pas seulement teste implicitement via les flux qui marchent - un service qui gere bien ses erreurs "connues" peut quand meme laisser un angle mort sur les erreurs generiques (JSON malforme, contrainte DB) si personne ne l'a copie depuis le pattern etabli ailleurs dans le projet.
+
+## 36. `payment-service` sans truststore TLS interne - risque de `SSLHandshakeException` sur ses appels sortants vers `travel-service`
+
+**Probleme** : trouve lors de l'audit infra complet, pas encore reproduit en conditions reelles - `payment-service/application-docker.properties` ne declarait pas de truststore pour le bundle SSL interne (`spring.ssl.bundle.pem.internal-services`), contrairement a `api-gateway` qui a la meme ligne.
+
+**Cause** : sans ce truststore explicite, le `RestClient` sortant de `payment-service` vers `travel-service` retombe sur le `cacerts` par defaut de la JVM, qui ne connait pas le certificat auto-signe genere par le pipeline (`infra/internal-tls/certs/internal.crt`) - tout appel sortant echouerait en `SSLHandshakeException` des que ce chemin de code serait exerce.
+
+**Solution** : ajout de `spring.ssl.bundle.pem.internal-services.truststore.certificate=file:/etc/internal-tls/internal.crt`, identique a la ligne deja presente cote `api-gateway`.
+
+**À retenir** : toute config TLS interne (bundle keystore/truststore) doit etre dupliquee de facon identique sur TOUS les services qui font des appels sortants vers un autre service interne, pas seulement ceux ou le bug a deja ete vu - verifier par recherche croisee (`grep` du nom de la propriete sur tous les `application-docker.properties`) plutot que service par service au fil des rapports de bug.
+
+## 37. `vault` non couvert par le force-remove anti bind-mount perime (meme classe de bug que #28, sur un autre service)
+
+**Probleme** : trouve lors de l'audit infra complet - le service `vault` monte lui-meme des fichiers regenerables (`infra/vault/certs`, config), exactement le meme type de montage que celui qui causait le bug TLS de l'entree #28, mais n'etait pas dans la liste de force-remove etendue a cette occasion (qui ne couvrait que `postgres`, `neo4j`, `nginx` et les 5 microservices).
+
+**Solution** : `vault` ajoute a la meme liste de force-remove dans `deploy.yml` (task renommee en consequence, variable `stale_mount_containers_rm`).
+
+**À retenir** : suite directe de l'À retenir de l'entree #28 - cette liste doit etre revue a chaque nouveau service qui monte un fichier regenerable en bind mount, `vault` avait ete oublie car protege par ailleurs par sa propre tache "Force-remove any previous vault-init container" qui ne couvre que le conteneur d'init, pas `vault` lui-meme.
+
+## 38. IDOR sur `GET /api/users/{id}` - un Travel Manager peut recuperer le profil complet de N'IMPORTE QUEL utilisateur, pas seulement celui d'un de ses abonnes
+
+**Probleme** : trouve lors de l'audit complet (verification point par point de `lets-travel_audit.md`, ligne "role-based access controls correctly enforced") - un compte TRAVEL_MANAGER authentifie pouvait appeler `GET /api/users/{id}` avec l'UUID de N'IMPORTE QUEL utilisateur de la plateforme (traveler ou meme autre manager) et recevoir son profil complet (email, telephone, adresse...), sans aucune relation d'abonnement entre les deux comptes.
+
+**Cause** : `SecurityConfig` de `user-service` autorisait deja correctement la route au niveau HTTP (`.hasAnyRole("ADMIN", "TRAVEL_MANAGER")`), mais ce controle de ROLE etait le seul en place - `UserService.findById` renvoyait le profil demande a n'importe quel appelant ayant l'un de ces deux roles, sans jamais verifier que le TRAVEL_MANAGER appelant avait une RELATION legitime (un abonnement a l'un de ses voyages) avec le `travelerId` cible. Un role autorise a consulter des profils n'implique pas qu'il soit autorise a consulter TOUS les profils.
+
+**Solution** : ajout cote `travel-service` d'un endpoint interne `GET /api/travels/managers/me/subscribers/{travelerId}` (`ManagerStatsController` + `ManagerStatsService.isMySubscriber`, verifie via `SubscriptionRepository.existsByTravel_ManagerIdAndTravelerId`) qui repond si le traveler cible est abonne a l'un des voyages du manager appelant. Cote `user-service`, `UserService.findById` prend desormais `callerIsAdmin` + le header `Authorization` d'origine, et appelle ce nouvel endpoint via un `TravelServiceClient` (meme pattern que le client `payment-service` -> `travel-service` deja en place : `RestClient` charge-balance via `spring-cloud-starter-loadbalancer`, mTLS sortant via le bundle `internal-services`, propagation du JWT, fail-closed sur toute erreur reseau/HTTP) : ADMIN passe toujours, TRAVEL_MANAGER doit avoir une relation d'abonnement confirmee sinon `ForbiddenException` (403). Necessite l'ajout du BOM `spring-cloud-dependencies` dans le `pom.xml` d'`user-service` (absent jusqu'ici) et deux nouvelles variables d'environnement `TRAVEL_SERVICE_URI_1`/`TRAVEL_SERVICE_URI_2` dans `docker-compose.yml`, identiques a celles deja utilisees par `payment-service`.
+
+**À retenir** : `hasAnyRole(...)` a la couche HTTP (Spring Security) verifie uniquement que l'appelant POSSEDE un role autorise - jamais qu'il a le droit sur CETTE ressource precise. C'est un IDOR classique des qu'une route parametree par un ID est ouverte a un role "manager/gestionnaire" sans second controle au niveau service. Toute route de ce type doit imposer une verification explicite de relation (ownership/abonnement/appartenance) cote service, en plus - jamais a la place - du controle de role cote securite HTTP. A verifier systematiquement sur toute autre route exposee a TRAVEL_MANAGER : le controle "role-based access controls correctly enforced" de l'audit ne testait que la premiere moitie du probleme.
+
+## 39. `api-gateway` ne fait confiance a AUCUN certificat interne pour ses appels sortants - toute requete routee (login, register, tout le reste) plante en 500
+
+**Probleme** : decouvert en essayant de verifier manuellement le fix IDOR (#38) de bout en bout via `docker compose up` complet (nginx + tous les microservices, pas de mock) - TOUTE requete passant par `api-gateway` vers un service en aval (a commencer par `POST /api/auth/login`) echouait en 500, sans lien avec le fix IDOR lui-meme. Bug d'infrastructure pre-existant, jamais decouvert avant car le projet n'avait apparemment jamais ete teste de bout en bout via la stack docker-compose complete (nginx + mTLS reel) - les tests unitaires/integration mockent la couche reseau/TLS.
+
+**Cause** : `RouteConfig` proxie chaque service via `HandlerFunctions.http()` + le filtre `lb(...)` de `spring-cloud-gateway-server-webmvc`, qui recuperent tous les deux un bean `RestClient.Builder` dans le contexte Spring. `api-gateway` n'en definissait aucun explicitement, donc gateway-server-webmvc construisait son propre `RestClient.Builder` par defaut - qui n'utilise pas le bundle mTLS `internal-services` (les proprietes `spring.ssl.bundle.pem.internal-services.*` d'`application-docker.properties` ne s'appliquent qu'aux clients HTTP auto-configures directement par Spring Boot, jamais a celui-la). Consequence : le JVM retombe sur son cacerts par defaut, qui ne fait pas confiance au certificat auto-signe interne -> `PKIX path building failed: unable to find valid certification path to requested target` sur CHAQUE appel sortant du gateway.
+
+**Solution** : ajout de `GatewayHttpClientConfig` (meme pattern que `TravelServiceClientConfig` de payment-service/user-service, `troubleshooting.md` #11) fournissant un bean `RestClient.Builder` dont le `JdkClientHttpRequestFactory` est construit avec le `SSLContext` du bundle `internal-services`. Deux pieges rencontres en cours de correction, tous les deux desormais commentes directement dans le code :
+- **Pas de `@LoadBalanced` sur ce bean**, contrairement a `TravelServiceClientConfig`. Le filtre `lb(...)` deja present dans `RouteConfig` resout LUI-MEME le service logique (`auth-service`) vers une instance concrete (ex. `lets-travel-app-auth-service-2`) AVANT que `http()` n'appelle ce `RestClient`. Un bean `@LoadBalanced` a cet endroit tente de re-resoudre ce nom d'instance concret comme s'il s'agissait encore d'un service logique, et echoue avec `IllegalStateException: No instances available for lets-travel-app-auth-service-2` (double resolution - confirme par [spring-cloud/spring-cloud-gateway#3168](https://github.com/spring-cloud/spring-cloud-gateway/issues/3168), jamais documente clairement dans la doc officielle).
+- **Le timeout de lecture doit etre dimensionne pour un usage generique** : un premier essai a 5s (copie de la valeur utilisee par `TravelServiceClientConfig` pour UN appel interne leger precis) a fait planter `POST /api/travels` (creation avec destinations imbriquees, plus lourde) en `HttpTimeoutException: Request cancelled` - passe a 30s, tres en dessous du defaut nginx (60s, aucun timeout explicite cote nginx non plus).
+
+**À retenir** : ce bug etait invisible depuis le debut du projet car jamais teste bout-en-bout via la stack reelle (nginx + mTLS complet, pas de mock reseau) - un rappel qu'un test manuel via `docker compose up` complet reste necessaire pour attraper ce genre de trou de plomberie qu'aucun test unitaire ne peut voir, meme avec une suite de tests par service exhaustive (`mvn test` passait a 100% sur les deux services du fix IDOR pendant que l'API entiere etait injoignable en pratique). Plus specifiquement pour `spring-cloud-gateway-server-webmvc` : tout bean `RestClient.Builder` personnalise fourni pour cabler le client HTTP interne du gateway (mTLS, timeouts, etc.) ne doit PAS etre `@LoadBalanced` des lors que les routes utilisent deja le filtre `lb(...)` - les deux mecanismes de resolution entrent en conflit silencieusement.
+
+## 40. 6 trous trouves lors de l'audit complet point-par-point (`lets-travel_audit.md`) - rate-limit login absent, headers de securite absents, index manquant, timeout paiement absent, 500 brut sur panne amont, traveler sans acces a son propre feedback/reports
+
+**Probleme** : suite au fix du gateway (#39) et a la verification manuelle bout-en-bout du fix IDOR (#38), demande de verifier le projet EN ENTIER contre les ~30 points de `docs/lets-travel_audit.md`, pas seulement le point IDOR deja traite. Un audit en lecture seule (7 agents en parallele, un par domaine, aucune commande docker/mvn executee) a remonte 6 trous concrets et peu couteux a corriger, en plus de 3 fonctionnalites bonus entierement absentes (PWA, multilingue, fonctionnalite innovante - hors scope, decision explicite de Daro de ne pas les traiter).
+Correction ulterieure : la conformite protection des donnees (RGPD) avait ete classee a tort dans ce meme lot de "bonus hors scope" - erreur signalee par Daro, qui a confirme que ce point ne figure ni dans la section Bonus de l'enonce ni dans celle de l'audit. Traitee separement et implementee le soir meme, voir #41.
+
+### 40.1 Aucun rate-limit sur `POST /api/auth/login`
+
+**Cause** : `auth-service` ne fait ni lockout ni delai progressif sur les echecs de connexion (verifie dans `AuthController`), et rien en amont (nginx) ne limitait non plus la frequence des requetes vers cette route - un brute-force ou credential-stuffing pouvait tourner sans aucune limite.
+
+**Solution** : ajout d'une zone `limit_req_zone $binary_remote_addr zone=login_zone:10m rate=5r/m;` (nginx n'accepte cette directive qu'au niveau `http`, hors de portee du `infra/nginx/nginx.conf` existant qui est monte en `conf.d/default.conf` - creation d'un fichier `infra/nginx/nginx-main.conf`, replique du `nginx.conf` par defaut de l'image `nginx:1.27-alpine` avec cette seule ligne ajoutee, monte a la place du fichier par defaut via `docker-compose.yml`) puis un bloc `location /api/auth/login { limit_req_status 429; limit_req zone=login_zone burst=3 nodelay; ... }` place AVANT le `location /api/` generique dans `nginx.conf` (nginx retient le prefixe le plus long qui matche, l'ordre des blocs dans le fichier est indifferent mais le bloc specifique doit exister). `limit_req_status 429` explicite car par defaut nginx renvoie 503 quand le burst est depasse - ambigu (503 evoque un service en panne, pas un simple throttle), corrige en 429 ("Too Many Requests", RFC 6585) des la premiere ecriture pour eviter d'avoir a le redecouvrir plus tard en testant le script de verification.
+
+### 40.2 Aucun header de securite HTTP (defense en profondeur XSS/clickjacking)
+
+**Cause** : aucune reponse nginx n'envoyait `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Strict-Transport-Security` ni de `Content-Security-Policy` - le JWT est stocke en `localStorage` cote frontend (`auth.ts`), ce qui le rend volable par n'importe quel XSS si jamais un s'introduit malgre l'absence actuelle de faille connue.
+
+**Solution** : ajout des 5 `add_header ... always;` dans le bloc `server { listen 443 ssl; }` de `nginx.conf`. La CSP reste permissive sur `script-src`/`style-src` (`'unsafe-inline'`) pour ne pas casser le build Angular actuel (non teste en usage strict) - a durcir si l'occasion se presente, mais ces headers ne changent rien au fonctionnement normal de l'app.
+
+### 40.3 Colonne `travels.manager_id` sans index malgre un usage intensif en filtre
+
+**Cause** : `manager_id` est le filtre principal de `ManagerStatsService`, des classements d'`AdminStatsService` (`managerRankings`/`travelRankings`) et de `TravelService.requireOwnershipOrAdmin`, mais n'avait jamais recu d'index - contrairement a `subscriptions.travel_id`/`traveler_id` (V3) et `feedbacks.travel_id`/`reports.travel_id`/`reported_id` (V5), qui ont le meme profil d'usage.
+
+**Solution** : nouvelle migration Flyway `V6__add_index_travels_manager_id.sql` (`CREATE INDEX idx_travels_manager_id ON travels(manager_id);`), appliquee automatiquement au prochain demarrage de `travel-service`.
+
+### 40.4 Client Stripe/PayPal sans aucun timeout
+
+**Cause** : `PaymentProviderConfig.paymentRestClient()` utilisait `RestClient.create()` brut, qui n'a NI timeout de connexion NI timeout de lecture par defaut - contrairement a tous les appels internes du projet (`TravelServiceClientConfig`, `GatewayHttpClientConfig`, tous timeoutes), un fournisseur de paiement externe qui traine ou ne repond jamais aurait bloque la requete indefiniment, sans meme le filet de securite d'un timeout amont.
+
+**Solution** : reconstruction du bean avec `JdkClientHttpRequestFactory` (meme pattern que `TravelServiceClientConfig`), `CONNECT_TIMEOUT=5s`, `READ_TIMEOUT=15s` (plus genereux que les appels internes docker de 2-3s, un fournisseur externe etant naturellement plus lent, mais reste borne).
+
+### 40.5 `api-gateway` renvoie une 500 HTML brute (page Tomcat par defaut) si un service en aval est injoignable
+
+**Cause** : sans gestionnaire d'exception global, toute panne totale d'un service en aval (ses 2 replicas down, timeout, ou tout autre echec du `RestClient` fourni par `GatewayHttpClientConfig`) remontait comme une 500 HTML brute par defaut, illisible et inexploitable par le frontend.
+
+**Solution** : ajout d'`ApiExceptionHandler` (`@RestControllerAdvice`), meme pattern que celui deja en place dans `payment-service` - `RestClientException` (timeout, connexion refusee, TLS, erreur HTTP renvoyee par le service en aval) devient une 502 JSON structuree (`timestamp`/`status`/`error`/`message`), toute autre exception non prevue devient une 500 JSON. Les routes fonctionnelles de `RouterFunction` passent bien par le `DispatcherServlet`/`HandlerFunctionAdapter` standard (confirme dans la stack trace du bug #39), donc `@RestControllerAdvice` s'applique normalement.
+
+### 40.6 Un Traveler ne peut pas relire le contenu de son propre feedback/reports deja soumis
+
+**Cause** : `TravelerStatsResponse` (`mySubscriptions`) n'exposait que des COMPTEURS de feedbacks/reports, jamais leur contenu - et les endpoints qui exposent le contenu (`GET /api/travels/{travelId}/feedbacks`, `GET /api/reports`) sont reserves a ADMIN/TRAVEL_MANAGER. Un traveler n'avait donc aucun moyen de relire ce qu'il avait lui-meme ecrit.
+
+**Solution** : ajout de `findByTravelerId`/`findByReporterId` (`FeedbackRepository`/`ReportRepository`), puis `myFeedbacks`/`myReports` dans `TravelerStatsService` (meme garde d'auto-restriction `requireTravelerId(caller)` que `mySubscriptions` - la cible est TOUJOURS `caller.userId()`, jamais un ID fourni par l'appelant), exposes via `GET /api/travels/travelers/me/feedbacks` et `GET /api/travels/travelers/me/reports` dans `TravelerStatsController`. Aucun changement `SecurityConfig` necessaire : deja couvert par la regle generique `GET /api/travels/**` -> TRAVELER minimum.
+
+**À retenir** : ces 6 trous partagent un point commun - aucun n'a ete detecte par les tests unitaires/integration existants (qui passent tous a 100%), parce qu'aucun ne teste un COMPORTEMENT fonctionnel incorrect au sens strict (rien ne plante, rien ne renvoie le mauvais resultat) mais plutot une ABSENCE de protection/exposition qui ne se voit qu'en se posant explicitement la question "et si..." (et si on spamme le login, et si un service tombe, et si un traveler veut relire son propre avis...). Une suite de tests verte ne garantit jamais qu'un audit fonctionnel point-par-point n'a rien a redire - c'est exactement le role de la grille d'audit, distincte de `mvn test`. A verifier systematiquement pour tout futur endpoint : (1) y a-t-il un timeout explicite sur CHAQUE client HTTP sortant, (2) toute panne amont renvoie-t-elle une erreur JSON structuree ou une page brute, (3) un utilisateur peut-il relire/gerer TOUT ce qu'il a lui-meme cree, pas seulement ce qu'un role superieur peut voir sur lui.
+
+
+## 41. Conformite protection des donnees (RGPD) absente - aucun consentement a l'inscription, aucun droit d'acces/portabilite, aucun droit a l'effacement self-service
+
+**Probleme** : signale par Daro apres relecture de `docs/audit_reponses_detaillees.md`, qui classait ce point dans le meme lot que les 3 bonus hors scope (#40, intro) - erreur de classification corrigee sur place (voir la note ajoutee en tete de #40) : la protection des donnees personnelles ne figure dans la section Bonus ni de l'enonce ni de `lets-travel_audit.md`, c'est une exigence fonctionnelle a part entiere, absente du projet jusqu'ici. Aucune trace de consentement a l'inscription, aucun moyen pour un utilisateur de consulter/exporter ses propres donnees autrement qu'en recomposant a la main plusieurs appels `/me`, et aucun moyen de supprimer son propre compte (seul un ADMIN pouvait supprimer un profil via `DELETE /api/users/{id}`).
+
+**Cause** : le projet n'avait jamais eu besoin de resoudre "qui suis-je" cote `auth-service`/`user-service` au-dela du username+role - `JwtAuthenticationFilter` des deux services ne mettait dans le principal Spring Security qu'une `String` (le username) et le role, jamais le `userId`, alors meme que le JWT porte deja ce claim depuis le debut (`auth-service.JwtService.generateToken`). Impossible donc de batir un endpoint self-service `/me` qui resout "mon propre profil" sans jamais recevoir d'id en parametre (le seul pattern sur, cf. le fix IDOR #38). Consequence secondaire decouverte en creusant : `UserService.delete(id)` (admin) supprimait le profil `user-service` mais ne touchait jamais au compte de connexion `auth-service` associe - un profil supprime par un ADMIN laissait derriere lui un compte "fantome" toujours capable de se reconnecter (`POST /api/auth/login` fonctionnait encore), aucun rapport avec la demande initiale mais un vrai bug corrige au passage.
+
+**Solution** : implementation complete cote backend puis frontend, meme soir.
+- **Principal enrichi** : `AuthenticatedUser(username, role, userId)` (implements `AuthenticatedPrincipal`) ajoute a `auth-service` ET `user-service` (seuls services sans ce pattern - `travel-service` l'avait deja), branche dans leurs `JwtAuthenticationFilter` respectifs. `auth-service.JwtService` avait deja `extractUserId` ; ajoute a `user-service.JwtService` qui ne lisait jamais ce claim.
+- **Suppression cross-service reelle** : nouveau `DELETE /api/auth/accounts/by-user/{userId}` (`AccountController`, `auth-service`) avec la meme garde que le fix IDOR #38 (ADMIN OU proprietaire du `userId`, jamais un role seul), et `AuthServiceClient`/`AuthServiceClientConfig` cote `user-service` (reutilise le bean `@LoadBalanced RestClient.Builder` deja cable en mTLS par `TravelServiceClientConfig`, memes instances statiques que `travel-service` : `AUTH_SERVICE_URI_1`/`_2` -> `lets-travel-app-auth-service-1`/`-2:8081`). `UserService.delete(id, authorizationHeader)` supprime desormais le compte `auth-service` AVANT le profil local : si l'appel echoue, l'exception remonte et RIEN n'est supprime - jamais de profil supprime avec un compte fantome derriere (le bug cite plus haut est corrige pour le chemin ADMIN par le meme code que le nouveau chemin self-service).
+- **Consentement a l'inscription** : `UserRegistrationRequest.acceptedPrivacyPolicy` (`@AssertTrue`, rejette l'inscription en 400 si la case n'est pas cochee), horodate dans `User.privacyAcceptedAt` (nouvelle colonne nullable, migration `V2__add_privacy_accepted_at.sql` - nullable car les profils crees par un ADMIN via `POST /api/users` n'ont pas ce consentement, ce qui est attendu). Case a cocher jamais cochee par defaut sur `register.html`, avec lien vers une nouvelle page publique `/politique-de-confidentialite`.
+- **Droit d'acces/portabilite** : `GET /api/users/me` (nouveau, resout l'appelant via son principal, jamais un id) - reutilise `UserResponse` tel quel plutot qu'un DTO dedie, deja complet. Cote frontend, nouvelle page `/mon-compte` (visible aux 3 roles) qui affiche ce profil et propose un export JSON telechargeable en un clic (`Blob` + lien `download`, aucun aller-retour serveur supplementaire).
+- **Droit a l'effacement** : `DELETE /api/users/me` (nouveau, self-service), meme chemin de suppression cross-service que `DELETE /api/users/{id}` (admin) ci-dessus. Cote frontend, meme page `/mon-compte`, avec le composant `ConfirmDialog` deja utilise ailleurs (`UserList`) plutot qu'une modale native - deconnexion et redirection `/login` immediates apres succes, le token local n'ayant plus aucune valeur (compte de connexion deja supprime a ce stade).
+
+**Decision de perimetre assumee, pas cachee** : les donnees cross-service liees a un compte supprime (abonnements, feedbacks, reports, historique de paiement dans `travel-service`/`payment-service`) ne sont PAS purgees ce soir - elles restent en base, referencant un `travelerId`/`ownerId` qui ne pointe plus vers aucun profil (ces colonnes sont des UUID nus sans FK cross-service par conception, voir les commentaires existants dans le code - aucune infrastructure de cascade cross-service n'existe dans le projet). Cote utilisateur c'est un effacement reel (plus aucune trace nominative consultable), mais ce n'est pas un scrubbing ligne par ligne dans les 4 autres services. Signale explicitement a Daro en direct plutot que documente seul ici (voir echange du meme soir) - pas une omission.
+
+**À retenir** : deux lecons distinctes. (1) Classer une exigence en "bonus" ou "hors scope" doit se verifier ligne par ligne contre l'enonce ET l'audit, jamais par supposition/analogie avec d'autres points effectivement bonus (PWA, i18n) traites dans le meme lot - une conformite legale (RGPD) n'est structurellement pas du meme ordre qu'une fonctionnalite "innovante". (2) Toute suppression de compte dans une architecture microservices sans FK cross-service doit etre orchestree explicitement cote application (ici : auth-service AVANT user-service, jamais l'inverse) - c'est exactement la meme classe de bug que le "compte fantome" trouve au passage : une suppression qui semble complete cote UI/API appelee mais qui laisse une trace ailleurs dans le systeme parce que personne n'a orchestre le nettoyage cross-service.
+
+
+## 42. Faille de prise de controle de compte via `POST /api/auth/register` (userId non verifie) - aggravee par la suppression self-service RGPD (#41)
+
+**Probleme** : trouve lors d'une re-verification adversariale complete de l'audit (8 agents en parallele, un par domaine fonctionnel/securite, chacun instruit de lire le code reel et de rester sceptique plutot que de faire confiance a la documentation existante), demandee par Daro apres avoir ete plusieurs fois deçu de decouvrir des trous plus tard malgre des affirmations anterieures de "c'est bon". `POST /api/auth/register` (2e etape de l'inscription publique traveler, feat/traveler-experience) acceptait un champ `userId` fourni tel quel par le CLIENT dans le corps de la requete, et le stockait sans aucune verification sur le nouveau compte de connexion (`Account.userId`). N'importe qui pouvait donc creer un compte de connexion (username/password de son choix) lie au `userId` de N'IMPORTE QUEL profil `user-service` existant - le sien, ou celui de quelqu'un d'autre, l'UUID etant devinable/enumerable (retourne par exemple dans les reponses `GET /api/users`, visible par tout ADMIN/TRAVEL_MANAGER, ou simplement brute-forcable vu le faible cout d'un essai). Une fois ce compte cree, se logger avec dessus donnait un JWT portant CE userId - soit un acces complet au profil de la victime a travers tous les endpoints qui font confiance a ce claim.
+
+**Gravite fortement aggravee par #41** : avant l'ajout du self-service RGPD ce meme soir, le pire impact pratique de cette faille etait deja significatif (usurper le profil d'un traveler existant, lire ses donnees via les endpoints qui font confiance au JWT). Mais #41 a ajoute `GET /api/users/me` (lire) ET `DELETE /api/users/me` (supprimer, cross-service - profil ET compte de connexion) - tous deux resolvent leur cible EXCLUSIVEMENT depuis `caller.userId()` (le principal du JWT), jamais un id fourni en parametre, un choix delibere fait a l'epoque justement pour eviter tout IDOR explicite (cf. #38). Ce choix, correct en apparence, s'appuyait implicitement sur une hypothese non verifiee : qu'un JWT valide porte forcement le userId de son PROPRE detenteur legitime. La faille de `/api/auth/register` invalidait cette hypothese : un attaquant pouvait donc, en un seul appel non authentifie et sans jamais connaitre le mot de passe de la victime, obtenir un JWT valide portant le userId de CETTE victime, puis l'utiliser sur `GET /api/users/me` (lire son profil complet) et surtout `DELETE /api/users/me` (supprimer definitivement son profil ET son compte de connexion reel) - une prise de controle de compte complete, silencieuse, sans laisser a la victime la moindre chance de s'en apercevoir avant coup.
+
+**Cause** : `AuthController.register` (avant fix) faisait confiance a `RegisterRequest.userId()` tel quel, sans jamais verifier que ce userId provenait effectivement d'un appel reussi et recent a `POST /api/users/register` (user-service). Aucun mecanisme ne liait cryptographiquement les deux etapes de l'inscription (creation du profil cote `user-service`, puis creation du compte de connexion cote `auth-service`) - le client etait le SEUL porteur de cette information entre les deux appels, et rien ne verifiait qu'il ne la falsifiait pas.
+
+**Solution** : jeton de preuve d'inscription signe, court, a usage prevu unique, plutot qu'un userId en clair.
+- `user-service.JwtService.generateRegistrationToken(UUID userId)` (nouvelle methode) signe un JWT avec la MEME cle partagee (Vault `shared/jwt`, confirmee identique dans les deux `JwtSigningKeyConfig`) que les JWT de connexion, mais avec un `subject` = userId (jamais un username, contrairement aux JWT de session) et un claim distinctif `"purpose":"user-registration"`, expiration courte (10 minutes). `UserService.register` l'appelle juste apres la sauvegarde du `User` et le renvoie dans une nouvelle reponse `RegistrationResponse(UserResponse user, String registrationToken)` (`POST /api/users/register` renvoie desormais cet objet au lieu du seul profil).
+- `auth-service.JwtService.validateRegistrationToken(String token)` (nouvelle methode) verifie la signature, le claim `purpose`, la non-expiration, et extrait le userId du `subject` - leve `InvalidRegistrationTokenException` (400, via `ApiExceptionHandler`) sur tout echec (jeton absent, invente, expire, mal signe, ou sans le bon claim). `RegisterRequest` perd son champ `userId` au profit de `registrationToken` ; `AuthController.register` derive desormais le userId UNIQUEMENT de ce jeton verifie, jamais du corps de la requete.
+- **Isolation du domaine de confiance** : le jeton de preuve n'a ni `role` ni `userId` en claim (contrairement a un JWT de session) et son `subject` est un UUID brut - si un tel jeton etait par erreur presente comme Bearer token ailleurs dans le systeme, `JwtAuthenticationFilter` resoudrait `role=null`/`userId=null` et echouerait toute autorisation, sans aucune confusion possible avec le circuit de connexion normal.
+- **Defense en profondeur** : nouvelle migration `V3__add_accounts_user_id_unique_constraint.sql` (`ALTER TABLE accounts ADD CONSTRAINT uq_accounts_user_id UNIQUE (user_id)`) - meme si un jeton valide etait rejoue (fenetre de 10 minutes), un DEUXIEME compte de connexion ne peut plus jamais etre lie au meme userId (409, via le handler `DataIntegrityViolationException` deja en place). Postgres n'applique jamais l'unicite entre plusieurs `NULL`, donc le compte ADMIN par defaut (sans fiche `User`, `userId` null) n'est pas affecte.
+- Frontend : `RegisterRequest.userId` -> `registrationToken` (`core/models/auth.ts`), nouvelle interface `RegistrationResponse` (`core/models/user.ts`), `UsersService.register` renvoie desormais `Observable<RegistrationResponse>`, et `Register.submit()` (`features/register/register.ts`) transmet `result.registrationToken` au lieu de `user.id` a la 2e etape.
+- Tests : nouveaux tests directs (sans mock) sur `auth-service.JwtServiceTest` couvrant les 5 cas du nouveau `validateRegistrationToken` (jeton valide, sans claim purpose, expire, mauvaise cle, subject non-UUID) ; `AuthControllerTest` mis a jour (stub de `validateRegistrationToken`) plus un nouveau test dedie au rejet d'un jeton invalide ; `UserServiceTest`/`UserControllerTest` mis a jour pour le nouveau type de retour `RegistrationResponse` ; `verify_platform.sh` gagne un `TEST 11` dedie (inscription legitime acceptee, jeton invente rejete en 400, rejeu du meme jeton valide sous un autre username rejete en 409 par la contrainte UNIQUE) et `test_idor.sh` est mis a jour pour rester executable.
+
+**À retenir** : une decision de conception qui semble fermer un IDOR ("resoudre uniquement depuis le principal du JWT, jamais un id fourni") ne vaut que ce que vaut la confiance accordee AU JWT lui-meme - si n'importe quel autre endpoint permet de faire emettre un JWT portant un claim choisi par l'attaquant, cette protection est illusoire. Toute donnee qui traverse une frontiere de confiance entre deux appels HTTP distincts (ici : userId communique par le client entre l'etape 1 - creation du profil - et l'etape 2 - creation du compte) doit etre soit revalidee independamment, soit transmise sous une forme que le client ne peut pas falsifier (ici : un jeton signe par le service qui a legitimement produit la donnee). Une fonctionnalite ajoutee plus tard (#41, le self-service RGPD) peut transformer une faille pre-existante de gravite moderee en faille critique sans que rien ne change dans le code de la faille elle-meme - un rappel qu'ajouter des capacites self-service (lire/modifier/supprimer "mon propre" compte) augmente mecaniquement l'enjeu de TOUT mecanisme qui etablit "qui je suis", meme des mecanismes anciens et jusque-la juges anodins.
+
+
+## 43. 4 gaps trouves lors de la re-verification adversariale du 27/08 - recommandations Neo4j, dashboard admin, dashboard manager, contenu feedback/reports traveler
+
+**Probleme** : suite a la demande de Daro de re-verifier point par point l'integralite de l'audit (8 agents en parallele, lecture de code reel), 4 gaps reels ont ete trouves en plus de la faille #42. Corriges le soir meme.
+
+### 43.1 Neo4j ignorait la valeur de la note du feedback, seulement sa presence
+
+**Cause** : `RecommendationRepository.recommendTravelIds` matchait tout voyage relie par `PARTICIPATED_IN` ou `RATED` de la meme facon - une note de 1/5 pesait exactement comme une note de 5/5 dans le calcul des recommandations.
+
+**Solution** : chaque voyage aime pese desormais `note - 3` s'il a ete note (4-5/5 pese plus qu'une simple participation, 1-2/5 devient negatif et est exclu), ou 1 s'il n'a ete que participe sans note. Le score final est la somme de ces poids plutot qu'un simple compte.
+
+### 43.2 Le dashboard admin ne proposait le lien feedback que pour les 5 premiers voyages du classement
+
+**Cause** : `dashboard.html` tronquait `travelRankings()` a `slice: 0 : 5` cote frontend (le backend renvoie deja le classement complet) - un admin ne pouvait pas atteindre le feedback d'un voyage hors de ce top 5 depuis le dashboard.
+
+**Solution** : suppression du `slice`, la table affiche desormais tous les voyages classes.
+
+### 43.3 Le dashboard manager n'avait pas d'analyse par voyage
+
+**Cause** : `ManagerStatsResponse` n'exposait que des totaux agreges (nombre de voyages, abonnes, revenu) - pas d'abonnes ni de note moyenne par voyage individuel.
+
+**Solution** : nouveau champ `travels` (liste de `ManagerTravelStatsEntry` : id, titre, nombre d'abonnes actifs, note moyenne, nombre d'avis), calcule dans `ManagerStatsService.myStats`. Cote frontend, deux colonnes ajoutees a la table "mes voyages" du dashboard.
+
+### 43.4 Le contenu du feedback/signalements d'un traveler etait accessible cote backend mais jamais affiche
+
+**Cause** : `GET /api/travels/travelers/me/feedbacks` et `.../me/reports` existaient deja mais aucun code frontend ne les appelait.
+
+**Solution** : `TravelerStatsService.myFeedbacks`/`myReports` (Angular) ajoutes, integres au chargement du dashboard traveler, deux nouvelles sections affichees ("mes avis", "mes signalements").
+
+**À retenir** : un backend correct et teste ne suffit pas si personne ne verifie que le frontend l'appelle reellement - c'est le meme trou que celui deja identifie sur ce projet (voir #40.6). Une donnee tronquee cote frontend pour l'affichage (le `slice: 0:5` de #43.2) peut cacher une fonctionnalite backend par ailleurs complete - a verifier explicitement, pas seulement le code serveur.
+
+## 44. 4 dernieres limites connues traitees le 27/08 - fallback travel-service, N+1 stats, messages d'erreur en anglais, verification de la copie infra/ci
+
+**Probleme** : 4 points restaient signales comme limites connues ou non tranchees apres #43 (resilience partielle, performance des stats, coherence linguistique de l'UI, et une copie de code suspectee dans `infra/ci`). Traites le meme soir, sans exception.
+
+### 44.1 `payment-service` retentait les pannes transitoires de `travel-service` mais n'avait aucune protection contre une panne prolongee
+
+**Cause** : `TravelServiceClient` retentait 3 fois (200ms d'ecart) chaque appel a `travel-service`, mais si le service restait indisponible plus longtemps, CHAQUE requete de paiement refaisait ces 3 tentatives avant d'echouer - aucun mecanisme n'empechait de marteler un service deja en panne, et l'erreur remontee au client etait l'exception reseau brute (`ResourceAccessException`), pas un message clair.
+
+**Solution** : nouveau `CircuitBreaker` (interne, sans dependance externe) - s'ouvre apres 5 echecs consecutifs et coupe court pendant 30s (les appels suivants echouent immediatement sans toucher le reseau), puis retente un seul appel d'essai (`HALF_OPEN`) : succes -> refermeture, echec -> reouverture. Un `TravelServiceUnavailableException` (503, message en francais) remplace desormais l'erreur reseau brute une fois les tentatives epuisees ou le circuit ouvert.
+
+### 44.2 `AdminStatsService`/`ManagerStatsService` faisaient une requete SQL par voyage (N+1)
+
+**Cause** : `managerRankings`, `travelRankings` et `myStats` calculaient le nombre d'abonnes actifs et la note moyenne de chaque voyage un par un, a l'interieur d'une boucle (`activeSubscriberCount(travel.getId())`, `feedbackRepository.findByTravel_Id(travel.getId())`) - N voyages generaient N+1 requetes au lieu d'une poignee.
+
+**Solution** : deux requetes groupees ajoutees (`SubscriptionRepository.countActiveSubscribersGroupedByTravelIds`, `FeedbackRepository.aggregateByTravelIds`, chacune un `GROUP BY s.travel.id` avec projection), appelees une seule fois par methode avec la liste complete des ids de voyages, puis consultees via une `Map` a l'interieur de la boucle d'affichage.
+
+### 44.3 Messages d'erreur backend systematiquement en anglais sur une UI en francais
+
+**Cause** : chaque exception metier (403/400/404/409) portait son message directement en anglais ("Invalid credentials", "You can only cancel your own subscription", etc.), tout comme les messages generiques de secours des `ApiExceptionHandler` ("Validation failed", "Unexpected error"...) et les messages de validation par defaut de Bean Validation (`@NotBlank`, `@Email`...) - `extractErrorMessage` cote frontend affiche ce texte tel quel dans les toasts, donc CHAQUE erreur visible par un utilisateur (pas seulement une, contrairement a ce qui avait ete signale initialement) sortait en anglais sur une interface en francais.
+
+**Solution** : traduction de tous les messages d'exception metier et des messages generiques des 4 `ApiExceptionHandler` (auth/user/travel/payment-service), plus un `ValidationMessages.properties` par service qui redefinit les messages par defaut de Bean Validation (`NotBlank`, `NotNull`, `Email`, `Size`, `Min`, `Max`, `Positive`, `PositiveOrZero`) en francais. Les messages internes jamais exposes a l'utilisateur (erreurs Vault, Stripe/PayPal, index de recherche - tous mappes en 500 generique) n'ont pas ete touches : aucun benefice utilisateur, risque de diff inutile.
+
+### 44.4 Verification de la copie de `travel-service` sous `infra/ci/deploy-workspace/`
+
+**Cause** : signalee comme copie dupliquee jamais nettoyee lors d'un premier passage.
+
+**Solution** : verifiee, ce n'est pas un bug. `infra/ci/deploy-workspace/` est dans `.gitignore` et c'est l'espace de deploiement du pipeline Jenkins : l'etape `Deploy` du `Jenkinsfile` fait un `rm -rf` puis regenere entierement son contenu a partir du workspace courant a CHAQUE execution. Rien n'est fige ni versionne la-dedans, donc pas de risque de derive entre ce dossier et le vrai code source. Aucun changement necessaire.
+
+**À retenir** : la resilience ne se limite pas au retry - un retry sans circuit breaker protege des pannes courtes mais aggrave une panne longue en continuant a solliciter un service deja mort. Sur le N+1, le reflexe "une methode privee par voyage appelee dans un stream" est le signal a chercher en premier dans du code Spring Data. Sur les messages d'erreur, une premiere estimation ("une chaine en anglais") s'est reveree etre un probleme systemique une fois qu'on a suivi le chemin complet exception -> ApiExceptionHandler -> frontend au lieu de s'arreter au premier exemple trouve. Et un signalement n'est pas automatiquement un bug : verifier avant de corriger evite de perdre du temps sur un fonctionnement de CI/CD volontaire.
+
+## 45. `ng test` (Vitest) plantait de facon intermittente sur l'environnement WSL2/DrvFs du poste de dev - migration vers Karma/Jasmine
+
+**Probleme** : `ng test` echouait par intermittence avec "Worker exited unexpectedly" / timeout, un fichier de test different a chaque execution, sans lien avec le code teste lui-meme.
+
+### 45.1 Cause racine
+
+Vitest execute chaque fichier de test dans un worker Node forke, avec un handshake IPC de demarrage borne par une constante codee en dur dans Vitest (`START_TIMEOUT = 60000ms`, verifie dans le source compile de la lib) - aucune option de `vitest.config.ts` ne permet de relever ce plafond. Sur le disque monte via DrvFs (pont WSL2 <-> NTFS) utilise pour ce projet, ce handshake est parfois trop lent et depasse le plafond : le worker est tue, le fichier de test associe echoue, un autre a la prochaine execution. Le choix de Vitest comme runner (defaut d'Angular 21, jamais decide explicitement) etait le probleme de fond, pas un reglage.
+
+### 45.2 Migration vers Karma/Jasmine
+
+**Solution** : `angular.json` (`runner: "karma"`), nouvelles dependances (`karma`, `karma-jasmine`, `karma-chrome-launcher`, `karma-jasmine-html-reporter`, `karma-coverage`, `jasmine-core`), `tsconfig.spec.json` (`types: ["jasmine"]`), suppression de `vitest.config.ts`. Karma execute les tests dans un vrai processus Chrome (CDP), sans mecanisme de worker/IPC forke - toute cette classe de bug disparait structurellement. Karma est une option officiellement supportee par le meme builder Angular (`runner: "karma" | "vitest"`), pas une bequille externe.
+
+### 45.3 API de mock Vitest incompatible avec Jasmine
+
+**Cause** : 10 fichiers `.spec.ts` utilisaient l'API de mock propre a Vitest (`vi.spyOn`, `vi.useFakeTimers`, `vi.advanceTimersByTime`...), absente de Jasmine. 4 fichiers utilisaient aussi `.toHaveLength(n)`, un matcher Jest/Vitest sans equivalent Jasmine natif.
+
+**Solution** : `vi.spyOn(...).mockReturnValue(...)` -> `spyOn(...).and.returnValue(...)`, `vi.spyOn(x, 'p', 'get')` -> `spyOnProperty(x, 'p', 'get')`, `.toHaveLength(n)` -> `.toHaveSize(n)` (equivalent natif Jasmine).
+
+### 45.4 Chrome headless introuvable dans l'environnement du poste de dev
+
+**Cause** : `karma-chrome-launcher` cherche un binaire Chrome/Chromium systeme et n'en trouve pas forcement selon le poste - erreur "No binary for ChromeHeadless browser".
+
+**Solution** : ajout de `puppeteer` en devDependency (telecharge son propre Chromium a l'installation) et d'un `karma.conf.js` qui fait `process.env.CHROME_BIN = require('puppeteer').executablePath()` avant le lancement de Karma (`angular.json` : `runnerConfig: true` pour que le builder charge ce fichier). Aucune installation systeme, aucune variable d'environnement a poser a la main : `npm install && npx ng test` suffit sur n'importe quel poste.
+
+### 45.5 Collision d'ID de composant (`NG0912`) sur 3 composants de test factices
+
+**Cause** : `login.spec.ts`, `register.spec.ts` et `travel-form.spec.ts` definissaient chacun un `@Component({ template: '' }) class DummyComponent {}` sans selecteur explicite - Angular leur generait a tous le meme ID interne.
+
+**Solution** : un selecteur unique ajoute a chacun (`app-test-dummy-login`, etc.). Simple warning, aucun test en echec, corrige au passage.
+
+### 45.6 Timer virtuel (`jasmine.clock()` puis `fakeAsync`/`tick()`) incompatible avec le debounce RxJS de `travel-browse.spec.ts`
+
+**Cause** : les 2 tests du debounce d'autocompletion (`debounceTime(250)`) utilisaient `vi.useFakeTimers()`/`vi.advanceTimersByTime()` sous Vitest. Porte tel quel vers `jasmine.clock()`, le timer RxJS ne se declenchait jamais (`tick(250)` n'avait aucun effet observable sur la requete HTTP attendue), et l'echec du premier test empechait d'atteindre son `jasmine.clock().uninstall()`, cassant le second test en cascade ("Clock was unable to install... already installed?"). Tentative suivante avec `fakeAsync`/`tick()` d'Angular : echec different, `zone.js/testing` introuvable - ce projet est une app Angular 21 zoneless, sans zone.js du tout, et `fakeAsync` en depend structurellement.
+
+**Solution** : abandon du temps virtuel pour ces 2 tests au profit d'un vrai delai (`await new Promise((resolve) => setTimeout(resolve, 300))`), superieur aux 250ms du debounce. Plus robuste qu'un mock de timer dont la compatibilite avec le scheduler interne de RxJS (`intervalProvider`) n'est pas garantie selon le runner/environnement, au prix de 300ms reels par test - negligeable sur une suite de cette taille.
+
+**À retenir** : un choix d'outillage jamais explicitement decide (Vitest par defaut d'Angular 21) peut devenir un probleme de fond sur un environnement particulier (ici WSL2/DrvFs) - remonter au choix de methode plutot que d'accumuler des reglages de config est parfois la seule vraie solution. Porter des tests d'un runner a un autre ne se limite pas a changer le builder : verifier systematiquement l'API de mock utilisee (`vi.*` vs Jasmine) et les mecanismes qui en dependent implicitement (zone.js pour `fakeAsync`) avant de declarer la migration terminee. Et face a un mock de temps qui ne se comporte pas comme attendu, un vrai petit delai reste parfois la solution la plus fiable - moins elegant, mais qui ne depend d'aucune hypothese sur la compatibilite entre librairies.
+## 46. Deuxieme re-verification adversariale du 27/08 (4 agents en parallele, chaque point de l'audit relu contre le code reel) - 2 erreurs de documentation trouvees, une couverture de test manquante comblee
+
+**Probleme** : apres la fermeture des points #43/#44/#45, tous les points de `lets-travel_audit.md` etaient marques SOLIDE dans `audit_reponses_detaillees.md`. Plutot que de faire confiance a ce document, relecture independante de CHAQUE affirmation contre le code source reel (pas contre sa propre description), un lot d'audit a la fois (comprehension, fonctionnel/securite, frontend/RGPD, couverture de test des correctifs recents).
+
+### 46.1 `docker-compose.yml` fait deja dependre le demarrage de `travel-service` de la sante de Neo4j/Elasticsearch
+
+**Cause** : `audit_reponses_detaillees.md` affirmait "une panne d'ES/Neo4j n'empeche pas travel-service de demarrer" - faux au demarrage : `travel-service` a bien `depends_on: { neo4j: condition: service_healthy, elasticsearch: condition: service_healthy }`, un choix de fail-fast delibere (ne pas demarrer avec une dependance critique cassee), pas un oubli, mais l'affirmation etait trop large.
+
+**Solution** : documentation corrigee - l'independance operationnelle (scaling, cycle de vie hors demarrage) reste vraie, mais le demarrage est bien couple par choix. Aucun changement de code : le comportement actuel (fail-fast) est le bon choix, seule la description etait fausse.
+
+### 46.2 "mTLS interne entre microservices" etait un abus de langage - c'est du TLS a sens unique avec confiance partagee, pas une authentification mutuelle par certificat
+
+**Cause** : verification du code de chaque service (`application-docker.properties`) : aucun ne configure `server.ssl.client-auth=need`/`want`. Chaque service presente son certificat serveur (bundle `internal-services`) et ses appelants verifient ce certificat via un truststore partage - c'est du TLS chiffre et a sens unique authentifie cote serveur, pas du mTLS (qui exigerait aussi une authentification du client par certificat).
+
+**Solution** : vocabulaire corrige dans `audit_reponses_detaillees.md`. L'exigence reelle de l'audit ("donnees transmises de maniere securisee via SSL/TLS") est deja pleinement satisfaite par le TLS a sens unique existant - **aucune correction de code necessaire pour repondre a l'audit**. Piste identifiee si un vrai mTLS est voulu au-dela de l'exigence : `payment-service`/`user-service`/`api-gateway` presentent deja ce meme certificat cote client sortant (`spring.http.client.ssl.bundle=internal-services`), donc activer `client-auth=need` sur `travel-service` (seulement appele par ces deux-la) serait sans risque - mais l'activer sur `api-gateway` casserait TOUT le trafic entrant : nginx verifie deja le certificat serveur d'api-gateway (`proxy_ssl_verify on`) mais ne presente lui-meme AUCUN certificat client (pas de `proxy_ssl_certificate`). Un vrai mTLS complet demanderait de monter le certificat interne dans le conteneur nginx en plus. Volontairement NON applique : ce changement touche le TLS de bout en bout entre nginx et 5 services, ne peut pas etre verifie sans un vrai redemarrage complet de la stack (`docker compose up`), et n'est pas requis par l'audit - decision a prendre par toi si tu veux aller au-dela de l'exigence, pas quelque chose a activer a l'aveugle depuis ce siege.
+
+### 46.3 Les messages d'erreur traduits en francais (#44.3) n'etaient testes que dans `auth-service` - une regression sur les 3 autres services serait passee inapercue
+
+**Cause** : seul `auth-service` avait un `ApiExceptionHandlerTest.java` qui verifie le CONTENU du message ("Nom d'utilisateur deja utilise", etc.). `payment-service`, `travel-service` et `user-service` n'avaient aucun test verifiant le texte des messages generiques (validation, corps malforme, parametre invalide, erreur inattendue) - seulement des tests de statut HTTP/type d'exception, qui passeraient meme si le texte anglais revenait par erreur.
+
+**Solution** : `ApiExceptionHandlerTest.java` ajoute aux 3 services manquants, sur le meme modele qu'`auth-service` (test unitaire direct du handler, sans contexte Spring), verifiant le texte francais exact de chaque message generique et, pour `payment-service`, des 2 handlers specifiques a ce service (en-tete manquant, echec d'appel amont).
+
+**À retenir** : une documentation d'audit qui n'est plus relue contre le code reel derive silencieusement - deux affirmations ("independance au demarrage", "mTLS") etaient devenues fausses ou approximatives sans qu'aucun bug de code n'existe derriere. Verifier une affirmation de securite/architecture veut dire lire la config reelle (`client-auth`, `depends_on`), pas relire la documentation qui la decrit. Et un message traduit sans assertion de contenu dans les tests n'est protege que par hasard - traduire un message et le tester sont deux etapes distinctes, la seconde ne decoule pas automatiquement de la premiere.
+
+## 47. Troisieme ronde de verification (mot a mot contre l'enonce colle par toi) - 3 ecarts fonctionnels/UI reels trouves et corriges
+
+**Probleme** : apres les rondes #45/#46, une derniere verification ligne par ligne contre le texte exact de `lets-travel_project.md` et `lets-travel_audit.md` (colle integralement, pas resume) a trouve 3 ecarts fonctionnels reels, tous signales avant correction et valides comme "facilement fixables".
+
+### 47.1 Un compte ADMIN ne pouvait pas s'abonner a un voyage ni laisser un avis
+
+**Cause** : l'enonce demande qu'un ADMIN puisse "perform all actions available to Travel Managers and Travelers". Cote roles HTTP c'etait deja vrai, mais `SubscriptionService`/`FeedbackService` rejettent tout appelant dont le `userId` est null - or `AdminSeeder` creait le compte ADMIN par defaut sans fiche `User` liee (`userId=null`), rendant l'abonnement et l'avis impossibles en pratique pour cet ADMIN precis.
+
+**Solution** : un UUID fixe (`00000000-0000-0000-0000-000000000001`) est desormais partage entre `AdminSeeder` (auth-service) et un nouveau `AdminProfileSeeder` (user-service) qui cree la fiche `User` correspondante au demarrage - sans appel inter-service supplementaire, chaque service seme sa propre table avec le meme id fixe. Gere le cas multi-replicas via une verification `existsById` puis un rattrapage sur `DataIntegrityViolationException`.
+
+### 47.2 Le tableau des signalements a moderer (dashboard admin) n'affichait pas qui avait depose le signalement
+
+**Cause** : `reporterId` etait deja recupere par le frontend mais jamais resolu en nom ni affiche - seule la cible (`reportedId`) et le motif etaient visibles.
+
+**Solution** : `resolveReportedNames` renommee `resolveUserNames` et etendue pour resoudre `reportedId` ET `reporterId` en un seul appel groupe (meme `forkJoin`, pas de requete HTTP supplementaire), nouvelle colonne "Signale par" ajoutee au tableau.
+
+### 47.3 La page publique d'un manager n'affichait qu'une seule note moyenne, pas les notes par voyage
+
+**Cause** : l'enonce demande explicitement que le Traveler puisse voir les "past travel ratings" (au pluriel) sur cette page. `ManagerPublicStatsResponse` ne renvoyait qu'une moyenne globale agregee sur tous les voyages du manager, aucun detail voyage par voyage.
+
+**Solution** : `ManagerPublicStatsResponse` porte desormais un champ `travelRatings` (liste de `travelId`/`title`/`averageRating`/`feedbackCount`, un par voyage du manager), calcule via la meme requete groupee que le tableau de bord prive du manager (`FeedbackRepository.aggregateByTravelIds`, pas de N+1). Le frontend (`manager-public.html`) affiche ce detail dans un tableau sous les compteurs globaux, uniquement si le manager a au moins un voyage.
+
+**À retenir** : comparer le code a un document interne qui resume l'enonce (aussi fidele soit-il) n'est pas equivalent a le comparer au texte exact de l'enonce - une reformulation plus generale peut faire disparaitre une exigence precise (ex : "past travel ratings" au pluriel devient silencieusement "note du manager" au singulier dans un resume). Les 3 ecarts trouves ici etaient tous dans du code deja fonctionnel a 90% (une valeur null non geree en aval, un champ recupere mais jamais affiche, un agregat global la ou un detail etait demande) - le genre d'ecart qui survit facilement a une revue de haut niveau et ne se voit qu'en confrontant chaque phrase du cahier des charges au code reel plutot qu'a sa propre synthese.
+
+
+## 48. `vault` recree par `deploy.yml` juste apres avoir ete descelle par `vault-unseal.yml` - toute la stack reste unhealthy en cascade
+
+**Probleme** : `ansible-playbook site.yml` (ou le meme flux via Jenkins) plante systematiquement au meme endroit - `vault-init` ne demarre jamais ("dependency failed to start: container ... vault-1 is unhealthy"), puis `fetch-vault-secrets.yml` echoue avec "Vault is sealed" apres 10 tentatives, alors meme que `vault-unseal.yml` (jouee juste avant dans le meme run) venait de confirmer Vault descelle avec succes quelques secondes plus tot.
+
+**Cause** : `deploy.yml` force-supprime le conteneur `vault` (task ajoutee par le fix #37, pour contourner un bug de bind-mount perime WSL2/Docker Desktop) juste avant de lancer `docker compose up` sur toute la stack. Vault demarre TOUJOURS scelle sur un conteneur neuf (son etat de scellement vit en memoire, jamais persiste avec le volume de donnees) - la recreation efface donc instantanement le travail de `vault-unseal.yml`. `vault-init` depend de `vault` a l'etat `healthy` (qui exige d'etre descelle) : jamais atteint, `vault-init` ne demarre jamais, aucun role AppRole n'est jamais seme, et tout le reste de la chaine echoue en cascade a partir de la.
+
+**Solution** : ajout dans `deploy.yml`, juste apres le force-remove de `vault` et juste avant le `docker compose up` complet, d'un bloc qui redemarre `vault` seul, attend que son CLI reponde, et le redescelle avec la cle deja stockee sur disque (meme sequence que `vault-unseal.yml`, reutilisee ici a l'identique) - avant que la commande `docker compose up` n'evalue la dependance `vault-init -> vault healthy`.
+
+**A retenir** : le fix #37 (ajouter `vault` a la liste de force-remove) etait correct pour son propre probleme (bind-mount perime) mais n'avait pas anticipe qu'il defaisait le travail d'un AUTRE playbook execute juste avant dans le meme run (`vault-unseal.yml`). Des que deux playbooks touchent au meme conteneur avec des effets qui ne sont pas idempotents l'un par rapport a l'autre (ici : descellement vs recreation), il faut retracer la sequence complete de `site.yml` (pas juste le playbook qu'on modifie) pour verifier qu'aucune etape ulterieure n'annule silencieusement le travail d'une etape anterieure.
+
+## 49. `user-service` (2 replicas) plante au demarrage sur `ObjectOptimisticLockingFailureException` en semant le profil admin - pas rattrape par le catch existant
+
+**Probleme** : juste apres le fix #48 (Vault reste descelle), 2e passe de `deploy.yml` echoue quand meme : `user-service-1` ET `user-service-2` finissent en **Error** (crash, pas juste "unhealthy"), avec dans `docker logs` :
+```
+org.springframework.orm.ObjectOptimisticLockingFailureException: Row was already updated or deleted
+by another transaction for entity [com.travel_plan.user_service.domain.User with id '00000000-...-1']
+	at com.travel_plan.user_service.bootstrap.AdminProfileSeeder.run(AdminProfileSeeder.java:40)
+```
+Docker relance le conteneur (restart policy), qui reussit generalement au 2e essai (l'admin existe deja a ce moment-la), mais `docker compose up` remonte un code de sortie non-nul le temps que ca se stabilise, ce qui fait echouer la tache "Fail loudly unless this pass is expected to leave services unhealthy".
+
+**Cause** : `AdminProfileSeeder` (comme `auth-service.AdminSeeder`, meme intention) doit gerer la course entre les 2 replicas qui demarrent en parallele et tentent tous les deux de creer le profil admin par defaut. Le code catchait deja `DataIntegrityViolationException` en pensant a une violation de contrainte unique classique (c'est exactement ce qui se passe cote `auth-service`, cf. #34, ou l'ID est genere). Mais ici `User.id` est fixe explicitement (`.id(ADMIN_USER_ID)`) pour rester identique a `auth-service`, alors que le champ est annote `@UuidGenerator` (generateur cote Hibernate). Un ID deja renseigne sur une entite avec generateur pousse Spring Data JPA a appeler `entityManager.merge()` (chemin "mise a jour d'une entite detachee") au lieu de `persist()` (chemin "nouvelle entite"). Sous course entre 2 replicas, `merge()` leve `ObjectOptimisticLockingFailureException`/`StaleObjectStateException` - pas `DataIntegrityViolationException` - donc le catch existant ne l'attrapait jamais.
+
+**Solution** : `AdminProfileSeeder.java` catche maintenant aussi `ObjectOptimisticLockingFailureException`, au meme titre que `DataIntegrityViolationException` (les deux signifient "un autre replica l'a deja cree, rien a faire"). Nouveau test `logsAndContinuesWhenAnotherReplicaWonTheMergeRaceConcurrently` ajoute a `AdminProfileSeederTest` a cote du test existant sur `DataIntegrityViolationException`, pour couvrir le vrai type d'exception observe en pratique.
+
+**A retenir** : deux seeders qui semblent suivre le meme patron ("check puis save, catch la violation de contrainte") peuvent echouer differemment des que l'un des deux force un ID explicite sur une entite a generateur - `save()` de Spring Data JPA ne prend pas le meme chemin (`persist()` vs `merge()`) selon que l'ID est deja renseigne ou non, et chaque chemin leve un type d'exception different sous la meme course. Un test qui mocke `save()` pour lever exactement l'exception qu'on imagine (ici `DataIntegrityViolationException`, copie du seeder voisin) donne une fausse confiance s'il ne reflete pas le vrai comportement d'Hibernate pour CE seeder precis - verifier contre un vrai `docker logs`, pas seulement contre le test deja en place.
+
+## 50. `GET /api/reports` inatteignable via la gateway - confirme par le premier run k6
+
+**Probleme** : le scenario `admin_dashboard` du test de charge k6 (`k6/lets-travel-load-test.js`) echoue a 0% sur le check `admin: reports reachable` (35 echecs sur 35, aucune reussite), alors que les autres routes admin du meme scenario (classements, revenu mensuel) passent a 100%.
+
+**Cause** : `ReportController.listAll()` (travel-service) expose `GET /api/reports`, hors du prefixe `/api/travels/**`. Le bean `travelServiceRoutes` de `RouteConfig` (api-gateway) ne routait QUE `/api/travels/**` vers travel-service - `/api/reports` ne correspondait a aucune route declaree, ni ici ni ailleurs, et tombait donc en 404 avant meme d'atteindre travel-service. Cote securite, `SecurityConfig` (travel-service) protegeait deja correctement `GET /api/reports` (`hasRole(ADMIN_ROLE)`) - le probleme etait uniquement le routage gateway, jamais rajoute quand cet endpoint a ete introduit.
+
+**Solution** : ajout d'une route separee `travel-service-reports` (`/api/reports/**` -> travel-service) dans `travelServiceRoutes`, au meme titre que les 2 routes deja separees de `paymentServiceRoutes` (`/api/payments/**` et `/api/payment-methods/**`) - meme pattern, un controller avec un chemin hors du prefixe principal de son service a besoin de sa propre entree de route.
+
+**A retenir** : ce gap avait deja ete repere en lisant le code (`RouteConfig.java` compare a `ReportController.java`) avant meme de lancer les tests, et signale a l'utilisateur - le premier run k6 vient seulement de le confirmer avec un vrai HTTP 404 en conditions reelles plutot qu'une lecture de code. Un controller qui expose un chemin ne partageant pas le prefixe REST habituel de son service (ici `/api/reports` a cote de `/api/travels/**`) est le symptome a chercher systematiquement dans `RouteConfig.java` a chaque nouvel endpoint de ce genre.
+
+## 51. `scripts/start-app.sh` (fix du jour pour #48) ne descellait pas Vault a cause d'un parsing JSON fragile en `sed`
+
+**Probleme** : meme apres avoir ajoute a `scripts/start-app.sh` la meme logique de re-descellement que dans `deploy.yml` (#48), `./scripts/start-app.sh` echouait encore sur `dependency failed to start: container lets-travel-app-vault-1 is unhealthy` - alors que le script affichait bien "Attente de Vault..." (donc s'executait), sans jamais afficher "Descellement de Vault...".
+
+**Cause** : contrairement a la version Ansible (qui parse le JSON de `vault status -format=json` avec `from_json`, un vrai parseur), la version shell utilisait un `sed` fait main (`sed -n 's/.*"sealed":\([a-z]*\).*/\1/p'`) pour extraire le champ `sealed`. Ce pattern suppose `"sealed":true` colle sans espace - si le JSON reel contient un espace apres les deux-points (ou tout autre leger ecart de format), le `sed` ne matche rien, la variable `sealed` reste vide, et `[ "$sealed" = "true" ]` est silencieusement faux : le script saute le descellement sans jamais signaler d'erreur.
+
+**Solution** : suppression totale du parsing JSON dans `start-app.sh`. `vault status` a un code de sortie documente et stable (0 = descelle, 1 = injoignable/erreur, 2 = scelle) - le script se base directement dessus (`rc`) au lieu de parser du texte, plus robuste et plus simple.
+
+**A retenir** : parser la sortie texte/JSON d'une commande CLI a la main (`sed`/`grep`/`awk`) est fragile des qu'un format peut varier legerement - preferer le code de sortie quand l'outil en documente un qui porte deja l'information cherchee (ici, Vault documente explicitement 0/1/2), ou un vrai parseur JSON (`jq`, `from_json` d'Ansible) sinon. Un script qui semble tourner sans erreur (`set -e` ne se declenche pas) peut quand meme silencieusement sauter une etape critique si un test de condition (`[ "$x" = "valeur" ]`) est simplement faux a cause d'une variable mal extraite - toujours verifier qu'une etape censee s'executer a bien laisse une trace (ici : l'absence du message "Descellement de Vault..." dans la sortie collee par l'utilisateur a ete l'indice determinant).
+
+## 52. `docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7688` echoue - mauvais port, bug preexistant dans la doc
+
+**Probleme** : `docker compose exec neo4j cypher-shell -a bolt+ssc://localhost:7688 -u neo4j -p ...` (commande documentee telle quelle dans `10-audit-demo-guide.md` et `11-audit-cheatsheet.md`) echoue systematiquement : "Unable to connect to localhost:7688, ensure the database is running...", meme quand Neo4j est confirme `healthy` par `docker compose ps`.
+
+**Cause** : confusion entre le port publie sur l'hote et le port interne au conteneur. `docker-compose.yml` mappe `127.0.0.1:7688:7687` (host:conteneur) - le `7688` n'existe QUE du point de vue de l'hote (Windows/WSL2), pour un client externe (Neo4j Browser/Desktop). Mais `docker compose exec neo4j ...` execute la commande DANS le conteneur neo4j lui-meme : a l'interieur, `localhost` c'est le conteneur, qui n'ecoute que sur son port interne `7687` (celui utilise en interne par `travel-service` via `NEO4J_URI=bolt+ssc://neo4j:7687`) - `7688` n'y existe pas.
+
+**Solution** : les 4 occurrences de `cypher-shell -a bolt+ssc://localhost:7688` dans `docs/10-audit-demo-guide.md` et `docs/11-audit-cheatsheet.md` (toutes lancees via `docker compose exec`) corrigees en `bolt+ssc://localhost:7687`. Aucun changement pour la connexion depuis un client externe (Neo4j Browser/Desktop sur la machine hote) - la, `localhost:7688` reste correct, c'est un contexte different (hors conteneur).
+
+**A retenir** : pour tout service dont le port publie differe du port interne (ici +1, decale expres pour coexister avec `travel-plan`), bien distinguer les deux avant d'ecrire une commande - `docker compose exec <service> ...` s'execute TOUJOURS du point de vue interne au conteneur (port interne), alors qu'un outil lance depuis l'hote (navigateur, client desktop, `curl` direct sans passer par `exec`) utilise TOUJOURS le port publie. Cette commande etait dans la doc depuis un moment sans etre remarquee errronee - vraisemblablement jamais executee telle quelle avant que Daro ne la teste en conditions reelles ce soir.
+
+## 53. Suite Playwright : `manager-journey.spec.ts` reste sur `/login` - trop d'appels `/api/auth/login` cumules malgre l'execution serie
+
+**Probleme** : au premier vrai run complet de la suite e2e, `manager-journey.spec.ts` echoue des son `beforeAll` : apres avoir rempli et soumis le formulaire de login, la page reste sur `/login` au lieu de `/dashboard`. `workers: 1` (execution serie) etait deja en place pour respecter la limite nginx sur `/api/auth/login` (5r/m, burst=3), mais elle a quand meme ete atteinte.
+
+**Cause** : chaque fichier de specs qui avait besoin d'une session (admin, manager) refaisait son PROPRE login via le formulaire UI dans son `beforeAll`, en plus des logins deja faits par `global-setup.ts` (API, une fois pour l'admin ET le manager, pour preparer les donnees). Resultat : le meme compte manager se connectait 2 fois (une fois dans `global-setup.ts`, une 2e fois dans `manager-journey.spec.ts`), et sur une suite qui tourne entierement en moins de 40 secondes, ces appels s'accumulent bien plus vite qu'"un par minute" - le burst de nginx finit par etre depasse.
+
+**Solution** : `global-setup.ts` sauvegarde desormais aussi `adminToken`/`managerToken` (deja obtenus une fois, jamais exploites au-dela de la creation des donnees) dans `.fixtures/run.json`. `admin-journey.spec.ts` et `manager-journey.spec.ts` injectent directement ce token dans le `localStorage` (`travel-plan.admin.token`) au lieu de resoumettre le formulaire de login - le guard Angular (`authGuard`) rappelle `/me` (non rate-limite) pour restaurer la session, exactement comme apres un rechargement de page reel. Seul `auth.spec.ts` continue de passer par le vrai formulaire, ce qui est son role (tester le login lui-meme).
+
+**A retenir** : "executer les tests en serie" ne suffit pas a lui seul a respecter un rate limit si le NOMBRE d'appels reste trop eleve - il faut aussi eliminer les appels redondants (ici, un compte qui se connectait 2 fois pour 2 raisons differentes). Quand un token/une session a deja ete obtenue une fois quelque part dans la suite, la reutiliser (via `localStorage`, pas via une resoumission du formulaire) est strictement equivalent du point de vue de l'application testee, sans consommer une nouvelle fois une ressource limitee en debit.
+
+## 54. Suite Playwright : `admin-journey.spec.ts` - "strict mode violation" sur la liste des utilisateurs (3 elements matches)
+
+**Probleme** : `la liste des utilisateurs est accessible et montre le manager de fixture` echoue avec "strict mode violation... resolved to 3 elements" - le locator `getByText(fixture.managerUsername).or(getByText('E2E Manager'))` matche a la fois l'email du manager de CE run et DEUX cellules "E2E Manager" (nom affiche, identique a chaque run).
+
+**Cause** : la suite e2e ne nettoie jamais ses donnees entre deux executions (voulu : chaque run cree ses propres comptes/voyages sans toucher a l'existant). Le manager de fixture a toujours pour nom affiche "E2E Manager" (`firstName`/`lastName` fixes dans `apiCreateManager`), donc des qu'on a lance la suite plus d'une fois sur la meme base, plusieurs managers differents (usernames distincts, horodates) partagent le meme nom affiche - le `.or(getByText('E2E Manager'))`, pense a l'origine comme filet de securite, devient une source d'ambiguite des que les runs s'accumulent.
+
+**Solution** : le locator ne s'appuie plus que sur `fixture.managerUsername` (unique et horodate par construction), avec `.first()` pour tolerer que le texte apparaisse dans plusieurs cellules de la meme ligne (nom + email) sans jamais viser un autre manager.
+
+**A retenir** : dans une suite qui ne nettoie jamais ses donnees de test, un `.or(texte generique)` ajoute "par securite" autour d'un identifiant deja unique (ici l'username horodate) est une fausse bonne idee - il ne rend pas le test plus robuste, il cree une ambiguite qui n'apparait qu'apres plusieurs runs, donc pas au moment ou on ecrit le test.
+
+## 55. Changer `STRIPE_SECRET_KEY` dans `.env` ne suffit pas - `payment-service` lit Vault, pas l'environnement directement
+
+**Probleme** : apres avoir remplace le placeholder `STRIPE_SECRET_KEY=sk_test_changeme_dev_only` par une vraie cle Stripe dans `.env`, puis redemarre `payment-service` (`docker compose up -d payment-service`), Stripe continue de rejeter la requete avec exactement la meme erreur qu'avant : "Invalid API Key provided: sk_test_*************only" - la cle utilisee reste visiblement le placeholder, malgre le `.env` a jour.
+
+**Cause** : `payment-service` ne lit pas `STRIPE_SECRET_KEY` directement depuis son environnement - `infra/vault/bootstrap.sh` (execute par le conteneur `vault-init`) ecrit cette valeur UNE FOIS dans Vault (`vault kv put secret/payment-service/stripe secret_key="${STRIPE_SECRET_KEY:-...}"`), et c'est CETTE copie dans Vault que `payment-service` consulte au demarrage. `vault-init` ne se relance pas quand on cible un seul service avec `docker compose up -d payment-service` - il n'y a donc plus aucune etape qui repropage un `.env` modifie vers Vault une fois que Vault a deja ete initialise avec l'ancienne valeur (ici, initialise plus tot dans la meme session, quand `.env` avait encore le placeholder).
+
+**Solution** : ecrire directement la nouvelle valeur dans Vault, puis redemarrer `payment-service` pour qu'il la relise a son prochain demarrage :
+```
+docker compose exec -T vault vault kv put secret/payment-service/stripe secret_key="<vraie cle>"
+docker compose restart payment-service
+```
+
+**A retenir** : tout secret seede par `vault-init` (Stripe, PayPal, JWT partage - voir `bootstrap.sh`) suit ce meme principe : une fois Vault initialise, changer `.env` seul ne met plus rien a jour automatiquement - il faut soit ecrire directement dans Vault (`vault kv put`, ci-dessus), soit forcer un reseed complet (ce qui implique de re-desceller/reinitialiser Vault, une operation beaucoup plus lourde). Avant de soupconner un bug applicatif sur un secret qui semble "ne pas se mettre a jour", verifier d'abord s'il transite par Vault plutot que par une variable d'environnement lue en direct.
+
+## 56. Suite Playwright : `manager-journey.spec.ts` - creation de voyage bloquee, formulaire invalide en silence
+
+**Probleme** : le test `cree un nouveau voyage via le formulaire` expire (`page.waitForResponse` timeout 15s) en attendant le `POST /api/travels` - le clic sur "$ save" ne declenche jamais la requete. La capture de page au moment de l'echec montre 2 destinations : la premiere bien remplie (Lyon/France), la seconde entierement vide.
+
+**Cause** : `travel-form.ts` (`ngOnInit`) appelle deja `addDestination()` une fois a l'ouverture du formulaire "nouveau voyage" - une destination vide existe donc par defaut. Le test cliquait EN PLUS sur "+ add destination" avant de remplir `.subcard.first()`, ce qui ajoutait une 2e destination (vide, champs obligatoires) au lieu de remplir celle deja presente. Angular bloque la soumission d'un formulaire reactif invalide sans message d'erreur explicite ici, donc le clic sur "$ save" ne fait rien - d'ou le timeout, qui ne dit pas directement "formulaire invalide".
+
+**Solution** : suppression du clic sur "+ add destination" dans le test - `.subcard.first()` cible directement la destination deja presente par defaut.
+
+**A retenir** : un `page.waitForResponse` qui expire sans qu'aucune requete ne parte du tout (par opposition a une requete qui echoue avec un code d'erreur) est souvent un signe de validation cote client qui bloque la soumission en silence - verifier l'etat reel du formulaire (ici via la capture de page Playwright, `error-context.md`) plutot que de supposer un probleme reseau ou backend.
+
+## 57. Paiement Stripe : "No such PaymentMethod: 'tok_visa'" - mauvais type d'identifiant de test dans les donnees de test
+
+**Probleme** : une fois la vraie cle Stripe en place dans Vault (#55), le paiement echoue encore, mais avec une erreur differente et 400 (pas 401) : `"No such PaymentMethod: 'tok_visa'"`, `code: resource_missing`.
+
+**Cause** : `StripePaymentProvider.charge()` (payment-service) envoie `payment_method: request.providerToken()` directement a l'API `/v1/payment_intents` de Stripe. Cette API attend un identifiant de PaymentMethod (`pm_...`) - `tok_visa` est un identifiant de Token (`tok_...`), une ressource Stripe differente, propre a l'ancienne API Charges/Sources, pas a l'API PaymentIntents utilisee ici. Le code applicatif est correct ; c'est la valeur de test que j'avais choisie (k6, e2e) qui utilisait le mauvais type d'identifiant.
+
+**Solution** : remplacement de `tok_visa` par `pm_card_visa` (identifiant de test officiel Stripe, documente pour un usage direct sans passer par Stripe.js) dans `k6/lets-travel-load-test.js`, `k6/README.md` et `e2e/tests/traveler-journey.spec.ts`.
+
+**A retenir** : Stripe a plusieurs familles d'identifiants de test qui se ressemblent (`tok_...` pour les Tokens, `pm_...` pour les PaymentMethods, `src_...` pour les Sources) et ne sont PAS interchangeables selon l'API appelee - toujours verifier, cote code applicatif, quel parametre est envoye a quelle API Stripe avant de choisir la valeur de test correspondante, plutot que de reutiliser un identifiant de test "classique" trouve dans un exemple externe sans le confronter au code reel.
+
+## 58. L'admin peut creer un utilisateur mais jamais lui donner de compte de connexion
+
+**Probleme** : le formulaire "creer un utilisateur" de l'admin ne creait qu'une fiche profil (user-service) - aucun chemin de l'UI ne permettait de creer, en plus, un compte de connexion (auth-service) utilisable pour un TRAVELER ou un TRAVEL_MANAGER ainsi cree.
+
+**Cause** : `UserService.create()` se limitait a `userRepository.save(user)`, sans jamais appeler auth-service. Seul `POST /api/auth/accounts` (deja fonctionnel, utilise par les tests e2e) pouvait creer un compte, mais rien dans ce flux ne l'appelait.
+
+**Solution** : ajout de `username`/`password` optionnels a `UserRequest` (avec `@AssertTrue` : les deux fournis ou aucun), d'un `AuthServiceClient.createAccount()`, et d'un appel conditionnel dans `UserService.create()` - jamais declenche pour ADMIN, qui n'a pas de fiche User liee. Cote UI, une case a cocher "creer un compte de connexion" revele les champs correspondants, visible uniquement a la creation (pas en edition) et hors role ADMIN.
+
+**A retenir** : ce n'etait pas un point demande par l'audit (celui-ci porte sur la creation de profils, pas explicitement sur le provisioning de comptes), mais un gap reel decouvert en testant manuellement l'app - un manager cree depuis l'admin ne pouvait jamais se connecter tant que ce chemin n'existait pas. Verifie par les tests unitaires (backend et frontend, tous verts) et par une creation + connexion reelles sur la stack en marche.
+
+## 59. Jenkins : `ng test` echoue - "ChromeHeadless failed 2 times (cannot start)" (`libgobject-2.0.so.0` manquante)
+
+**Probleme** : la stage "Build & Test" du Jenkinsfile echoue sur `npx ng test` (frontend), avec `error while loading shared libraries: libgobject-2.0.so.0: cannot open shared object file: No such file or directory` au lancement de `ChromeHeadless`.
+
+**Cause** : `karma.conf.js` utilise volontairement le Chrome telecharge par Puppeteer (`require('puppeteer').executablePath()`) plutot qu'un Chrome systeme, pour eviter d'imposer une install manuelle. Mais ce binaire reste un vrai Chrome dynamiquement lie aux bibliotheques partagees habituelles (glib, nss, atk, etc.) - `infra/ci/jenkins/Dockerfile` installe Node.js pour builder/tester le frontend, mais aucune de ces dependances systeme : l'image Jenkins ne les fournissait jamais, donc le Chrome de Puppeteer ne pouvait pas demarrer, meme en local sur poste dev le probleme ne se voyait pas (WSL2/Linux desktop les a deja par un autre biais).
+
+**Solution** : ajout du paquet `chromium` (le paquet Debian complet, pas juste une liste de libs a la main) a la commande `apt-get install` de `infra/ci/jenkins/Dockerfile`. Installer ce paquet via apt resout automatiquement toutes ses dependances partagees (dont `libgobject-2.0.so.0`), qui deviennent alors disponibles systeme pour n'importe quel binaire Chrome/Chromium present sur la machine - y compris celui de Puppeteer, jamais invoque directement.
+
+**A retenir** : un CI qui installe seulement le runtime (ici Node.js) sans les dependances systeme d'outils tiers qu'il invoque en sous-main (ici Puppeteer/Chrome pour les tests navigateur) echoue uniquement en CI, jamais en local ou ces libs sont deja presentes par ailleurs - toujours verifier que l'image d'agent CI a explicitement tout ce dont les commandes qu'elle execute ont besoin, plutot que de supposer qu'elle "a Node donc ça doit marcher".
+
+## 60. `AdminSeeder` : 2 replicas demarrent en parallele et un des deux plante sur la contrainte unique du username
+
+**Probleme** : avec `auth-service` deploye en 2 replicas, les deux demarrent `CommandLineRunner.run()` en parallele, passent tous les deux le garde `accountRepository.count() > 0` (compte encore a 0) avant qu'aucun n'ait insere l'admin par defaut, puis tentent tous les deux `accountRepository.save(admin)`.
+
+**Cause** : `username` est contraint unique en base ; le second replica a inserer echouait sur cette contrainte avec une `DataIntegrityViolationException` remontee brute, ce qui plantait le replica (redemarrage en boucle) au lieu de simplement constater que l'admin par defaut existe deja.
+
+**Solution** : `AdminSeeder.run()` attrape `DataIntegrityViolationException` autour du `save()` et logge en `info` que l'admin est deja cree par un autre replica, plutot que de laisser l'exception remonter.
+
+**A retenir** : tout code d'initialisation au demarrage (`CommandLineRunner`, seed de donnees) qui verifie "est-ce que ca existe deja ?" avant d'inserer doit prevoir la course entre plusieurs replicas demarrant en parallele - le check-then-insert n'est jamais atomique entre deux processus, seule la contrainte unique en base l'est reellement.
+
+## 61. Spring Security : une regle specifique declaree apres une regle generique ne s'applique jamais (`authorizeHttpRequests` matche dans l'ordre de declaration)
+
+**Probleme** : plusieurs endpoints specifiques de travel-service (`/subscriptions`, `/feedbacks`, `/managers/me/stats`, etc.) doivent etre plus permissifs ou plus restrictifs que la regle generique `/api/travels/**` qui les englobe, mais les declarer dans le mauvais ordre les rendait inefficaces sans erreur visible (ex : un TRAVELER n'arrivait pas a annuler son propre abonnement, intercepte par une regle ADMIN/TRAVEL_MANAGER-only pensee pour `DELETE /api/travels/**`).
+
+**Cause** : `HttpSecurity.authorizeHttpRequests()` evalue les `requestMatchers` dans leur ordre de declaration et applique la premiere regle qui matche - une regle generique declaree avant une regle plus specifique masque silencieusement cette derniere, sans erreur de compilation ni au demarrage.
+
+**Solution** : toutes les regles specifiques (`/subscriptions`, `/feedbacks`, `/reports`, `/managers/me/stats`, `/managers/me/subscribers/*`, `/admin/**`) sont declarees AVANT les regles generiques `/api/travels/**` dans `SecurityConfig.securityFilterChain()`, avec un commentaire de 2 lignes a chaque endroit rappelant cette contrainte d'ordre.
+
+**A retenir** : dans `authorizeHttpRequests`, toujours declarer les regles du plus specifique au plus generique (jamais l'inverse) - piege classique de Spring Security qui ne produit aucune erreur, juste un comportement silencieusement different de l'intention.
+
+## 62. `MissingRequestHeaderException` tombait dans le handler `Exception.class` generique (500 au lieu de 400)
+
+**Probleme** : un appel a payment-service sans un `@RequestHeader` obligatoire remontait un 500 brut ("Unexpected error") au lieu d'un 400 explicite nommant l'en-tete manquant.
+
+**Cause** : sans handler explicite pour `MissingRequestHeaderException` dans `ApiExceptionHandler`, Spring ne retombe pas sur son comportement par defaut (400) une fois qu'un `@RestControllerAdvice` existe sur le projet - l'exception remonte jusqu'au handler generique `Exception.class`, qui repond 500 pour tout ce qu'il ne reconnait pas.
+
+**Solution** : ajout d'un `@ExceptionHandler(MissingRequestHeaderException.class)` dedie dans `payment-service/ApiExceptionHandler.java`, renvoyant 400 avec le nom de l'en-tete manquant.
+
+**A retenir** : des qu'un `@RestControllerAdvice` avec un handler `Exception.class` generique existe, toute exception Spring qui aurait normalement un statut par defaut (400, 404...) doit avoir son propre `@ExceptionHandler` explicite, sinon elle est silencieusement absorbee en 500 par le filet de securite generique.
+
+## 63. Matcher Spring Security `/api/payments/*` (un seul segment) et pas `/api/payments/**` : la nuance qui empeche une fuite de la liste complete
+
+**Probleme** : un Traveler doit pouvoir consulter/payer SES paiements (`GET/POST /api/payments/{id}`), mais jamais la liste complete de tous les paiements (`GET /api/payments`, Admin-only) - `PaymentService.findAll()` ne filtre pas par proprietaire.
+
+**Cause** : un matcher `/api/payments/**` (double etoile) aurait aussi couvert `/api/payments` (liste complete, `**` matche aussi sans segment supplementaire), ouvrant involontairement la liste globale a tout Traveler authentifie.
+
+**Solution** : `SecurityConfig` utilise `/api/payments/*` (un seul segment, exige un `{id}` apres `/payments/`) pour la regle TRAVELER, laissant `GET /api/payments` (sans segment supplementaire) retomber sur la regle `anyRequest().hasRole(ADMIN_ROLE)` par defaut.
+
+**A retenir** : `/**` et `/*` ne sont pas interchangeables en securite Spring - `/**` matche aussi le chemin sans segment supplementaire, `/*` exige exactement un segment de plus. Toujours verifier lequel des deux couvre par erreur une route plus large que prevu, surtout quand la route "liste complete" doit rester plus restrictive que la route "detail".
+
+## 64. Certificat TLS interne : le SAN est lie au nom de projet Docker Compose, a regenerer si ce nom change
+
+**Probleme** : le certificat TLS interne (`infra/internal-tls/certs/internal.crt`) est genere une seule fois (`creates:` dans le playbook Ansible) avec un SAN listant les noms DNS Docker Compose exacts de chaque replica (`lets-travel-app-auth-service-1`, etc.) - si le nom du projet Compose (`docker-compose.yml: name:`) change un jour, ces noms DNS changent aussi mais le certificat existant n'est jamais regenere automatiquement.
+
+**Cause** : `openssl req -addext subjectAltName=...` fige la liste de noms DNS au moment de la generation ; la tache Ansible qui le genere est gardee par `creates:`, donc elle ne se rejoue jamais si le fichier existe deja, meme si les noms DNS reels ont change entre-temps.
+
+**Solution** : aucune automatisation pour l'instant - documente en commentaire dans `ansible/playbooks/deploy.yml` et ici, a regenerer manuellement (`rm infra/internal-tls/certs/internal.crt` puis rejouer le playbook) si le nom de projet Compose change.
+
+**A retenir** : tout artefact genere une seule fois et garde par une condition `creates:`/`exists` doit etre explicitement documente comme "a regenerer si X change" - sinon la deprecation est invisible jusqu'a ce que le TLS interne echoue avec une erreur SAN mismatch, loin de la cause reelle.
+
+## 65. Params Jenkins granulaires (skip par stage) : un run partiel doit rester FAILURE meme si tout ce qu'il a teste est vert
+
+**Probleme** : `SKIP_BUILD_TEST` etait le seul param existant et sautait Build & Test ET Sonar ensemble, sans moyen de lancer Sonar seul quand on sait deja que Build & Test passe - or un run partiel qui affiche SUCCESS pourrait etre confondu avec une vraie validation complete du pipeline.
+
+**Cause** : les stages Build & Test et SonarQube partageaient le meme `when { !params.SKIP_BUILD_TEST }`, et rien ne forcait le resultat final quand une portion du pipeline n'avait pas tourne.
+
+**Solution** : ajout de `SKIP_SONAR` et `SKIP_DEPLOY`, independants de `SKIP_BUILD_TEST`. La stage Sonar sait se debrouiller seule (`clean verify sonar:sonar` complet via un flag `standalone`) si Build & Test a ete saute. Un param `TARGET_SERVICES` pour cibler un service precis a ete envisage puis retire (juge inutile en pratique - voir aussi #66) : Sonar doit toujours rester une analyse globale, et cibler Build & Test seul n'apportait pas assez de valeur pour la complexite ajoutee. Le bloc `post.always` calcule `fullRun` (aucun skip) et force `currentBuild.result = 'FAILURE'` des que ce n'est pas le cas, quel que soit le resultat des stages qui ont reellement tourne.
+
+**A retenir** : un param qui permet de sauter une partie du pipeline doit toujours s'accompagner d'une regle qui empeche le build de finir en SUCCESS tant que le pipeline entier n'a pas tourne - sinon un run de debug/cible fini vert peut etre pris a tort pour une validation complete.
+
+## 66. Tests e2e (Playwright) et k6 jamais integres a Jenkins - restaient a lancer manuellement apres deploiement
+
+**Probleme** : `e2e/` et `k6/` existaient et fonctionnaient (voir `docs/12-e2e-et-k6.md`) mais aucune stage Jenkins ne les lancait - ils repondent pourtant a deux items explicites de l'enonce/audit (tests end-to-end, tenue en charge), restes non automatises faute de pouvoir tourner avant qu'une stack complete soit deployee.
+
+**Cause** : contrairement a Build & Test/Sonar (qui ne dependent que du code source), e2e et k6 tapent sur de vraies URLs HTTP d'une stack deployee - ils ne peuvent donc logiquement s'inserer qu'apres la stage Deploy, jamais avant, et ont ete laisses de cote lors de la premiere version du Jenkinsfile pour cette raison.
+
+**Solution** : deux nouvelles stages `E2E Tests (Playwright)` et `Load Tests (k6)` ajoutees apres Deploy, plus une stage `Wait for stack ready` avant elles (boucle `curl` sur `https://host.docker.internal:8443/` jusqu'a HTTP 200, 30 tentatives x 5s) en filet de securite - Compose attend deja ses healthchecks pendant `docker compose up`, mais les apps peuvent finir de demarrer quelques secondes apres. Playwright tourne directement dans le conteneur Jenkins (`npm ci` + `npx playwright test`, `E2E_BASE_URL=https://host.docker.internal:8443`) ; k6 tourne via `docker run --rm -i grafana/k6` (image officielle, meme pattern que le reste du pipeline qui pilote deja Docker via le socket monte) plutot que d'installer le binaire k6 en plus dans l'image Jenkins. Les trois nouvelles stages partagent le `when { !params.SKIP_DEPLOY }` de Deploy : skip Deploy = rien a tester dessus, donc elles se sautent ensemble.
+
+**A retenir** : une suite de tests qui a besoin d'un environnement deploye (pas seulement du code source compile) doit toujours etre placee apres la stage de deploiement dans le pipeline, jamais en parallele ni avant - et merite son propre filet d'attente de disponibilite (health-check en boucle) plutot que de supposer que "le deploiement a fini" veut dire "l'application repond deja aux requetes HTTP".
+
+## 67. Sonar bloquait des le premier service en echec, masquant l'etat des suivants dans le meme run
+
+**Probleme** : `sonar.qualitygate.wait=true` fait echouer directement l'appel Maven quand le gate d'un service est rouge - avec `ALL_SERVICES.each { sonarService(svc) }` et un `sh` classique (qui leve une exception sur exit non-zero), le premier service en echec arretait la boucle : les services suivants n'etaient jamais analyses dans ce run, decouverts seulement au run suivant, un par un.
+
+**Cause** : `sh` sans `returnStatus: true` transforme un exit code non-zero en exception Groovy, qui remonte hors du `.each {}` et interrompt le `script {}` entier.
+
+**Solution** : `sonarService`/`sonarFrontend` utilisent desormais `sh(script: ..., returnStatus: true)` et retournent le code de sortie au lieu de le laisser lever une exception. La stage Sonar boucle sur TOUS les services (et le frontend), accumule les noms de ceux en echec, et ne leve `error(...)` qu'a la toute fin, une fois tout le monde analyse.
+
+**A retenir** : dans une boucle qui doit auditer plusieurs cibles independantes (services, modules...), ne jamais laisser le premier echec interrompre les suivants - capturer le statut de chacun (`returnStatus`/try-catch), collecter les echecs, et ne faire echouer le job qu'apres avoir tout tente. Le debug redevient alors "voici tout ce qui est casse" au lieu de "voici le premier truc casse, corrige-le et relance pour voir le suivant".
+
+## 68. `JwtService.generateRegistrationToken`/`generateToken` : Sonar signale un usage de `java.util.Date` impose par l'API JJWT (`java:S2143`)
+
+**Probleme** : Sonar (regle `java:S2143` "Use the java.time API for date and time") signale `Date.from(now)` dans les `JwtService` d'auth-service et de user-service - a premiere vue un oubli de migration vers `java.time`.
+
+**Cause** : `Jwts.builder().issuedAt(...)/.expiration(...)` (JJWT 0.12.6) n'accepte QUE `java.util.Date`, aucune surcharge `Instant` n'existe dans cette version de la librairie - verifie sur le javadoc officiel. Le code calcule deja tout en `java.time` (`Instant.now()`, `ChronoUnit`) et ne convertit en `Date` qu'au dernier moment, a la frontiere imposee par JJWT : c'est deja la pratique recommandee quand une lib tierce impose un type legacy.
+
+**Solution** : deja traite une premiere fois sur auth-service (`JwtService.generateToken`) avec un commentaire `// NOSONAR java:S2143 - jjwt 0.12.x n'expose que des overloads java.util.Date, pas java.time.Instant` directement sur les lignes concernees - suppression versionnee dans le code, appliquee automatiquement a chaque scan. Meme traitement applique sur user-service. Marquer le finding "Faux Positif" dans l'UI SonarQube fonctionne aussi (fait une fois sur user-service avant de retrouver ce precedent) mais est moins durable : c'est une resolution cote serveur Sonar, pas versionnee avec le code, a refaire manuellement si jamais recreee.
+
+**A retenir** : une regle Sonar generique ne connait pas les contraintes d'API d'une librairie tierce - avant de "corriger" un finding lie a `java.util.Date`/`Calendar`, verifier si l'appel est impose par une dependance externe sans equivalent `java.time`, ET verifier si ce cas a deja ete rencontre ailleurs dans le projet (grep le message de regle ou son ID dans `troubleshooting.md` avant de choisir entre NOSONAR inline et resolution UI) - preferer `// NOSONAR <regle> - <raison>` en ligne, versionne avec le code, plutot qu'une resolution manuelle qui ne survit pas forcement a la re-creation du projet Sonar.
+
+## 69. Frontend : couverture a 0.0% sur TOUT le projet (New Code et Overall Code), alors que les tests `ng test` existent et passent
+
+**Probleme** : le Quality Gate Sonar de `lets-travel-frontend` echoue avec Coverage a 0.0% sur 483 lignes a couvrir, aussi bien en "New Code" qu'en "Overall Code" - donc pas un souci limite au code recent, la couverture n'a jamais ete remontee a Sonar, peu importe le nombre de tests reellement executes.
+
+**Cause** : `frontend/sonar-project.properties` pointe `sonar.javascript.lcov.reportPaths=coverage/lets-travel-frontend/lcov.info`, mais ce fichier n'a jamais existe. Le Jenkinsfile lance `ng test --coverage --coverage-reporters=lcov`, sauf que le projet (Angular 21, builder `@angular/build:unit-test` avec `runner: karma` et `runnerConfig: true`) delegue entierement a `frontend/karma.conf.js` - ce flag CLI n'est donc jamais applique, seule la liste `coverageReporter.reporters` du fichier compte. Or celle-ci ne contenait que `{ type: 'html' }` et `{ type: 'text-summary' }`, jamais `{ type: 'lcov' }` : `lcov.info` n'a donc jamais ete genere, meme localement. Le Quality Gate ne l'a probablement jamais remarque avant car la condition "Coverage on New Code" n'a rien a signaler tant que la periode de reference ("New Code") ne contient pas de changement significatif - une fois une grosse serie de fichiers frontend modifies (periode "Since August 23, 2026"), la condition a enfin eu de la matiere a evaluer et a expose le 0.0% qui existait silencieusement depuis le debut.
+
+**Solution** : ajout de `{ type: 'lcov' }` a `coverageReporter.reporters` dans `karma.conf.js`. Le chemin de sortie (`dir: coverage/lets-travel-frontend`, `subdir: '.'`) correspondait deja a ce qu'attend `sonar-project.properties`, seul le reporter manquait.
+
+**A retenir** : sur un projet Angular recent utilisant `@angular/build:unit-test` avec un `karma.conf.js` custom (`runnerConfig: true`), les flags CLI historiques d'Angular CLI comme `--coverage-reporters` ne sont PAS transmis au runner - c'est la config `coverageReporter.reporters` du fichier karma qui fait foi. Verifier aussi la couverture "Overall Code" (pas seulement "New Code") sur Sonar pour distinguer un vrai probleme de generation de rapport (0% partout, tout le temps) d'un probleme ponctuel limite au code recent.
+
+## 70. `AuthServiceClientTest.createAccountCallsAuthService` : NullPointerException sur `.retrieve()`, `.body(Object)` renvoyait null
+
+**Probleme** : premiere execution reelle de ce nouveau test (ecrit cote assistant, jamais lance avant puisque `mvn test` reste toujours lance par toi) - `AuthServiceClient.createAccount` plante avec un NPE : `.body(new CreateAccountBody(...))` renvoie null, donc l'appel `.retrieve()` juste apres explose. Les 4 autres tests du meme fichier (basés sur `RequestHeadersSpec`, plus court : `uri` -> `header` -> `retrieve`) passaient sans probleme.
+
+**Cause** : le mock de `RestClient.RequestBodySpec` etait stubbe maillon par maillon (`contentType(...)`, `header(...)`, `body(any())` renvoient chacun explicitement `bodySpec`) - contrairement au reste du projet qui ne mocke jamais ce point precis de l'API RestClient (seulement `RequestHeadersSpec`/`ResponseSpec`, plus simples). Un des maillons de cette chaine plus longue ne matchait pas au runtime et Mockito appliquait son comportement par defaut pour un appel non stubbe : renvoyer null plutot que de lever une erreur explicite.
+
+**Solution** : le mock de `RequestBodySpec` est cree avec `Answers.RETURNS_SELF` (`mock(RestClient.RequestBodySpec.class, Answers.RETURNS_SELF)`) - toute methode de la chaine qui renvoie normalement le meme type se renvoie elle-meme par defaut, sans avoir besoin de stubber `contentType`/`header`/`body` individuellement. Seuls `uri(...)` (renvoie un objet different) et `retrieve()` (idem, renvoie `ResponseSpec`) restent stubbes explicitement.
+
+**A retenir** : pour mocker une chaine fluide (builder-style) dont la plupart des methodes se contentent de renvoyer `this`/le meme type, preferer `mock(Type.class, Answers.RETURNS_SELF)` plutot que de stubber chaque maillon un par un - plus court, et surtout plus robuste : un maillon oublie ou mal stubbe (mauvais matcher, mauvaise surcharge) renvoie silencieusement `this` au lieu de `null`, ce qui evite une `NullPointerException` sans rapport avec le vrai comportement teste.
+
+## 71. `TravelBrowse` : test d'autocompletion debounce flaky (timer reel au lieu de temps simule)
+
+**Probleme** : `autocompletes suggestions while typing, debounced` echoue par intermittence dans Jenkins (premiere fois observee sur une machine deja chargee par les builds backend precedents) - `Expected one matching request... found none`, alors que le test passe generalement en local.
+
+**Cause** : le test attendait le debounce (250ms cote `TravelBrowse.watchAutocomplete()`) avec un vrai timer (`await new Promise(r => setTimeout(r, 300))`) au lieu d'un temps simule - sur une machine sous charge (CPU partage avec les 5 builds Maven/Testcontainers qui viennent de tourner), rien ne garantit qu'un `setTimeout(300)` reel se resout apres le timer RxJS de 250ms : ordonnancement du navigateur headless, throttling, boucle d'evenements ralentie peuvent inverser l'ordre.
+
+**Solution** : deux tentatives ratees avant la bonne. (1) `fakeAsync`/`tick(250)` - casse TOUT le run (`zone-testing.js is needed...`) : ce projet n'a pas `zone.js` du tout (aucune dependance dans `package.json`, aucun `polyfills` configure, full signals/zoneless), `fakeAsync` ne peut pas fonctionner ici. (2) `jasmine.clock().install()`/`.tick(250)` - compile et ne casse plus rien, mais le test echoue encore avec la meme erreur qu'a l'origine (`found none`) : le mock global de `setInterval`/`setTimeout` par jasmine n'a pas intercepte de facon fiable le scheduler par defaut de RxJS (`asyncScheduler`) dans cet environnement (esbuild/zoneless). Fix retenu : rendre le scheduler du `debounceTime` injectable cote composant (`protected debounceScheduler: SchedulerLike = asyncScheduler`, utilise via `debounceTime(250, this.debounceScheduler)`), et dans le test, le remplacer par un `VirtualTimeScheduler` (`component['debounceScheduler'] = new VirtualTimeScheduler()`) puis appeler `.flush()` - une horloge purement en memoire, qui ne touche a AUCUN timer global (ni reel, ni mocke), donc insensible a l'environnement zoneless/bundler.
+
+**A retenir** : ne jamais tester un operateur RxJS base sur le temps (`debounceTime`, `throttleTime`, `delay`...) avec un vrai `setTimeout`/`await` cote test - flaky des que la machine est sollicitee. Pour un remplacement deterministe : `fakeAsync`/`tick()` exige zone.js (absent ici) ; `jasmine.clock()` mocke les timers globaux mais n'est pas garanti d'intercepter le scheduler RxJS selon l'environnement (verifie non fiable ici) ; la solution la plus robuste et independante de l'environnement est de rendre le scheduler RxJS injectable/overridable et d'utiliser un `VirtualTimeScheduler` + `.flush()` en test - aucune dependance a un timer global, marche partout.
+
+## 72. Build & Test : le frontend (rapide) tournait apres les 5 services backend (lents) - un echec frontend ne se voyait qu'apres ~28min
+
+**Probleme** : `ALL_SERVICES.each { buildService(svc) }` puis `buildFrontend()` - un echec frontend (ex: test flaky, voir #71) n'apparaissait qu'apres avoir attendu la compilation+tests des 5 services backend, alors que le frontend seul prend ~1min30.
+
+**Cause** : simple ordre d'execution choisi sans se soucier du cout relatif de chaque etape - le frontend, bien plus rapide a rendre un verdict, passait en dernier.
+
+**Solution** : `buildFrontend()` appele en premier, avant la boucle sur `ALL_SERVICES`. Ne change rien a ce qui est teste ni au temps total d'un run qui reussit entierement - seulement l'ordre, pour qu'un echec sur la partie la moins chere a verifier se voie le plus tot possible.
+
+**A retenir** : dans une sequence de verifications independantes de couts tres differents, executer les moins cheres en premier (fail-fast trie par cout croissant) - ca ne reduit pas le temps total d'un run qui passe, mais ca minimise le temps perdu avant de decouvrir un echec sur la partie rapide. Ca ne resout pas le cas symetrique (un echec sur le DERNIER service backend reste decouvert tard) - seulement un reordonnancement complet ou une execution parallele changerait ca.
+
+## 73. Sonar signale 3 nouveaux problemes sur `AuthServiceClientTest.java` alors que 2 des 3 lignes visees n'ont jamais ete touchees ce soir
+
+**Probleme** : rapport Sonar sur user-service, 3 issues sur `AuthServiceClientTest.java` : 2x "Refactor the code of the lambda to have only one invocation possibly throwing a runtime exception" (lignes des deux `assertThatThrownBy` de `deleteAccountByUserIdThrowsWhenAuthorizationHeaderIsMissing`) et 1x BLOCKER "Add at least one assertion to this test case" (`deleteAccountByUserIdSwallows404`). Ces deux tests n'ont pourtant pas ete modifies par le fix de l'entree #70 (seul `createAccountCallsAuthService` avait change).
+
+**Cause** : `git blame` sur le fichier montre que TOUTES ses lignes datent d'aujourd'hui (29/08) ou ne sont pas encore commitees - le fichier entier a ete cree dans la fenetre "New Code" de Sonar (periode "Since August 23, 2026"). Sonar ne compare donc pas seulement les lignes touchees par le dernier commit : des qu'un fichier est entierement recent, TOUT son contenu compte comme "code nouveau", meme des lignes jamais retouchees depuis leur creation. Les deux vrais problemes existaient donc deja avant ce soir, juste jamais signales tant que le fichier n'avait pas encore ete scanne dans cet etat. Le rule java:S5783 compte `UUID.randomUUID()` comme un second appel "pouvant lever une exception" a l'interieur du lambda passe a `assertThatThrownBy`, meme s'il ne leve jamais rien en pratique - la regle est purement syntaxique (compte les invocations, pas leur risque reel). Le rule java:S2699 (BLOCKER) exige une assertion explicite dans chaque `@Test` ; `deleteAccountByUserIdSwallows404` se contentait d'appeler la methode sans verifier quoi que ce soit, l'absence d'exception etant son seul critere de reussite implicite.
+
+**Solution** : extraction de `UUID.randomUUID()` dans une variable locale avant les deux `assertThatThrownBy` (le lambda ne contient plus qu'un seul appel, `client.deleteAccountByUserId(userId, ...)`). Ajout d'une assertion explicite `assertThatCode(() -> client.deleteAccountByUserId(userId, "Bearer admin-token")).doesNotThrowAnyException()` a `deleteAccountByUserIdSwallows404`, qui documente en clair l'intention du test (aucune exception ne doit remonter sur un 404) au lieu de le laisser deviner.
+
+**A retenir** : la definition Sonar de "New Code" (base sur une date, pas sur le diff du dernier commit) peut faire apparaitre d'un coup TOUS les problemes latents d'un fichier entierement recent, meme sur des lignes non touchees par le commit qui a declenche le scan - un "nouveau" rapport charge de problemes ne veut donc pas dire que le dernier commit en a introduit autant, `git blame` sur le fichier permet de trancher rapidement. Pour `assertThatThrownBy`, garder le lambda reduit a un seul appel (sortir toute construction d'argument, meme reputee sure, avant l'assertion). Pour un test qui verifie "ne leve pas d'exception", preferer `assertThatCode(...).doesNotThrowAnyException()` a un appel nu sans assertion.
+
+## 74. Nettoyage Sonar payment-service et travel-service : variable jamais lue, `Thread.sleep()` dans les tests, assertions `.get(key)).isEqualTo(...)` au lieu de `containsEntry`, `.isEqualTo(0)` au lieu de `.isZero()`
+
+**Probleme** : rapport Sonar signalant, sur du code deja existant (pas touche ce soir) : `TravelServiceClient.fetchTravelSummary` assigne `lastError` a chaque echec de tentative mais ne le lit jamais ; `CircuitBreakerTest` utilise `Thread.sleep(20)` a 3 endroits pour attendre l'expiration du `openDuration` du circuit breaker ; `ApiExceptionHandlerTest` (payment-service ET travel-service, 7 puis 5 occurrences) ecrit `assertThat(response.getBody().get("message")).isEqualTo(...)` au lieu de `assertThat(response.getBody()).containsEntry("message", ...)` ; `ManagerStatsServiceTest` ecrit `assertThat(x).isEqualTo(0)` au lieu de `.isZero()`.
+
+**Cause** : ecarts d'usage AssertJ/Mockito accumules au fil des services (chaque service ayant ete ecrit independamment, les conventions n'ont pas toujours ete harmonisees) plutot qu'un bug fonctionnel unique - a l'exception de `lastError`, qui cachait un vrai defaut : la cause reelle d'un echec definitif de `TravelServiceClient` (dernier `RestClientResponseException`/`ResourceAccessException` rencontre) etait silencieusement perdue, `TravelServiceUnavailableException` ne portant aucune cause exploitable en logs.
+
+**Solution** : `TravelServiceUnavailableException` gagne un second constructeur `(Throwable cause)`, utilise par `TravelServiceClient` pour propager `lastError` au lieu de le laisser inutilise (corrige le signalement Sonar ET restaure la veritable cause en cas d'echec). `CircuitBreakerTest` utilise desormais une petite `Clock` de test (`MutableClock`, horloge manuelle avec `.advance(Duration)`) injectee dans `CircuitBreaker` (qui acceptait deja un `Clock` en parametre) a la place de `Clock.systemUTC()` + `Thread.sleep(20)` - le passage du temps est simule, plus besoin d'attendre reellement et plus de flakiness possible liee a la charge machine. Les 12 assertions `.get("message")).isEqualTo(...)` sont remplacees par `.containsEntry("message", ...)` sur les deux `ApiExceptionHandlerTest`. Le `.isEqualTo(0)` de `ManagerStatsServiceTest` devient `.isZero()`.
+
+**A retenir** : quand une classe accepte deja une dependance injectable liee au temps (ici `Clock`), l'utiliser avec une implementation de test controlable est toujours preferable a un vrai `Thread.sleep()` - plus rapide, deterministe, et insensible a la charge de la machine qui execute le build. Une variable assignee mais jamais lue merite d'etre questionnee avant d'etre simplement supprimee : ici elle revelait une vraie information perdue (la cause de l'echec), pas juste du code mort inoffensif.
+
+## 75. Rapport Sonar avec beaucoup d'issues "d'un coup" : en realite l'accumulation de plusieurs scans a des heures differentes, pas une regression d'un coup
+
+**Probleme** : un rapport Sonar complet colle d'un bloc donnait l'impression qu'un nombre enorme de problemes venaient d'apparaitre simultanement, avec le soupcon que les fixes precedents (#69-#74) auraient fait "recharger un vieux rapport".
+
+**Cause** : les horodatages affiches par issue ("11 hours ago", "4 hours ago", "3 hours ago") montrent que ces problemes viennent en realite de PLUSIEURS scans Sonar distincts, etales sur la soiree, pas d'un seul coup. Sonar garde un probleme "Open" tant qu'une analyse plus recente n'a pas prouve qu'il a disparu - hors, aucun commit n'avait encore ete pousse ni re-scanne depuis les fixes de #69-#74 au moment ou ce rapport a ete consulte : le rapport reflete donc fidelement l'etat du code AVANT ces fixes, ce qui est le comportement normal et attendu, pas un bug de cache introduit par une de mes modifications.
+
+**Solution** : verification fichier par fichier des issues listees contre le code reellement present sur disque (pas de confiance aveugle au rapport ni a la memoire de la conversation) :
+- `TravelServiceClient`/`CircuitBreakerTest`/`ApiExceptionHandlerTest` (payment+travel-service)/`ManagerStatsServiceTest` : deja corriges en #74, confirmes present sur disque.
+- `TravelerStatsResponse.java` L3 : PAS du code commente - un commentaire d'explication normal ("cancellationCount = abonnements CANCELLED ;") dont la forme ("mot = mot ;") declenche un faux positif de la regle java:S125. Reformule sans "=" ni ";" isole pour eviter le declencheur, sens inchange.
+- `payment-form.html` L58 et `travel-detail.html` L107 : un `<label>` sans controle associe (juste un affichage lecture-seule du montant) - remplace par un `<span class="label">`, un `<label>` implique par definition un controle de formulaire associe.
+- `travel-form.html` : 13 champs (destinations, hebergement, activites, transports, tous dans des boucles `@for`) sans `id`/`for` - ajoute un id unique par iteration (`'dest-city-' + dIndex`, `'activity-name-' + dIndex + '-' + aIndex`, etc.), meme pattern que celui deja utilise pour la case a cocher hebergement (`'accom-' + dIndex`).
+
+**A retenir** : face a un rapport Sonar qui semble soudainement enorme, regarder les horodatages par issue avant de soupconner un bug d'outillage - un rapport peut agreger plusieurs scans successifs. Toujours verifier une issue contre le fichier reel avant de la corriger : un "commented-out code" peut etre un faux positif sur un commentaire dont la forme ressemble a du code, et une regle d'accessibilite peut viser des occurrences precises (13 sur 19 champs non-labelises ici) sans forcement couvrir tous les cas identiques - ne pas supposer que "corriger ce qui est signale" = "corriger tout ce qui devrait l'etre".
+
+## 76. Stage "SonarQube Analysis & Quality Gate" : le frontend etait verifie APRES les 5 services backend, alors que c'est lui qui a fait echouer tout le run
+
+**Probleme** : un run a echoue avec "Quality Gate Sonar en echec pour : frontend" apres avoir attendu les scans Sonar des 5 services backend (chacun ~1-2min, compile+sonar:sonar), alors que le frontend (le plus rapide a verifier, ~1min) etait analyse en dernier dans cette stage.
+
+**Cause** : le reordonnancement de #72 ne portait que sur la stage "Build & Test" (buildFrontend() avant ALL_SERVICES.each). La stage separee "SonarQube Analysis & Quality Gate" (qui, elle, ne bloque qu'a la toute fin - voir #67) gardait encore l'ordre backend-d'abord, frontend-en-dernier.
+
+**Solution** : `sonarFrontend(standalone)` appele avant `ALL_SERVICES.each { sonarService(...) }` dans cette stage, meme logique fail-cheap-first que #72. Ca ne change rien au resultat final du run (tous les projets sont toujours analyses, la stage ne bloque toujours qu'a la fin), seulement l'ordre dans lequel les echecs deviennent visibles en suivant le log en direct.
+
+**A retenir** : un principe de reordonnancement (ici "le moins cher d'abord") applique a une stage ne se propage pas automatiquement aux autres stages qui ont la meme structure - `Build & Test` et `SonarQube Analysis & Quality Gate` sont deux boucles ALL_SERVICES+frontend independantes dans ce Jenkinsfile, chacune a du etre reordonnee separement.
+
+## 77. Duplication Sonar frontend (register/user-form ~50%, manager-travel-detail/travel-detail ~20-30%) : extraction de composants partages
+
+**Probleme** : 4 templates signales par la duplication CPD de Sonar - `register.html` (50.0%, 75 lignes), `user-form.html` (49.0%, 24 lignes), `manager-travel-detail.html` (30.1%, 44 lignes), `travel-detail.html` (21.9%, 43 lignes).
+
+**Cause** : deux paires de pages copiaient litteralement le meme bloc de template. `register.html`/`user-form.html` partageaient a l'identique les champs Prenom/Nom/Email/Telephone (35 lignes) et tout le sous-formulaire adresse (Rue/Ville/Code postal/Pays, ~38 lignes). `manager-travel-detail.html`/`travel-detail.html` partageaient a l'identique la carte resume (dates/prix/statut/nombre de destinations, ~18 lignes) et la liste des destinations avec son `@for` (~23 lignes).
+
+**Solution** : 4 nouveaux composants partages dans `frontend/src/app/shared/ui/` : `NameContactFields` (prend les `FormControl` firstName/lastName/email/phone directement, les deux formulaires ayant des formes differentes par ailleurs), `AddressFields` (prend le `FormGroup` adresse, le `[formGroup]` est pose sur un `ng-container` pour ne pas ajouter de div et laisser chaque page garder son propre wrapper - `register.html` n'avait pas de `form-grid` sur l'adresse, `user-form.html` si, les deux comportements sont preserves), `TravelSummaryCard` et `TravelDestinationsList` (composants d'affichage purs, prennent respectivement un `Travel` et un tableau de `Destination`). Chaque page importe ces composants et remplace le bloc duplique par une balise.
+
+**A retenir** : avant d'extraire un composant partage entre deux templates, verifier que les CONTROLES sous-jacents ont vraiment la meme forme (ici, `firstName`/`address` sont construits a l'identique via `fb.nonNullable.group(...)` dans les deux composants) - sinon le composant partage devient un faux partage qui force artificiellement deux formulaires differents a converger. Poser un `[formGroup]` sur un `ng-container` plutot que sur une nouvelle div evite d'alterer la structure DOM (et donc le CSS/layout) des pages appelantes.
+
+## 78. E2E Playwright "Login (admin) a echoue (HTTP 502)" alors qu'auth-service tournait deja sans probleme depuis plusieurs minutes
+
+**Probleme** : le stage "E2E Tests (Playwright)" echouait des le `globalSetup` sur `POST /api/auth/login` -> 502, alors que `docker compose ps` montrait tous les conteneurs `healthy`, les logs d'auth-service un demarrage Spring Boot propre termine 4 minutes avant la requete en echec, et les `/healthz` de nginx qui repondaient 200 en continu juste avant et juste apres.
+
+**Cause** : `/api/*` ne va jamais directement a auth-service - `nginx.conf` route tout `/api/` vers `api-gateway:8080`, qui route lui-meme vers les 4 backends. Le stage "Wait for stack ready" ne testait que `${DEPLOYED_BASE_URL}/` (nginx -> frontend), jamais un chemin passant par api-gateway. Or le healthcheck Docker d'api-gateway (comme celui des 4 autres services backend) n'est qu'un test TCP brut (`/dev/tcp/localhost/8080`) : il passe des que le port est ouvert, sans garantir que le routage HTTP interne de Spring Cloud Gateway (vers auth-service via le discovery client simple) soit deja pleinement operationnel. La stage e2e demarrait donc parfois une poignee de secondes avant que ce dernier maillon soit reellement pret.
+
+**Solution** : "Wait for stack ready" verifie desormais aussi `${DEPLOYED_BASE_URL}/api/__stack_ready_probe__` (chemin volontairement sans route Gateway definie, donc jamais rate-limite ni protege par JWT) et n'accepte l'etat "pret" que si nginx repond autre chose que 000/502/503/504 - ce qui prouve que le trajet complet nginx -> api-gateway -> dispatcher Spring fonctionne, sans jamais toucher `/api/auth/login` (deja limite a 5 requetes/minute par `limit_req_zone`, un polling repete dessus aurait pu faire echouer le VRAI login e2e par 429).
+
+**A retenir** : un healthcheck "port TCP ouvert" verifie qu'un processus a demarre, pas que la chaine de requetes qu'on va reellement emprunter est prete de bout en bout - pour un stack a plusieurs sauts (nginx -> gateway -> service), le garde-fou de demarrage doit tester le MEME chemin que celui emprunte par les tests, jamais un raccourci plus simple (ici `/`) qui contourne justement le maillon fragile.
+
+## 79. Paiement e2e "502" (en realite 401 Stripe) : `STRIPE_SECRET_KEY` jamais configuree dans le `.env` de la CI
+
+**Probleme** : apres les fixes #78, tous les tests e2e passaient sauf "ajoute un moyen de paiement puis paie le voyage de fixture", qui recevait 502 au lieu de 201.
+
+**Cause** : le 502 etait un symptome, pas la cause - `payment-service` loggait en realite `401 Unauthorized: "Invalid API Key provided: sk_test_*************only"` sur son appel a l'API Stripe (le "Broken pipe" cote api-gateway n'est que Playwright qui avait deja abandonne la connexion pendant l'echec+retry cote payment-service). `sk_test_changeme_dev_only` est exactement la valeur par defaut de `.env.example` - jamais remplacee dans `infra/ci/persistent-state/.env` (le `.env` reellement utilise par Jenkins), contrairement au `.env` local de dev qui avait deja la vraie cle. `vault-init` (voir `docker-compose.yml`, service `vault-init`) seme Vault avec `STRIPE_SECRET_KEY` lue depuis `.env` a CHAQUE deploiement - ce n'est donc pas une regression des fixes Vault de cette session, juste un trou de configuration jamais expose avant que ce test de paiement complet n'existe et n'aille au bout.
+
+**Solution** : valeur reelle copiee du `.env` local vers `infra/ci/persistent-state/.env` (celui restaure a chaque build, voir Jenkinsfile STATE_FILES). Mais ca ne suffisait pas : `infra/vault/bootstrap.sh` (execute par le conteneur `vault-init` a chaque deploiement) n'ecrivait `secret/payment-service/stripe`/`.../paypal` dans Vault QUE s'ils etaient absents (`if ! vault kv get ... ; then`) - le meme piege "creates:" que le certificat TLS de #64/#78. Une vraie cle mise manuellement dans Vault survivait tant que le volume n'etait jamais reinitialise, mais un reset complet (cf. #18 - vault-reset.yml) la faisait disparaitre, et le bootstrap la recreait alors depuis `.env`, retombant sur le placeholder si celui-ci n'avait jamais ete corrige. Les deux `vault kv put` (Stripe, PayPal) sont desormais executes a chaque run sans garde : `.env` devient la seule source de verite, un reset ne peut plus faire regresser ces secrets (le JWT genere aleatoirement garde lui son garde "si absent", pour ne pas invalider les sessions a chaque deploiement normal).
+
+**A retenir** : un 502 ne veut pas toujours dire "probleme reseau/TLS" comme en #78 - toujours lire le log du service qui a echoue avant de chercher plus loin, l'erreur reelle (401 Stripe) etait deja dans les logs payment-service depuis le debut. Un garde "si absent" (`creates:` Ansible ou `if ! vault kv get`) est correct pour une valeur GENEREE (JWT aleatoire), mais dangereux pour une valeur qui doit toujours REFLETER une source externe (`.env`) - dans ce second cas, ecrire sans condition est la seule facon qu'un reset ne fige pas une valeur perimee.
+

@@ -1,0 +1,67 @@
+<app-page-header title="mon compte" subtitle="Vos données personnelles (RGPD)" />
+
+@if (loading()) {
+  <app-spinner />
+} @else if (profile(); as user) {
+  <div class="card">
+    <div class="field">
+      <span class="label">Nom</span>
+      <p>{{ user.firstName }} {{ user.lastName }}</p>
+    </div>
+    <div class="field">
+      <span class="label">Email</span>
+      <p>{{ user.email }}</p>
+    </div>
+    <div class="field">
+      <span class="label">Téléphone</span>
+      <p>{{ user.phone || '—' }}</p>
+    </div>
+    <div class="field">
+      <span class="label">Adresse</span>
+      @if (user.address; as address) {
+        <p>{{ address.street }}, {{ address.postalCode }} {{ address.city }}, {{ address.country }}</p>
+      } @else {
+        <p>—</p>
+      }
+    </div>
+    <div class="field">
+      <span class="label">Compte créé le</span>
+      <p>{{ user.createdAt | slice: 0 : 10 }}</p>
+    </div>
+    <div class="field">
+      <span class="label">Consentement politique de confidentialité</span>
+      <p>
+        @if (user.privacyAcceptedAt) {
+          accepté le {{ user.privacyAcceptedAt | slice: 0 : 10 }}
+        } @else {
+          non applicable (compte créé par un administrateur)
+        }
+      </p>
+    </div>
+
+    <p class="login-subtitle" style="margin: 16px 0">
+      <a routerLink="/politique-de-confidentialite" target="_blank" rel="noopener"
+        >relire la politique de confidentialité</a
+      >
+    </p>
+
+    <div class="form-actions">
+      <button type="button" class="btn btn-primary" (click)="exportData()">
+        exporter mes données (JSON)
+      </button>
+      <button type="button" class="btn btn-danger" (click)="confirmingDelete.set(true)">
+        supprimer mon compte
+      </button>
+    </div>
+  </div>
+}
+
+@if (confirmingDelete()) {
+  <app-confirm-dialog
+    title="Supprimer mon compte"
+    message="Cette action supprime définitivement votre profil et votre compte de connexion. Elle est irréversible et vous serez immédiatement déconnecté."
+    confirmLabel="supprimer définitivement"
+    (confirmed)="confirmDelete()"
+    (cancelled)="confirmingDelete.set(false)"
+  />
+}

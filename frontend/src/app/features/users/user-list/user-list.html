@@ -1,5 +1,5 @@
 <app-page-header title="users" subtitle="Comptes admins et voyageurs">
-  <a routerLink="/users/new" class="btn btn-primary">+ new user</a>
+  <a routerLink="/users/new" class="btn btn-primary">+ nouvel utilisateur</a>
 </app-page-header>
 
 @if (loading()) {
@@ -28,9 +28,9 @@
             <td><app-badge [value]="user.role" /></td>
             <td>{{ user.address?.city || '—' }}</td>
             <td class="actions">
-              <a [routerLink]="['/users', user.id, 'edit']" class="btn btn-ghost btn-sm">edit</a>
+              <a [routerLink]="['/users', user.id, 'edit']" class="btn btn-ghost btn-sm">modifier</a>
               <button type="button" class="btn btn-danger btn-sm" (click)="deleteTarget.set(user)">
-                delete
+                supprimer
               </button>
             </td>
           </tr>

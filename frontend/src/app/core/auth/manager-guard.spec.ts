@@ -2,7 +2,6 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 import { AuthService } from './auth';
 import { managerGuard } from './manager-guard';
 
@@ -17,7 +16,7 @@ describe('managerGuard', () => {
   });
 
   it('allows a TRAVEL_MANAGER through', () => {
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
 
     const result = TestBed.runInInjectionContext(() => managerGuard({} as never, {} as never));
 
@@ -25,7 +24,7 @@ describe('managerGuard', () => {
   });
 
   it('allows an ADMIN through', () => {
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'admin', role: 'ADMIN' });
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'admin', role: 'ADMIN' });
 
     const result = TestBed.runInInjectionContext(() => managerGuard({} as never, {} as never));
 
@@ -33,7 +32,7 @@ describe('managerGuard', () => {
   });
 
   it('redirects a TRAVELER to /dashboard', () => {
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'traveler', role: 'TRAVELER' });
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'traveler', role: 'TRAVELER' });
 
     const result = TestBed.runInInjectionContext(() => managerGuard({} as never, {} as never));
 

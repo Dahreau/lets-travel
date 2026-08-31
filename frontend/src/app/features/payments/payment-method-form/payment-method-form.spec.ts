@@ -2,7 +2,6 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 import { AuthService } from '../../../core/auth/auth';
 import { PaymentMethodForm } from './payment-method-form';
 
@@ -26,8 +25,8 @@ describe('PaymentMethodForm (as TRAVELER)', () => {
     }).compileComponents();
 
     const authService = TestBed.inject(AuthService);
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'traveler1', role: 'TRAVELER' });
-    vi.spyOn(authService, 'userId').mockReturnValue('u1');
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'traveler1', role: 'TRAVELER' });
+    spyOn(authService, 'userId').and.returnValue('u1');
 
     httpMock = TestBed.inject(HttpTestingController);
     const fixture = TestBed.createComponent(PaymentMethodForm);
@@ -81,7 +80,7 @@ describe('PaymentMethodForm (as ADMIN)', () => {
     }).compileComponents();
 
     const authService = TestBed.inject(AuthService);
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'admin', role: 'ADMIN' });
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'admin', role: 'ADMIN' });
 
     httpMock = TestBed.inject(HttpTestingController);
   });
@@ -95,6 +94,6 @@ describe('PaymentMethodForm (as ADMIN)', () => {
     const req = httpMock.expectOne('/api/users');
     req.flush([{ id: 'u2', firstName: 'Ada', lastName: 'Lovelace' }]);
 
-    expect(fixture.componentInstance['users']()).toHaveLength(1);
+    expect(fixture.componentInstance['users']()).toHaveSize(1);
   });
 });

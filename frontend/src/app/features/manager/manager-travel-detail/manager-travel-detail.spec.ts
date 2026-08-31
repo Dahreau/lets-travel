@@ -61,9 +61,9 @@ describe('ManagerTravelDetail', () => {
       .flush({ id: 'trav-1', firstName: 'Ada', lastName: 'T', email: 'ada@t.com', phone: null, role: 'TRAVELER', address: null, createdAt: '', updatedAt: '' });
 
     expect(component['travel']()?.title).toBe('Road trip');
-    expect(component['subscribers']()).toHaveLength(1);
+    expect(component['subscribers']()).toHaveSize(1);
     expect(component['subscribers']()[0].traveler?.firstName).toBe('Ada');
-    expect(component['feedbacks']()).toHaveLength(1);
+    expect(component['feedbacks']()).toHaveSize(1);
     expect(component['loading']()).toBe(false);
   });
 

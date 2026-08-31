@@ -1,10 +1,10 @@
 package com.travel_plan.travel_service.web;
 
 import java.math.BigDecimal;
+import java.util.List;
 
-// Tableau de bord prive du manager connecte (feat/manager-frontend). estimatedRevenue est une
-// estimation (prix x abonnes actifs par voyage, sommee), pas une reconciliation avec les vrais
-// paiements de payment-service - voir ManagerStatsService.myStats et
-// docs/nouveautes-vs-travel-plan.md pour le raisonnement.
-public record ManagerStatsResponse(long travelCount, long travelerCount, BigDecimal estimatedRevenue) {
+// estimatedRevenue = prix x abonnes actifs par voyage, somme - pas une reconciliation avec les
+// vrais paiements de payment-service.
+public record ManagerStatsResponse(
+        long travelCount, long travelerCount, BigDecimal estimatedRevenue, List<ManagerTravelStatsEntry> travels) {
 }

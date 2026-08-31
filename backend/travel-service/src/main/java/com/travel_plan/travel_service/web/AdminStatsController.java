@@ -24,4 +24,9 @@ public class AdminStatsController {
     public List<AdminTravelRankingResponse> travelRankings() {
         return adminStatsService.travelRankings();
     }
+
+    @GetMapping("/monthly-revenue")
+    public List<AdminMonthlyRevenueResponse> monthlyRevenue() {
+        return adminStatsService.monthlyRevenue();
+    }
 }

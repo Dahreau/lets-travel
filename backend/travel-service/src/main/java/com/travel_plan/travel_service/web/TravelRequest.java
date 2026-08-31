@@ -12,13 +12,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-// managerId n'est PAS @NotNull : quand l'appelant est TRAVEL_MANAGER, il est
-// force a son propre userId (JWT) et toute valeur envoyee ici est ignoree.
-// Seul un appel ADMIN doit le fournir explicitement (verifie dans TravelService,
-// pas ici, car ca depend du role de l'appelant, pas juste du contenu de la requete).
-// price/currency sont obligatoires ici (contrairement a l'entite Travel, qui les
-// garde nullable pour les voyages crees avant leur introduction - voir migration V4) :
-// tout Travel Manager qui cree ou modifie un voyage doit desormais lui fixer un vrai prix.
+// managerId n'est pas @NotNull (ignore si TRAVEL_MANAGER, requis pour ADMIN - verifie dans
+// TravelService). price/currency obligatoires ici, contrairement a l'entite Travel (nullable, legacy).
 public record TravelRequest(
         @NotBlank String title,
         UUID managerId,
@@ -30,7 +25,7 @@ public record TravelRequest(
         @NotEmpty List<@Valid DestinationRequest> destinations,
         List<@Valid TransportationRequest> transportations) {
 
-    @AssertTrue(message = "endDate must not be before startDate")
+    @AssertTrue(message = "endDate ne doit pas etre anterieure a startDate")
     public boolean isDateRangeValid() {
         return startDate == null || endDate == null || !endDate.isBefore(startDate);
     }

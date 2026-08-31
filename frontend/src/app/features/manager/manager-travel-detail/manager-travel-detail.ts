@@ -8,6 +8,8 @@ import { Badge } from '../../../shared/ui/badge';
 import { ConfirmDialog } from '../../../shared/ui/confirm-dialog';
 import { PageHeader } from '../../../shared/ui/page-header';
 import { Spinner } from '../../../shared/ui/spinner';
+import { TravelDestinationsList } from '../../../shared/ui/travel-destinations-list';
+import { TravelSummaryCard } from '../../../shared/ui/travel-summary-card';
 import { Feedback } from '../../../core/models/feedback';
 import { Subscription } from '../../../core/models/subscription';
 import { Travel } from '../../../core/models/travel';
@@ -26,7 +28,16 @@ interface SubscriberRow {
 
 @Component({
   selector: 'app-manager-travel-detail',
-  imports: [RouterLink, SlicePipe, Badge, ConfirmDialog, PageHeader, Spinner],
+  imports: [
+    RouterLink,
+    SlicePipe,
+    Badge,
+    ConfirmDialog,
+    PageHeader,
+    Spinner,
+    TravelSummaryCard,
+    TravelDestinationsList,
+  ],
   templateUrl: './manager-travel-detail.html',
 })
 export class ManagerTravelDetail implements OnInit {

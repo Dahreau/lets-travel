@@ -10,6 +10,7 @@ export interface ReportRequest {
 export interface ReportResponse {
   id: string;
   travelId: string;
+  travelTitle: string;
   reporterId: string;
   reportedType: ReportedType;
   reportedId: string;

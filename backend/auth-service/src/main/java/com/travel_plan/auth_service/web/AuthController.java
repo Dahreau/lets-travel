@@ -8,6 +8,7 @@ import com.travel_plan.auth_service.security.JwtService;
 import jakarta.validation.Valid;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,33 +35,32 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
         Account account = accountRepository.findByUsername(request.username())
-                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+                .orElseThrow(() -> new BadCredentialsException("Identifiants invalides"));
 
         if (!passwordEncoder.matches(request.password(), account.getPasswordHash())) {
-            throw new BadCredentialsException("Invalid credentials");
+            throw new BadCredentialsException("Identifiants invalides");
         }
 
         String token = jwtService.generateToken(account.getUsername(), account.getRole().name(), account.getUserId());
         return ResponseEntity.ok(new LoginResponse(token));
     }
 
-    // Public (voir SecurityConfig) : feat/traveler-experience, 2e etape de l'inscription
-    // publique traveler (userId venant de POST /api/users/register cote user-service, appele
-    // en 1er par le client). role toujours force a TRAVELER, jamais lu depuis la requete.
-    // Connecte immediatement l'inscrit (meme reponse que /login) - evite un aller-retour de
-    // plus pour l'UX, coherent avec "login process secure and straightforward" de l'audit.
+    // Public : 2e etape de l'inscription. Le userId vient du jeton signe par user-service,
+    // jamais directement du client. Connecte immediatement l'inscrit (meme reponse que /login).
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     public LoginResponse register(@Valid @RequestBody RegisterRequest request) {
+        UUID userId = jwtService.validateRegistrationToken(request.registrationToken());
+
         accountRepository.findByUsername(request.username()).ifPresent(existing -> {
-            throw new UsernameAlreadyTakenException("Username already taken: " + request.username());
+            throw new UsernameAlreadyTakenException("Nom d'utilisateur deja pris : " + request.username());
         });
 
         Account account = Account.builder()
                 .username(request.username())
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .role(Role.TRAVELER)
-                .userId(request.userId())
+                .userId(userId)
                 .createdAt(Instant.now(clock))
                 .build();
         accountRepository.save(account);

@@ -18,3 +18,9 @@ export interface AdminTravelRanking {
   revenue: number;
   averageRating: number | null;
 }
+
+// fix/audit-gaps : revenu estime des 6 derniers mois (miroir AdminMonthlyRevenueResponse).
+export interface AdminMonthlyRevenue {
+  month: string;
+  revenue: number;
+}

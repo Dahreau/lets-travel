@@ -58,6 +58,11 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    // voir troubleshooting.md #41 - trace le consentement RGPD a l'inscription publique ; nullable,
+    // vide pour les profils crees par un ADMIN (V2__add_privacy_accepted_at.sql).
+    @Column(name = "privacy_accepted_at")
+    private Instant privacyAcceptedAt;
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();

@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.travel_plan.payment_service.exception.TravelNotFoundException;
+import com.travel_plan.payment_service.exception.TravelServiceUnavailableException;
 import com.travel_plan.payment_service.exception.TravelPriceNotSetException;
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -90,14 +93,33 @@ class TravelServiceClientTest {
     }
 
     // Panne de connexion persistante (travel-service injoignable) : les 3 tentatives echouent,
-    // l'erreur d'origine remonte telle quelle plutot que de bloquer indefiniment.
+    // un TravelServiceUnavailableException clair remonte plutot que l'erreur reseau brute.
     @Test
-    void getPricedTravelGivesUpAfterMaxAttemptsOnPersistentConnectionFailure() {
+    void getPricedTravelThrowsUnavailableAfterMaxAttemptsOnPersistentConnectionFailure() {
         UUID travelId = UUID.randomUUID();
-        ResourceAccessException connectionFailure = new ResourceAccessException("connect timed out");
-        stubGetError(travelId, connectionFailure);
+        stubGetError(travelId, new ResourceAccessException("connect timed out"));
 
-        assertThatThrownBy(() -> client.getPricedTravel(travelId, "Bearer test-token")).isSameAs(connectionFailure);
+        assertThatThrownBy(() -> client.getPricedTravel(travelId, "Bearer test-token"))
+                .isInstanceOf(TravelServiceUnavailableException.class);
+    }
+
+    // Circuit breaker (client/CircuitBreaker) : s'ouvre au 5e echec consecutif et coupe court
+    // sans plus jamais appeler RestClient, tant qu'il reste ouvert.
+    @Test
+    void circuitBreakerOpensAfterRepeatedFailuresAndShortCircuitsWithoutCallingRestClient() {
+        UUID travelId = UUID.randomUUID();
+        stubGetError(travelId, new ResourceAccessException("connect timed out"));
+
+        for (int i = 0; i < 5; i++) {
+            assertThatThrownBy(() -> client.getPricedTravel(travelId, "Bearer test-token"))
+                    .isInstanceOf(TravelServiceUnavailableException.class);
+        }
+
+        clearInvocations(restClient);
+
+        assertThatThrownBy(() -> client.getPricedTravel(travelId, "Bearer test-token"))
+                .isInstanceOf(TravelServiceUnavailableException.class);
+        verifyNoInteractions(restClient);
     }
 
     private void stubGetResponse(UUID travelId, TravelSummary response) {

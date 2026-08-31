@@ -25,9 +25,7 @@ describe('PaymentsService', () => {
   });
 
   it('POSTs a new payment', () => {
-    service
-      .create({ travelId: 't1', ownerId: 'u1', paymentMethodId: 'm1', amount: 100, currency: 'EUR' })
-      .subscribe();
+    service.create({ travelId: 't1', ownerId: 'u1', paymentMethodId: 'm1' }).subscribe();
     const req = httpMock.expectOne('/api/payments');
     expect(req.request.method).toBe('POST');
     req.flush({});

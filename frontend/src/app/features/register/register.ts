@@ -5,14 +5,15 @@ import { finalize, switchMap } from 'rxjs';
 import { AuthService } from '../../core/auth/auth';
 import { extractErrorMessage } from '../../core/http/api-error';
 import { UserRegistrationRequest } from '../../core/models/user';
+import { AddressFields } from '../../shared/ui/address-fields';
+import { NameContactFields } from '../../shared/ui/name-contact-fields';
 import { UsersService } from '../users/users';
 
-// Inscription publique Traveler en 2 appels (deja existants cote backend, feat/traveler-experience) :
-// POST /api/users/register cree le profil, puis POST /api/auth/register cree le compte avec le
-// userId renvoye et connecte immediatement - meme enchainement que Login, avec un appel de plus.
+// Inscription en 2 appels : POST /api/users/register cree le profil, puis POST /api/auth/register
+// cree le compte avec le registrationToken renvoye par le 1er, et connecte immediatement.
 @Component({
   selector: 'app-register',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, NameContactFields, AddressFields],
   templateUrl: './register.html',
   styleUrl: './register.scss',
 })
@@ -33,6 +34,8 @@ export class Register implements OnInit {
     phone: [''],
     username: ['', Validators.required],
     password: ['', [Validators.required, Validators.minLength(6)]],
+    // voir troubleshooting.md #41 - requiredTrue reprend la contrainte @AssertTrue du backend.
+    acceptedPrivacyPolicy: [false, Validators.requiredTrue],
     address: this.fb.nonNullable.group({
       street: ['', Validators.required],
       city: ['', Validators.required],
@@ -56,6 +59,7 @@ export class Register implements OnInit {
   protected submit(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
+      this.errorMessage.set('Certains champs obligatoires sont manquants ou invalides.');
       return;
     }
 
@@ -66,6 +70,7 @@ export class Register implements OnInit {
       email: raw.email,
       phone: raw.phone || null,
       address: this.hasAddress() ? raw.address : null,
+      acceptedPrivacyPolicy: raw.acceptedPrivacyPolicy,
     };
 
     this.loading.set(true);
@@ -74,8 +79,12 @@ export class Register implements OnInit {
     this.usersService
       .register(profile)
       .pipe(
-        switchMap((user) =>
-          this.authService.register({ username: raw.username, password: raw.password, userId: user.id }),
+        switchMap((result) =>
+          this.authService.register({
+            username: raw.username,
+            password: raw.password,
+            registrationToken: result.registrationToken,
+          }),
         ),
         switchMap(() => this.authService.me()),
         finalize(() => this.loading.set(false)),

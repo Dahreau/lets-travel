@@ -2,7 +2,6 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 import { AuthService } from '../../core/auth/auth';
 import { Shell } from './shell';
 
@@ -23,7 +22,7 @@ describe('Shell', () => {
   });
 
   it('shows the full admin toolkit nav, including browse, for an ADMIN', () => {
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'admin', role: 'ADMIN' });
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'admin', role: 'ADMIN' });
     fixture.detectChanges();
 
     expect(component['navItems']().map((item) => item.label)).toEqual([
@@ -33,24 +32,34 @@ describe('Shell', () => {
       'travels',
       'payments',
       'payment-methods',
+      // fix/audit-gaps (troubleshooting.md #41) : self-service RGPD, ajoute aux 3 roles.
+      'mon compte',
     ]);
   });
 
-  it('shows the dashboard and browse links for a TRAVEL_MANAGER, never the admin tools', () => {
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
-    fixture.detectChanges();
-
-    expect(component['navItems']().map((item) => item.label)).toEqual(['dashboard', 'voyages']);
-  });
-
-  it('shows the browse & payment-methods nav for a TRAVELER, never the admin tools', () => {
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'traveler1', role: 'TRAVELER' });
+  it('shows the dashboard, browse and payment-methods links for a TRAVEL_MANAGER, never the admin tools', () => {
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
     fixture.detectChanges();
 
     expect(component['navItems']().map((item) => item.label)).toEqual([
       'dashboard',
       'voyages',
       'payment-methods',
+      // fix/audit-gaps (troubleshooting.md #41) : self-service RGPD, ajoute aux 3 roles.
+      'mon compte',
+    ]);
+  });
+
+  it('shows the browse & payment-methods nav for a TRAVELER, never the admin tools', () => {
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'traveler1', role: 'TRAVELER' });
+    fixture.detectChanges();
+
+    expect(component['navItems']().map((item) => item.label)).toEqual([
+      'dashboard',
+      'voyages',
+      'payment-methods',
+      // fix/audit-gaps (troubleshooting.md #41) : self-service RGPD, ajoute aux 3 roles.
+      'mon compte',
     ]);
   });
 });

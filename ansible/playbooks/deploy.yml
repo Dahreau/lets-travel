@@ -3,6 +3,7 @@
   hosts: travel_plan
   vars:
     project_dir: "{{ playbook_dir }}/../.."
+    unseal_key_file: "{{ project_dir }}/infra/vault/.unseal-key.txt"
 
   tasks:
     - name: Ensure .env exists (copied from .env.example on first run only)
@@ -56,6 +57,38 @@
         state: directory
         mode: "0755"
 
+    - name: Resolve the current Docker Compose project name (le SAN d'internal.crt en depend - #64)
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, "{{ project_dir }}", config, --format, json]
+      register: compose_config_raw
+      changed_when: false
+
+    - name: Parse the current Compose project name
+      ansible.builtin.set_fact:
+        compose_project_name: "{{ (compose_config_raw.stdout | from_json).name }}"
+
+    - name: Check whether internal.crt exists already
+      ansible.builtin.stat:
+        path: "{{ project_dir }}/infra/internal-tls/certs/internal.crt"
+      register: internal_crt_stat
+
+    - name: Read the SAN list of the existing internal.crt (if any)
+      ansible.builtin.command:
+        argv: [openssl, x509, -in, "{{ project_dir }}/infra/internal-tls/certs/internal.crt", -noout, -ext, subjectAltName]
+      register: internal_crt_san
+      changed_when: false
+      failed_when: false
+      when: internal_crt_stat.stat.exists
+
+    - name: Self-heal - internal.crt vient d'un projet Compose renomme depuis sa generation (SAN perime, cf. #64)
+      ansible.builtin.file:
+        path: "{{ project_dir }}/infra/internal-tls/certs/{{ item }}"
+        state: absent
+      loop: [internal.crt, internal.key]
+      when:
+        - internal_crt_stat.stat.exists
+        - (compose_project_name ~ '-auth-service-1') not in internal_crt_san.stdout
+
     - name: Generate a self-signed TLS certificate for internal service-to-service traffic (skipped if it already exists)
       ansible.builtin.command:
         argv:
@@ -73,11 +106,10 @@
           - "365"
           - -subj
           - /CN=lets-travel-internal
-          # SAN requis (pas juste CN) : nginx et api-gateway verifient le hostname du certificat.
-          # Les noms DNS suivent le nom de projet Compose (docker-compose.yml: name: lets-travel-app) —
-          # a regenerer (supprimer le .crt/.key existants) si ce nom de projet change un jour.
+          # SAN requis (pas juste CN) ; noms DNS lies au nom de projet Compose - regenere
+          # automatiquement si perime, cf. self-heal ci-dessus et troubleshooting.md #64.
           - -addext
-          - "subjectAltName=DNS:api-gateway,DNS:lets-travel-app-auth-service-1,DNS:lets-travel-app-auth-service-2,DNS:lets-travel-app-user-service-1,DNS:lets-travel-app-user-service-2,DNS:lets-travel-app-travel-service-1,DNS:lets-travel-app-travel-service-2,DNS:lets-travel-app-payment-service-1,DNS:lets-travel-app-payment-service-2"
+          - "subjectAltName=DNS:api-gateway,DNS:{{ compose_project_name }}-auth-service-1,DNS:{{ compose_project_name }}-auth-service-2,DNS:{{ compose_project_name }}-user-service-1,DNS:{{ compose_project_name }}-user-service-2,DNS:{{ compose_project_name }}-travel-service-1,DNS:{{ compose_project_name }}-travel-service-2,DNS:{{ compose_project_name }}-payment-service-1,DNS:{{ compose_project_name }}-payment-service-2"
         creates: "{{ project_dir }}/infra/internal-tls/certs/internal.crt"
 
     - name: Pre-pull third-party images explicitly for linux/amd64
@@ -112,7 +144,7 @@
       changed_when: "'Removing' in vault_init_rm.stdout"
       failed_when: false
 
-    - name: Force-remove postgres, neo4j and nginx before recreate (same host-port/bind-mount release race as vault-init, they're the other services publishing ports)
+    - name: Force-remove postgres, neo4j, nginx, vault and the 5 internal-tls-mounted services before recreate (same stale Docker Desktop/WSL2 bind-mount race as vault-init - also hits infra/internal-tls/certs and infra/vault/certs, not just published ports)
       ansible.builtin.command:
         argv:
           - docker
@@ -125,9 +157,78 @@
           - postgres
           - neo4j
           - nginx
-      register: db_containers_rm
-      changed_when: "'Removing' in db_containers_rm.stdout"
+          - vault
+          - auth-service
+          - user-service
+          - travel-service
+          - payment-service
+          - api-gateway
+      register: stale_mount_containers_rm
+      changed_when: "'Removing' in stale_mount_containers_rm.stdout"
       failed_when: false
+
+    # Vault redemarre scelle sur un conteneur neuf (etat en memoire) - le force-remove ci-dessus
+    # vient de le recreer ; sans ce bloc, vault-init n'atteint jamais l'etat "healthy".
+    - name: Restart Vault alone and re-unseal it before bringing up the rest of the stack
+      block:
+        - name: Start only the Vault container
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - up
+              - -d
+              - vault
+          changed_when: true
+
+        - name: Wait for the Vault CLI to respond
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - exec
+              - -T
+              - vault
+              - vault
+              - status
+              - -format=json
+          register: vault_status_raw
+          until: vault_status_raw.rc in [0, 2]
+          retries: 20
+          delay: 3
+          changed_when: false
+          failed_when: false
+
+        - name: Parse Vault status
+          ansible.builtin.set_fact:
+            vault_status: "{{ vault_status_raw.stdout | from_json }}"
+
+        - name: Read the stored unseal key
+          ansible.builtin.slurp:
+            src: "{{ unseal_key_file }}"
+          register: unseal_key_raw
+          when: vault_status.sealed | default(true)
+
+        - name: Unseal Vault using the stored key (safe to skip if already unsealed)
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ project_dir }}"
+              - exec
+              - -T
+              - vault
+              - vault
+              - operator
+              - unseal
+              - "{{ unseal_key_raw.content | b64decode | trim }}"
+          when: vault_status.sealed | default(true)
+          no_log: true
 
     - name: Deploy infra, microservices and the reverse proxy (docker compose up)
       ansible.builtin.command:

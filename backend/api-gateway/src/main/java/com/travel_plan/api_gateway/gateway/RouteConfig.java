@@ -20,8 +20,11 @@ public class RouteConfig {
 
     @Bean
     public RouterFunction<ServerResponse> authServiceRoutes(JwtGatewayFilterFunction jwtFilter) {
-        RouterFunction<ServerResponse> login = route("auth-service-login")
+        // /register public comme /login (2e etape de l'inscription traveler, voir AuthController) -
+        // sinon jwtFilter bloque en 401 avant le permitAll() de auth-service.
+        RouterFunction<ServerResponse> publicRoutes = route("auth-service-public")
                 .POST("/api/auth/login", http())
+                .POST("/api/auth/register", http())
                 .filter(lb(AUTH_SERVICE))
                 .build();
 
@@ -31,25 +34,44 @@ public class RouteConfig {
                 .filter(jwtFilter)
                 .build();
 
-        return login.and(protectedRoutes);
+        return publicRoutes.and(protectedRoutes);
     }
 
     @Bean
     public RouterFunction<ServerResponse> userServiceRoutes(JwtGatewayFilterFunction jwtFilter) {
-        return route(USER_SERVICE)
+        // /register public (1ere etape de l'inscription publique traveler) - meme raison
+        // que auth-service-public ci-dessus.
+        RouterFunction<ServerResponse> publicRoutes = route("user-service-public")
+                .POST("/api/users/register", http())
+                .filter(lb(USER_SERVICE))
+                .build();
+
+        RouterFunction<ServerResponse> protectedRoutes = route(USER_SERVICE)
                 .route(path("/api/users/**"), http())
                 .filter(lb(USER_SERVICE))
                 .filter(jwtFilter)
                 .build();
+
+        return publicRoutes.and(protectedRoutes);
     }
 
     @Bean
     public RouterFunction<ServerResponse> travelServiceRoutes(JwtGatewayFilterFunction jwtFilter) {
-        return route(TRAVEL_SERVICE)
+        RouterFunction<ServerResponse> travels = route(TRAVEL_SERVICE)
                 .route(path("/api/travels/**"), http())
                 .filter(lb(TRAVEL_SERVICE))
                 .filter(jwtFilter)
                 .build();
+
+        // ReportController.listAll() vit dans travel-service mais expose /api/reports, hors du
+        // prefixe /api/travels/** - sans cette route separee, jamais atteignable via la gateway.
+        RouterFunction<ServerResponse> reports = route("travel-service-reports")
+                .route(path("/api/reports/**"), http())
+                .filter(lb(TRAVEL_SERVICE))
+                .filter(jwtFilter)
+                .build();
+
+        return travels.and(reports);
     }
 
     @Bean

@@ -13,6 +13,13 @@ export const routes: Routes = [
     loadComponent: () => import('./features/register/register').then((m) => m.Register),
   },
   {
+    // fix/audit-gaps (troubleshooting.md #41) : publique, comme /login et /register - la case a
+    // cocher obligatoire de l'inscription doit pouvoir y renvoyer avant meme d'avoir un compte.
+    path: 'politique-de-confidentialite',
+    loadComponent: () =>
+      import('./features/legal/privacy-policy/privacy-policy').then((m) => m.PrivacyPolicy),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./layout/shell/shell').then((m) => m.Shell),
@@ -62,14 +69,22 @@ export const routes: Routes = [
           import('./features/travels/travel-detail/travel-detail').then((m) => m.TravelDetail),
       },
       {
-        // Gestion des abonnés/feedback d'un voyage - réservé au Travel Manager propriétaire
-        // (ou Admin), cf. managerGuard. Doit précéder aucune autre route travels/* : segment
-        // "manager" distinct, pas d'ambiguïté de matching avec /travels/:id/edit ci-dessus.
+        // Reserve Travel Manager/Admin (cf. managerGuard). Doit precéder /travels/:id/edit ci-dessus.
         path: 'manager/travels/:id',
         canActivate: [managerGuard],
         loadComponent: () =>
           import('./features/manager/manager-travel-detail/manager-travel-detail').then(
             (m) => m.ManagerTravelDetail,
+          ),
+      },
+      {
+        // "view profiles" des abonnés (énoncé, role Travel Manager) - lecture seule, réservé
+        // au manager/admin comme manager/travels/:id ci-dessus.
+        path: 'manager/travelers/:id',
+        canActivate: [managerGuard],
+        loadComponent: () =>
+          import('./features/manager/traveler-profile/traveler-profile').then(
+            (m) => m.TravelerProfile,
           ),
       },
       {
@@ -109,6 +124,11 @@ export const routes: Routes = [
           import('./features/payments/payment-method-form/payment-method-form').then(
             (m) => m.PaymentMethodForm,
           ),
+      },
+      {
+        // voir troubleshooting.md #41 - self-service RGPD, ouvert a tout role authentifie.
+        path: 'mon-compte',
+        loadComponent: () => import('./features/account/my-data/my-data').then((m) => m.MyData),
       },
       { path: '**', redirectTo: 'dashboard' },
     ],

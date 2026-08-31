@@ -1,0 +1,24 @@
+<h2 class="section-title">destinations</h2>
+@for (destination of destinations(); track destination.id; let dIndex = $index) {
+  <div class="subcard">
+    <div class="subcard-head">
+      <span class="subcard-index">#{{ dIndex + 1 }}</span>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">ville</div>
+        <div class="stat-value" style="font-size: 16px">{{ destination.city }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">pays</div>
+        <div class="stat-value" style="font-size: 16px">{{ destination.country }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">dates</div>
+        <div class="stat-value" style="font-size: 16px">
+          {{ destination.arrivalDate }} → {{ destination.departureDate }}
+        </div>
+      </div>
+    </div>
+  </div>
+}

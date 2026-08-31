@@ -3,6 +3,7 @@ package com.travel_plan.auth_service.security;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -29,10 +30,15 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login").permitAll()
-                        // feat/traveler-experience : inscription publique, 2e etape (identifiants +
-                        // Account role=TRAVELER force). Voir user-service SecurityConfig pour la 1ere
-                        // etape (profil User).
+                        // Inscription publique, 2e etape (identifiants + role=TRAVELER force) ; la 1ere
+                        // etape (profil User) est dans user-service SecurityConfig.
                         .requestMatchers("/api/auth/register").permitAll()
+                        // /me est appele par tous les roles juste apres login/register - sans cette regle
+                        // il tombe dans anyRequest() (ADMIN uniquement).
+                        .requestMatchers("/api/auth/me").authenticated()
+                        // voir troubleshooting.md #41 - appele par user-service pour supprimer un compte lie ;
+                        // la garde fine (ADMIN ou proprietaire) est dans AccountController.deleteByUserId.
+                        .requestMatchers(HttpMethod.DELETE, "/api/auth/accounts/by-user/*").authenticated()
                         .anyRequest().hasRole("ADMIN"))
                 .addFilterBefore(
                         new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);

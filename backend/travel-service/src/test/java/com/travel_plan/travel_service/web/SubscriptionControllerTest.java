@@ -52,7 +52,13 @@ class SubscriptionControllerTest {
         UUID subscriptionId = UUID.randomUUID();
         when(subscriptionService.subscribe(travelId, travelerAuth().user()))
                 .thenReturn(new SubscriptionResponse(
-                        subscriptionId, travelId, travelerId, SubscriptionStatus.ACTIVE, Instant.now(Clock.systemUTC()), null));
+                        subscriptionId,
+                        travelId,
+                        "Test Travel",
+                        travelerId,
+                        SubscriptionStatus.ACTIVE,
+                        Instant.now(Clock.systemUTC()),
+                        null));
 
         mockMvc.perform(post("/api/travels/{travelId}/subscriptions", travelId).principal(travelerAuth().token()))
                 .andExpect(status().isCreated())
@@ -63,7 +69,7 @@ class SubscriptionControllerTest {
     @Test
     void subscribeReturns409WhenAlreadySubscribed() throws Exception {
         when(subscriptionService.subscribe(travelId, travelerAuth().user()))
-                .thenThrow(new DuplicateSubscriptionException("Already subscribed to this travel"));
+                .thenThrow(new DuplicateSubscriptionException("Deja abonne a ce voyage"));
 
         mockMvc.perform(post("/api/travels/{travelId}/subscriptions", travelId).principal(travelerAuth().token()))
                 .andExpect(status().isConflict());
@@ -93,7 +99,7 @@ class SubscriptionControllerTest {
     @Test
     void unsubscribeReturns403WhenNotOwnSubscription() throws Exception {
         UUID subscriptionId = UUID.randomUUID();
-        doThrow(new ForbiddenException("You can only cancel your own subscription"))
+        doThrow(new ForbiddenException("Vous ne pouvez annuler que votre propre abonnement"))
                 .when(subscriptionService)
                 .unsubscribe(travelId, subscriptionId, travelerAuth().user());
 
@@ -105,7 +111,7 @@ class SubscriptionControllerTest {
     @Test
     void unsubscribeReturns409WhenPastCutoff() throws Exception {
         UUID subscriptionId = UUID.randomUUID();
-        doThrow(new SubscriptionCutoffException("Subscriptions can no longer be cancelled less than 3 days before departure"))
+        doThrow(new SubscriptionCutoffException("Les abonnements ne peuvent plus etre annules moins de 3 jours avant le depart"))
                 .when(subscriptionService)
                 .unsubscribe(travelId, subscriptionId, travelerAuth().user());
 
@@ -119,7 +125,13 @@ class SubscriptionControllerTest {
         AuthenticatedManager manager = managerAuth();
         when(subscriptionService.listSubscribers(travelId, manager.user()))
                 .thenReturn(List.of(new SubscriptionResponse(
-                        UUID.randomUUID(), travelId, travelerId, SubscriptionStatus.ACTIVE, Instant.now(Clock.systemUTC()), null)));
+                        UUID.randomUUID(),
+                        travelId,
+                        "Test Travel",
+                        travelerId,
+                        SubscriptionStatus.ACTIVE,
+                        Instant.now(Clock.systemUTC()),
+                        null)));
 
         mockMvc.perform(get("/api/travels/{travelId}/subscriptions", travelId).principal(manager.token()))
                 .andExpect(status().isOk())
@@ -129,7 +141,7 @@ class SubscriptionControllerTest {
     @Test
     void listSubscribersReturns403WhenNotOwningManager() throws Exception {
         when(subscriptionService.listSubscribers(travelId, managerAuth().user()))
-                .thenThrow(new ForbiddenException("You can only view subscribers of your own travels"));
+                .thenThrow(new ForbiddenException("Vous ne pouvez consulter les abonnes que de vos propres voyages"));
 
         mockMvc.perform(get("/api/travels/{travelId}/subscriptions", travelId).principal(managerAuth().token()))
                 .andExpect(status().isForbidden());
@@ -150,7 +162,7 @@ class SubscriptionControllerTest {
     @Test
     void coTravelersReturns403WhenCallerNeverParticipated() throws Exception {
         when(subscriptionService.coTravelerIds(travelId, travelerAuth().user()))
-                .thenThrow(new ForbiddenException("You can only view co-travelers of a travel you participated in"));
+                .thenThrow(new ForbiddenException("Vous ne pouvez consulter les co-voyageurs que d'un voyage auquel vous avez participe"));
 
         mockMvc.perform(
                         get("/api/travels/{travelId}/subscriptions/co-travelers", travelId)
@@ -158,9 +170,8 @@ class SubscriptionControllerTest {
                 .andExpect(status().isForbidden());
     }
 
-    // AuthenticatedUser est un record : chaque appel a travelerAuth()/managerAuth() reconstruit
-    // une instance egale (equals()) a celle capturee par le mock, donc Mockito matche correctement
-    // meme sans reutiliser exactement le meme objet entre le stubbing et l'appel MockMvc.
+    // AuthenticatedUser est un record : chaque appel a travelerAuth()/managerAuth() reconstruit une
+    // instance egale (equals()), donc Mockito matche sans reutiliser le meme objet.
     private AuthenticatedManager travelerAuth() {
         AuthenticatedUser user = new AuthenticatedUser("traveler1", "TRAVELER", travelerId);
         Authentication token =

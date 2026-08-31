@@ -11,6 +11,9 @@ interface NavItem {
 // Sonar S1192 (New Code) : ces literals apparaissaient dans plusieurs des 3 tableaux ci-dessous.
 const DASHBOARD_NAV_ITEM: NavItem = { path: '/dashboard', label: 'dashboard' };
 const BROWSE_NAV_ITEM: NavItem = { path: '/browse', label: 'voyages' };
+// voir troubleshooting.md #41 - self-service RGPD, meme route pour les 3 roles (JWT resolvent
+// l'appelant, jamais un id).
+const ACCOUNT_NAV_ITEM: NavItem = { path: '/mon-compte', label: 'mon compte' };
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
   DASHBOARD_NAV_ITEM,
@@ -19,19 +22,25 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { path: '/travels', label: 'travels' },
   { path: '/payments', label: 'payments' },
   { path: '/payment-methods', label: 'payment-methods' },
+  ACCOUNT_NAV_ITEM,
 ];
 
-// feat/admin-dashboard-overview : /browse manquait alors que le backend l'autorise deja
-// (RoleHierarchy). users/payments/payment-methods restent Admin-only cote backend.
-const MANAGER_NAV_ITEMS: NavItem[] = [DASHBOARD_NAV_ITEM, BROWSE_NAV_ITEM];
+// fix/audit-gaps : /payment-methods manquait alors que le backend l'autorise deja (scope
+// au caller, cf. PaymentMethodController.findAll) - users/payments restent Admin-only.
+const MANAGER_NAV_ITEMS: NavItem[] = [
+  DASHBOARD_NAV_ITEM,
+  BROWSE_NAV_ITEM,
+  { path: '/payment-methods', label: 'payment-methods' },
+  ACCOUNT_NAV_ITEM,
+];
 
-// feat/traveler-frontend : parcourir/s'abonner (browse) et gerer ses moyens de paiement
-// (deja scopes au caller cote backend, cf. PaymentMethodController.findAll) - pas d'acces
-// a /payments (liste globale, Admin-only) ni /users.
+// Parcourir/s'abonner (browse) et gerer ses moyens de paiement (scopes au caller cote
+// backend) - pas d'acces a /payments (Admin-only) ni /users.
 const TRAVELER_NAV_ITEMS: NavItem[] = [
   DASHBOARD_NAV_ITEM,
   BROWSE_NAV_ITEM,
   { path: '/payment-methods', label: 'payment-methods' },
+  ACCOUNT_NAV_ITEM,
 ];
 
 @Component({

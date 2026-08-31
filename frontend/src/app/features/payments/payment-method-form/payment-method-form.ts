@@ -33,9 +33,8 @@ export class PaymentMethodForm implements OnInit {
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly users = signal<User[]>([]);
-  // GET /api/users est reserve a l'Admin : un Traveler qui gere son propre moyen de paiement
-  // n'a jamais a choisir un owner arbitraire (feat/traveler-frontend - sinon 403 garanti,
-  // meme piege que PaymentForm/ownerId, voir docs/nouveautes-vs-travel-plan.md).
+  // GET /api/users est reserve a l'Admin - un Traveler ne doit jamais choisir un owner
+  // arbitraire (meme piege que PaymentForm/ownerId), sinon 403 garanti.
   protected readonly isTraveler = computed(() => this.authService.currentUser()?.role === 'TRAVELER');
 
   protected readonly form = this.fb.nonNullable.group({

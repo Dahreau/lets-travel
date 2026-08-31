@@ -192,6 +192,12 @@ services:
       VAULT_SECRET_ID: ${USER_SERVICE_SECRET_ID}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       SPRING_PROFILES_ACTIVE: docker
+      TRAVEL_SERVICE_URI_1: https://lets-travel-app-travel-service-1:8083
+      TRAVEL_SERVICE_URI_2: https://lets-travel-app-travel-service-2:8083
+      # fix/audit-gaps (troubleshooting.md #41) : AuthServiceClient (DELETE /api/users/me et
+      # /api/users/{id}) - meme convention de nommage de conteneur que travel-service ci-dessus.
+      AUTH_SERVICE_URI_1: https://lets-travel-app-auth-service-1:8081
+      AUTH_SERVICE_URI_2: https://lets-travel-app-auth-service-2:8081
     volumes:
       - ./infra/internal-tls/certs:/etc/internal-tls:ro
       - ./infra/vault/certs:/etc/vault-tls:ro
@@ -261,6 +267,10 @@ services:
         condition: service_healthy
       vault-init:
         condition: service_completed_successfully
+      # Appel direct a travel-service (TravelServiceClient) : sans cette ligne, rien ne
+      # garantissait travel-service pret avant payment-service (contrairement a api-gateway).
+      travel-service:
+        condition: service_healthy
     environment:
       DB_HOST: postgres
       DB_USERNAME: payment_user
@@ -361,6 +371,7 @@ services:
       - "${NGINX_HTTP_HOST_PORT:-8080}:80"
       - "${NGINX_HTTPS_HOST_PORT:-8443}:443"
     volumes:
+      - ./infra/nginx/nginx-main.conf:/etc/nginx/nginx.conf:ro
       - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./infra/nginx/certs:/etc/nginx/certs:ro
       - ./infra/internal-tls/certs/internal.crt:/etc/nginx/internal-certs/internal.crt:ro

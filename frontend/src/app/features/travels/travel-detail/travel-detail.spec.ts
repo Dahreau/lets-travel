@@ -2,7 +2,6 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 import { AuthService } from '../../../core/auth/auth';
 import { TravelDetail } from './travel-detail';
 
@@ -81,8 +80,6 @@ describe('TravelDetail', () => {
 
     expect(component['hasParticipated']()).toBe(true);
     expect(component['activeSubscription']()).toBeNull();
-    expect(component['paymentForm'].getRawValue().amount).toBe(500);
-    expect(component['paymentForm'].getRawValue().currency).toBe('EUR');
   });
 
   it('subscribing posts and stores the new active subscription', () => {
@@ -110,7 +107,7 @@ describe('TravelDetail', () => {
 
   it('submits a payment for the connected traveler', () => {
     const authService = TestBed.inject(AuthService);
-    vi.spyOn(authService, 'userId').mockReturnValue('u1');
+    spyOn(authService, 'userId').and.returnValue('u1');
     flushInit([], [{ id: 'pm1', ownerId: 'u1', provider: 'STRIPE', type: 'CARD', brand: 'Visa', last4: '4242', isDefault: true, createdAt: '' }]);
 
     component['paymentForm'].patchValue({ paymentMethodId: 'pm1' });
@@ -122,8 +119,6 @@ describe('TravelDetail', () => {
       travelId: 't1',
       ownerId: 'u1',
       paymentMethodId: 'pm1',
-      amount: 500,
-      currency: 'EUR',
     });
     req.flush({});
   });

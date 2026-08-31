@@ -28,6 +28,7 @@ export class Login {
   protected submit(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
+      this.errorMessage.set('Identifiant et mot de passe requis.');
       return;
     }
 

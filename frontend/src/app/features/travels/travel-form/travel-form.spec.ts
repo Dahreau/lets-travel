@@ -1,10 +1,13 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 import { AuthService } from '../../../core/auth/auth';
 import { TravelForm } from './travel-form';
+
+@Component({ selector: 'app-test-dummy-travel-form', template: '' })
+class DummyComponent {}
 
 describe('TravelForm (as ADMIN)', () => {
   let fixture: ReturnType<typeof TestBed.createComponent<TravelForm>>;
@@ -26,7 +29,7 @@ describe('TravelForm (as ADMIN)', () => {
     }).compileComponents();
 
     const authService = TestBed.inject(AuthService);
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'admin', role: 'ADMIN' });
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'admin', role: 'ADMIN' });
 
     httpMock = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(TravelForm);
@@ -38,25 +41,25 @@ describe('TravelForm (as ADMIN)', () => {
   afterEach(() => httpMock.verify());
 
   it('starts with one empty destination in create mode', () => {
-    expect(component['destinationsArray']).toHaveLength(1);
+    expect(component['destinationsArray']).toHaveSize(1);
   });
 
   it('adds and removes destinations', () => {
     component['addDestination']();
-    expect(component['destinationsArray']).toHaveLength(2);
+    expect(component['destinationsArray']).toHaveSize(2);
 
     component['removeDestination'](0);
-    expect(component['destinationsArray']).toHaveLength(1);
+    expect(component['destinationsArray']).toHaveSize(1);
   });
 
   it('adds and removes activities within a destination', () => {
-    expect(component['destinationActivities'](0)).toHaveLength(0);
+    expect(component['destinationActivities'](0)).toHaveSize(0);
 
     component['addActivity'](0);
-    expect(component['destinationActivities'](0)).toHaveLength(1);
+    expect(component['destinationActivities'](0)).toHaveSize(1);
 
     component['removeActivity'](0, 0);
-    expect(component['destinationActivities'](0)).toHaveLength(0);
+    expect(component['destinationActivities'](0)).toHaveSize(0);
   });
 
   it('accommodation group starts disabled and toggles on', () => {
@@ -71,13 +74,13 @@ describe('TravelForm (as ADMIN)', () => {
   });
 
   it('adds and removes transportations', () => {
-    expect(component['transportationsArray']).toHaveLength(0);
+    expect(component['transportationsArray']).toHaveSize(0);
 
     component['addTransportation']();
-    expect(component['transportationsArray']).toHaveLength(1);
+    expect(component['transportationsArray']).toHaveSize(1);
 
     component['removeTransportation'](0);
-    expect(component['transportationsArray']).toHaveLength(0);
+    expect(component['transportationsArray']).toHaveSize(0);
   });
 
   it('exposes the manager dropdown control, enabled, for an admin', () => {
@@ -101,7 +104,7 @@ describe('TravelForm (as ADMIN) — manager dropdown filtering', () => {
     }).compileComponents();
 
     const authService = TestBed.inject(AuthService);
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'admin', role: 'ADMIN' });
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'admin', role: 'ADMIN' });
 
     const httpMock = TestBed.inject(HttpTestingController);
     const fixture = TestBed.createComponent(TravelForm);
@@ -139,8 +142,8 @@ describe('TravelForm (as TRAVEL_MANAGER)', () => {
     }).compileComponents();
 
     const authService = TestBed.inject(AuthService);
-    vi.spyOn(authService, 'currentUser').mockReturnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
-    vi.spyOn(authService, 'userId').mockReturnValue('manager-1');
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
+    spyOn(authService, 'userId').and.returnValue('manager-1');
 
     httpMock = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(TravelForm);
@@ -155,5 +158,62 @@ describe('TravelForm (as TRAVEL_MANAGER)', () => {
     expect(component['form'].getRawValue().managerId).toBe('manager-1');
 
     httpMock.expectNone('/api/users');
+  });
+});
+
+describe('TravelForm (edit mode) — delete', () => {
+  let fixture: ReturnType<typeof TestBed.createComponent<TravelForm>>;
+  let component: TravelForm;
+  let httpMock: HttpTestingController;
+
+  const TRAVEL = {
+    id: 't1',
+    title: 'Trip',
+    managerId: 'manager-1',
+    startDate: '2026-01-01',
+    endDate: '2026-01-05',
+    status: 'PLANNED',
+    price: 500,
+    currency: 'EUR',
+    destinations: [],
+    transportations: [],
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [TravelForm],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([{ path: 'travels', component: DummyComponent }]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: 't1' }) } },
+        },
+      ],
+    }).compileComponents();
+
+    const authService = TestBed.inject(AuthService);
+    spyOn(authService, 'currentUser').and.returnValue({ username: 'manager', role: 'TRAVEL_MANAGER' });
+    spyOn(authService, 'userId').and.returnValue('manager-1');
+
+    httpMock = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(TravelForm);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    httpMock.expectOne('/api/travels/t1').flush(TRAVEL);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  // Le controle "c'est bien SON voyage" reste fait par le backend (requireOwnershipOrAdmin) :
+  // le bouton delete n'est qu'un raccourci UI, pas un second controle d'autorisation.
+  it('deletes the travel and navigates away on confirm', () => {
+    component['confirmDelete']();
+    const req = httpMock.expectOne('/api/travels/t1');
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null);
+
+    expect(component['confirmingDelete']()).toBe(false);
   });
 });

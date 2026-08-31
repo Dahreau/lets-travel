@@ -8,6 +8,7 @@ import java.util.UUID;
 public record ReportResponse(
         UUID id,
         UUID travelId,
+        String travelTitle,
         UUID reporterId,
         ReportedType reportedType,
         UUID reportedId,
@@ -18,6 +19,7 @@ public record ReportResponse(
         return new ReportResponse(
                 report.getId(),
                 report.getTravel().getId(),
+                report.getTravel().getTitle(),
                 report.getReporterId(),
                 report.getReportedType(),
                 report.getReportedId(),

@@ -16,10 +16,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-// Avis d'un Traveler sur un Travel auquel il a participe (la participation est verifiee via
-// une Subscription existante dans FeedbackService, pas rejouee ici). Meme pattern que
-// Subscription : vraie relation JPA vers Travel (meme base), travelerId reste un UUID nu
-// car il pointe vers user-service (pas de FK cross-service possible).
+// Avis d'un Traveler sur un Travel (participation verifiee dans FeedbackService). Meme pattern
+// que Subscription : relation JPA vers Travel, travelerId reste un UUID nu (vient de user-service).
 @Entity
 @Table(name = "feedbacks")
 @Getter

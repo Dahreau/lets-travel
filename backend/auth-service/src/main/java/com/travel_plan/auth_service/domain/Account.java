@@ -15,10 +15,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-// Anciennement "Admin" : generalise pour porter les identifiants de connexion
-// des 3 roles (TRAVELER, TRAVEL_MANAGER, ADMIN), pas seulement les admins.
-// Le profil metier (nom, email, adresse...) reste dans user-service ; userId
-// fait juste le lien entre les deux, comme Payment.ownerId le fait ailleurs.
+// Porte les identifiants de connexion des 3 roles ; le profil metier reste dans
+// user-service, userId fait juste le lien entre les deux.
 @Entity
 @Table(name = "accounts")
 @Getter

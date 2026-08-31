@@ -28,12 +28,8 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable()) // NOSONAR java:S4502 - API stateless (JWT en header Authorization, aucun cookie de session), donc pas de surface CSRF
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Un traveler consulte/paie SES paiements et methodes de paiement (verifie en plus
-                        // dans PaymentService/PaymentMethodService, la HttpSecurity ne sait pas encore
-                        // lequel est "le sien"). Matchers a un seul segment ("/*", pas "/**") pour
-                        // /api/payments/{id} : la liste complete non filtree (GET /api/payments) reste
-                        // ADMIN-only via le anyRequest ci-dessous, PaymentService.findAll() ne filtre pas
-                        // par proprietaire.
+                        // Un traveler consulte/paie SES paiements (verifie dans PaymentService). Matcher
+                        // "/*" et pas "/**" : voir troubleshooting.md #63 (fuite de la liste complete sinon).
                         .requestMatchers(HttpMethod.GET, "/api/payments/*").hasRole(TRAVELER_ROLE)
                         .requestMatchers(HttpMethod.POST, "/api/payments").hasRole(TRAVELER_ROLE)
                         // GET /api/payment-methods (liste) est filtree par proprietaire dans
@@ -50,9 +46,8 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // Meme mecanisme que travel-service (voir son SecurityConfig) : ADMIN implies TRAVEL_MANAGER
-    // implies TRAVELER, pour rester coherent avec le modele de roles du projet meme si aucune
-    // route de payment-service ne differencie encore specifiquement TRAVEL_MANAGER.
+    // Meme mecanisme que travel-service : ADMIN implies TRAVEL_MANAGER implies TRAVELER, pour rester
+    // coherent avec le modele de roles meme si aucune route ne differencie encore TRAVEL_MANAGER.
     @Bean
     public RoleHierarchy roleHierarchy() {
         return RoleHierarchyImpl.withDefaultRolePrefix()

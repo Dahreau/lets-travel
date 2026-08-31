@@ -6,28 +6,15 @@
   </app-page-header>
 
   <div class="card">
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-label">dates</div>
-        <div class="stat-value" style="font-size: 16px">{{ t.startDate }} → {{ t.endDate }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">prix</div>
-        <div class="stat-value">{{ t.price !== null ? t.price + ' ' + t.currency : 'gratuit' }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">statut</div>
-        <div class="stat-value"><app-badge [value]="t.status" /></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">destinations</div>
-        <div class="stat-value">{{ t.destinations.length }}</div>
-      </div>
-    </div>
+    <app-travel-summary-card [travel]="t" />
 
     <p class="page-subtitle" style="margin-top: 12px">
       Organisé par <a [routerLink]="['/manager', t.managerId]">ce Travel Manager</a>
     </p>
+  </div>
+
+  <div class="card">
+    <app-travel-destinations-list [destinations]="t.destinations" />
   </div>
 
   <div class="card">
@@ -61,7 +48,12 @@
           <div class="form-grid">
             <div class="field">
               <label class="label" for="paymentMethodId">Moyen de paiement<span class="req">*</span></label>
-              <select id="paymentMethodId" class="select" formControlName="paymentMethodId">
+              <select
+                id="paymentMethodId"
+                class="select"
+                formControlName="paymentMethodId"
+                [class.invalid]="paymentForm.controls.paymentMethodId.invalid && paymentForm.controls.paymentMethodId.touched"
+              >
                 <option value="" disabled>— sélectionner —</option>
                 @for (method of paymentMethods(); track method.id) {
                   <option [value]="method.id">
@@ -72,12 +64,8 @@
               </select>
             </div>
             <div class="field">
-              <label class="label" for="amount">Montant<span class="req">*</span></label>
-              <input id="amount" class="input" type="number" step="0.01" formControlName="amount" />
-            </div>
-            <div class="field">
-              <label class="label" for="currency">Devise<span class="req">*</span></label>
-              <input id="currency" class="input" formControlName="currency" maxlength="3" />
+              <span class="label">Montant</span>
+              <div class="stat-value" style="font-size: 16px">{{ t.price }} {{ t.currency }}</div>
             </div>
           </div>
           <div class="form-actions">
@@ -99,7 +87,12 @@
         <form [formGroup]="feedbackForm" (ngSubmit)="submitFeedback()">
           <div class="field">
             <label class="label" for="rating">Note (1 à 5)<span class="req">*</span></label>
-            <select id="rating" class="select" formControlName="rating">
+            <select
+              id="rating"
+              class="select"
+              formControlName="rating"
+              [class.invalid]="feedbackForm.controls.rating.invalid && feedbackForm.controls.rating.touched"
+            >
               @for (n of [1, 2, 3, 4, 5]; track n) {
                 <option [ngValue]="n">{{ n }}</option>
               }
@@ -128,7 +121,12 @@
         <form [formGroup]="reportForm" (ngSubmit)="submitReport()">
           <div class="field">
             <label class="label" for="target">Personne à signaler<span class="req">*</span></label>
-            <select id="target" class="select" formControlName="target">
+            <select
+              id="target"
+              class="select"
+              formControlName="target"
+              [class.invalid]="reportForm.controls.target.invalid && reportForm.controls.target.touched"
+            >
               <option value="MANAGER">le manager de ce voyage</option>
               @for (co of coTravelers(); track co.id) {
                 <option [value]="co.id">{{ co.firstName }} {{ co.lastName }}</option>
@@ -137,7 +135,13 @@
           </div>
           <div class="field">
             <label class="label" for="reason">Motif<span class="req">*</span></label>
-            <textarea id="reason" class="textarea" formControlName="reason" rows="3"></textarea>
+            <textarea
+              id="reason"
+              class="textarea"
+              formControlName="reason"
+              rows="3"
+              [class.invalid]="reportForm.controls.reason.invalid && reportForm.controls.reason.touched"
+            ></textarea>
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-danger" [disabled]="reportSubmitting()">

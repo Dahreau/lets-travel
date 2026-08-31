@@ -18,11 +18,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-// Abonnement d'un Traveler a un Travel. Vit dans travel-service (meme base que Travel,
-// donc vraie relation JPA) - contrairement a Travel.managerId/travelerId qui referencent
-// user-service par UUID simple (pattern cross-service deja utilise ailleurs), travelerId
-// ici reste un UUID nu car il pointe, lui, vers user-service (pas de FK possible entre bases).
-// Voir docs/nouveautes-vs-travel-plan.md.
+// Abonnement d'un Traveler a un Travel (relation JPA reelle, meme base). travelerId reste un
+// UUID nu car il pointe vers user-service (pas de FK cross-service possible).
 @Entity
 @Table(name = "subscriptions")
 @Getter

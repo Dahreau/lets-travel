@@ -43,9 +43,8 @@ public class Travel {
     @Column(nullable = false)
     private String title;
 
-    // Anciennement "ownerId" : un voyage est desormais une offre creee et geree
-    // par un Travel Manager, pas la propriete d'un seul traveler (qui s'y abonne
-    // via Subscription, entite a part - voir docs/nouveautes-vs-travel-plan.md).
+    // Anciennement "ownerId" : un voyage est cree/gere par un Travel Manager, plus la propriete
+    // d'un traveler (qui s'y abonne via Subscription, entite a part).
     @Column(name = "manager_id", nullable = false)
     private UUID managerId;
 
@@ -59,10 +58,8 @@ public class Travel {
     @Column(nullable = false)
     private TravelStatus status;
 
-    // Volontairement nullable : les voyages crees avant l'introduction du prix n'en ont pas
-    // retroactivement (voir migration V4). payment-service refuse de facturer un voyage tant
-    // que price/currency ne sont pas renseignes (TravelPriceNotSetException). TravelRequest,
-    // lui, impose les deux pour toute creation/modification a partir de maintenant.
+    // Volontairement nullable : les voyages crees avant l'introduction du prix n'en ont pas (migration
+    // V4). payment-service refuse de facturer tant que price/currency ne sont pas renseignes.
     private BigDecimal price;
 
     private String currency;

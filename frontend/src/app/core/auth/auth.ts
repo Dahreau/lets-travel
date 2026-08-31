@@ -23,10 +23,8 @@ export class AuthService {
     return !!token && !isTokenExpired(token);
   }
 
-  // Le JWT porte deja un claim "userId" (voir auth-service JwtService), meme si MeResponse
-  // ne l'expose pas : on le lit directement ici plutot que d'agrandir l'API pour si peu
-  // (feat/manager-frontend en a besoin pour reconnaitre "mes" voyages/mon propre profil).
-  // Null pour le compte ADMIN par defaut, qui n'a pas de fiche User liee.
+  // Claim "userId" du JWT, non expose par MeResponse - lu ici directement. Null pour ADMIN
+  // (pas de fiche User liee).
   userId(): string | null {
     const token = this.token;
     if (!token) {

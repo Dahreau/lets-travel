@@ -40,21 +40,26 @@ class ManagerStatsControllerTest {
     @Test
     void myStatsReturnsOwnDashboardStats() throws Exception {
         AuthenticatedManager manager = managerAuth();
+        UUID travelId = UUID.randomUUID();
+        ManagerTravelStatsEntry entry = new ManagerTravelStatsEntry(travelId, "Trip", 3, 4.5, 2);
         when(managerStatsService.myStats(manager.user()))
-                .thenReturn(new ManagerStatsResponse(2, 5, BigDecimal.valueOf(450)));
+                .thenReturn(new ManagerStatsResponse(2, 5, BigDecimal.valueOf(450), List.of(entry)));
 
         mockMvc.perform(get("/api/travels/managers/me/stats").principal(manager.token()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.travelCount").value(2))
                 .andExpect(jsonPath("$.travelerCount").value(5))
-                .andExpect(jsonPath("$.estimatedRevenue").value(450));
+                .andExpect(jsonPath("$.estimatedRevenue").value(450))
+                .andExpect(jsonPath("$.travels[0].title").value("Trip"))
+                .andExpect(jsonPath("$.travels[0].subscriberCount").value(3))
+                .andExpect(jsonPath("$.travels[0].averageRating").value(4.5));
     }
 
     @Test
     void myStatsReturns403WhenCallerIsNotAManager() throws Exception {
         AuthenticatedManager traveler = travelerAuth();
         when(managerStatsService.myStats(traveler.user()))
-                .thenThrow(new ForbiddenException("Only a Travel Manager has a personal dashboard"));
+                .thenThrow(new ForbiddenException("Seul un Travel Manager a un tableau de bord personnel"));
 
         mockMvc.perform(get("/api/travels/managers/me/stats").principal(traveler.token()))
                 .andExpect(status().isForbidden());
@@ -64,7 +69,7 @@ class ManagerStatsControllerTest {
     void publicStatsReturnsAggregatedStatsForAnyCaller() throws Exception {
         UUID targetManagerId = UUID.randomUUID();
         when(managerStatsService.publicStats(targetManagerId))
-                .thenReturn(new ManagerPublicStatsResponse(3, 4.5, 1));
+                .thenReturn(new ManagerPublicStatsResponse(3, 4.5, 1, List.of()));
 
         mockMvc.perform(get("/api/travels/managers/{managerId}/public-stats", targetManagerId)
                         .principal(travelerAuth().token()))
@@ -72,6 +77,30 @@ class ManagerStatsControllerTest {
                 .andExpect(jsonPath("$.travelCount").value(3))
                 .andExpect(jsonPath("$.averageRating").value(4.5))
                 .andExpect(jsonPath("$.reportCount").value(1));
+    }
+
+    @Test
+    void isMySubscriberReturnsSubscriberFlag() throws Exception {
+        AuthenticatedManager manager = managerAuth();
+        UUID travelerId = UUID.randomUUID();
+        when(managerStatsService.isMySubscriber(manager.user(), travelerId)).thenReturn(true);
+
+        mockMvc.perform(get("/api/travels/managers/me/subscribers/{travelerId}", travelerId)
+                        .principal(manager.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.subscriber").value(true));
+    }
+
+    @Test
+    void isMySubscriberReturns403WhenCallerIsNotAManager() throws Exception {
+        AuthenticatedManager traveler = travelerAuth();
+        UUID travelerId = UUID.randomUUID();
+        when(managerStatsService.isMySubscriber(traveler.user(), travelerId))
+                .thenThrow(new ForbiddenException("Seul un Travel Manager peut verifier ses propres abonnes"));
+
+        mockMvc.perform(get("/api/travels/managers/me/subscribers/{travelerId}", travelerId)
+                        .principal(traveler.token()))
+                .andExpect(status().isForbidden());
     }
 
     // Meme pattern que SubscriptionControllerTest : AuthenticatedUser est un record, donc

@@ -1,0 +1,28 @@
+<app-page-header title="profil voyageur" subtitle="lecture seule">
+  <a routerLink="/travels" class="btn btn-ghost">← retour aux voyages</a>
+</app-page-header>
+
+@if (loading()) {
+  <app-spinner />
+} @else if (traveler(); as t) {
+  <div class="card">
+    <dl class="profile-fields">
+      <dt>Nom</dt>
+      <dd>{{ t.firstName }} {{ t.lastName }}</dd>
+      <dt>Email</dt>
+      <dd>{{ t.email }}</dd>
+      <dt>Téléphone</dt>
+      <dd>{{ t.phone ?? '—' }}</dd>
+      <dt>Adresse</dt>
+      <dd>
+        @if (t.address; as a) {
+          {{ a.street }}, {{ a.postalCode }} {{ a.city }}, {{ a.country }}
+        } @else {
+          —
+        }
+      </dd>
+      <dt>Membre depuis</dt>
+      <dd>{{ t.createdAt }}</dd>
+    </dl>
+  </div>
+}

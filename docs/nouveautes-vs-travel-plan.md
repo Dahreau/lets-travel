@@ -196,6 +196,18 @@ sans `Account` si le 2e appel échoue (ex : username déjà pris, détecté expl
 DB). Acceptable pour ce projet : pas de nettoyage automatique prévu, à traiter manuellement si
 ça arrive en pratique.
 
+**Correction a posteriori (troubleshooting.md #42)** : le raisonnement ci-dessus ("même niveau
+de confiance que l'existant") était fauté sur un point precis, decouvert bien plus tard lors
+d'une re-verification de securite. La comparaison avec `POST /api/auth/accounts` ignorait la
+difference determinante : cet endpoint est `ADMIN`-only (seul un appelant deja de confiance peut
+choisir un `userId` arbitraire), alors que `POST /api/auth/register` est **public** - n'importe
+qui, sans authentification, pouvait fournir n'importe quel `userId` existant et se faire creer un
+compte de connexion dessus (prise de controle de compte). Le flux en 2 appels reste conserve tel
+quel (toujours pas d'appel inter-service orchestre), mais `RegisterRequest.userId` a ete remplace
+par un jeton de preuve signe (`registrationToken`, voir #42) que seul `user-service` peut emettre
+suite a un `POST /api/users/register` reellement reussi - le client ne peut plus choisir le
+`userId` lui-meme.
+
 ## `feat/manager-frontend` — dashboard manager, gestion des abonnés, profil public
 
 ### Avant (travel-plan)
@@ -227,8 +239,10 @@ de propriété : c'est une fiche publique), volontairement sans vérifier que `m
 réellement — un id inconnu renvoie juste des compteurs à zéro/`null`, pas une 404, pour ne pas
 révéler par effet de bord si un id correspond ou non à un compte réel. `averageRating` reste
 `null` tant qu'aucun feedback n'existe, jamais `0` (qui laisserait croire à une mauvaise note
-plutôt qu'à une absence de donnée). C'est l'endpoint que `feat/traveler-experience` avait
-explicitement laissé de côté (voir section précédente).
+plutôt qu'à une absence de donnée). L'énoncé demandant les notes au pluriel ("past travel
+ratings"), la reponse inclut aussi `travelRatings` : le detail voyage par voyage, pas seulement
+la moyenne globale. C'est l'endpoint que `feat/traveler-experience` avait explicitement laissé
+de côté (voir section précédente).
 
 **Frontend : un même Angular admin-tool, maintenant partagé avec les Travel Managers.**
 Jusqu'ici, l'app Angular de ce repo n'était qu'un back-office `ADMIN` (badge "admin" en dur
@@ -383,3 +397,47 @@ la case "adresse renseignée" n'était pas cochée ET remplie, sans message d'er
 **Ce qui reste volontairement absent de cette branche.** Rien côté scope Traveler : dashboard,
 navigation, paiement, avis et signalement (manager ou autre traveler) couvrent l'ensemble des
 parcours demandés par l'audit pour ce rôle.
+
+
+## `fix/audit-gaps` — clôture des écarts identifiés lors de l'audit final
+
+Avant de merger cette branche, un audit exhaustif du projet contre `docs/lets-travel_audit.md`
+et `docs/lets-travel_project.md` (5 agents en parallèle, un par rôle + un transverse) a fait
+remonter plusieurs écarts réels entre ce que le backend autorisait déjà et ce que le frontend
+exposait réellement. Cette branche les corrige tous, sans changement de permission backend
+(déjà correctes dans tous les cas) :
+
+- **Travel Manager ne pouvait ni créer ni supprimer un voyage depuis l'UI** (écart le plus
+  critique) alors que `TravelForm` gérait déjà le cas Manager et que `TravelService.delete`
+  vérifiait déjà `requireOwnershipOrAdmin` — juste aucun bouton n'y menait. Ajout d'un bouton
+  "+ nouveau voyage" sur le dashboard Manager et d'un bouton delete (avec confirmation) dans
+  `TravelForm` en mode édition.
+- **Admin ne pouvait pas atteindre le feedback d'un voyage** (`/manager/travels/:id`, déjà
+  autorisé pour l'Admin par `managerGuard` et le backend) : lien ajouté dans le tableau "top
+  voyages" du dashboard Admin.
+- **Revenu mensuel absent** ("reports on income for the last months", énoncé) : nouvelle méthode
+  `AdminStatsService.monthlyRevenue()` (6 derniers mois, abonnements ACTIFS, même convention
+  "estimée" que le reste), exposée via `GET /api/travels/admin/monthly-revenue`.
+- **Autocomplete Elasticsearch jamais consommé** (`TravelController.autocomplete`, présent
+  depuis `feat/search-and-recommendations`, jamais appelé côté UI) : branché sur le champ de
+  recherche de `TravelBrowse` avec un debounce de 250ms.
+- **Signalements affichés en UUID brut** dans le tableau de modération Admin : résolution en
+  nom via `GET /api/users/{id}`, même patron que les co-travelers.
+- **Formulaire de paiement trompeur, découvert en creusant ce point** : le DTO backend
+  `PaymentRequest` (payment-service) avait déjà retiré `amount`/`currency` (le montant vient de
+  `travel-service`, jamais du client) mais DEUX formulaires frontend (`TravelDetail` côté
+  Traveler ET `PaymentForm` côté Admin) envoyaient encore ces champs en les laissant modifiables
+  — sans aucun effet réel puisque le backend les ignorait déjà. Les deux formulaires affichent
+  désormais le prix réel du voyage en lecture seule à la place.
+- `/payment-methods` ajouté à la navigation Manager (`Shell`), manquant alors que
+  `PaymentMethodController.findAll` l'autorisait déjà (scope au caller).
+
+**Tests e2e et tests de charge k6 : finalement construits.** Décision initiale : ne pas
+construire de suite Playwright/Cypress ni de scénario k6 (effort jugé disproportionné),
+remplacés par un unique script `scripts/load-test.sh` (login réel + `ab` sur
+`GET /api/travels/search`) pour avoir un chiffre concret à citer à l'oral. Revenu dessus une
+fois le reste du projet stabilisé : une vraie suite k6 (`k6/lets-travel-load-test.js`, seuil
+`p(95)<5000ms` sur le libellé exact de l'audit) et une suite Playwright (`e2e/`, parcours
+traveler/manager/admin réels) existent maintenant — détail : `12-e2e-et-k6.md`.
+`scripts/load-test.sh` en devient obsolète (à retirer ou garder en filet de secours, à
+trancher).

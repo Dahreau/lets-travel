@@ -65,8 +65,7 @@ public class PaymentService {
                 .orElseThrow(() -> new PaymentMethodNotFoundException(request.paymentMethodId()));
         requireMethodOwnershipOrAdmin(method, caller);
 
-        // Le montant vient de travel-service, jamais de la requete (voir
-        // docs/nouveautes-vs-travel-plan.md) : faire confiance a un "amount" fourni par le client
+        // Montant vient de travel-service, jamais de la requete : faire confiance a un "amount" client
         // permettait de payer n'importe quel prix pour n'importe quel voyage.
         TravelSummary travel = travelServiceClient.getPricedTravel(request.travelId(), authorizationHeader);
 
@@ -107,7 +106,7 @@ public class PaymentService {
         }
         if (requestedOwnerId == null) {
             throw new InvalidPaymentRequestException(
-                    "ownerId is required when an admin creates a payment on behalf of a traveler");
+                    "ownerId est obligatoire quand un admin cree un paiement pour le compte d'un traveler");
         }
         return requestedOwnerId;
     }
@@ -117,7 +116,7 @@ public class PaymentService {
             return;
         }
         if (!payment.getOwnerId().equals(caller.userId())) {
-            throw new ForbiddenException("You can only view your own payments");
+            throw new ForbiddenException("Vous ne pouvez consulter que vos propres paiements");
         }
     }
 
@@ -126,7 +125,7 @@ public class PaymentService {
             return;
         }
         if (!method.getOwnerId().equals(caller.userId())) {
-            throw new ForbiddenException("You can only pay with your own payment methods");
+            throw new ForbiddenException("Vous ne pouvez payer qu'avec vos propres moyens de paiement");
         }
     }
 

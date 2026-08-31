@@ -14,7 +14,7 @@ public record TransportationRequest(
         @NotNull Instant arrivalTime,
         String provider) {
 
-    @AssertTrue(message = "arrivalTime must not be before departureTime")
+    @AssertTrue(message = "arrivalTime ne doit pas etre anterieur a departureTime")
     public boolean isDateRangeValid() {
         return departureTime == null || arrivalTime == null || !arrivalTime.isBefore(departureTime);
     }

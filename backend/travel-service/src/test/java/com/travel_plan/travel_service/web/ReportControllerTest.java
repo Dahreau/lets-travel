@@ -53,6 +53,7 @@ class ReportControllerTest {
                 .thenReturn(new ReportResponse(
                         UUID.randomUUID(),
                         travelId,
+                        "Test Travel",
                         reporterId,
                         ReportedType.MANAGER,
                         managerId,
@@ -80,7 +81,7 @@ class ReportControllerTest {
     void submitReturns403WhenReporterDidNotParticipate() throws Exception {
         ReportRequest request = new ReportRequest(ReportedType.MANAGER, managerId, "reason");
         when(reportService.submit(travelId, request, travelerAuth()))
-                .thenThrow(new ForbiddenException("You can only report someone from a travel you were subscribed to"));
+                .thenThrow(new ForbiddenException("Vous ne pouvez signaler que quelqu'un d'un voyage auquel vous etiez abonne"));
 
         mockMvc.perform(post("/api/travels/{travelId}/reports", travelId)
                         .principal(travelerToken())
@@ -93,7 +94,7 @@ class ReportControllerTest {
     void submitReturns400WhenTargetInconsistent() throws Exception {
         ReportRequest request = new ReportRequest(ReportedType.MANAGER, UUID.randomUUID(), "reason");
         when(reportService.submit(travelId, request, travelerAuth()))
-                .thenThrow(new InvalidReportRequestException("reportedId must be the manager of this travel"));
+                .thenThrow(new InvalidReportRequestException("reportedId doit etre le manager de ce voyage"));
 
         mockMvc.perform(post("/api/travels/{travelId}/reports", travelId)
                         .principal(travelerToken())
@@ -108,6 +109,7 @@ class ReportControllerTest {
                 .thenReturn(List.of(new ReportResponse(
                         UUID.randomUUID(),
                         travelId,
+                        "Test Travel",
                         reporterId,
                         ReportedType.MANAGER,
                         managerId,

@@ -40,9 +40,8 @@ class TravelServiceApplicationTests {
 	@MockitoBean
 	private SubscriptionRepository subscriptionRepository;
 
-	// feat/traveler-experience - voir troubleshooting.md #9 : tout nouveau repository Spring
-	// Data JPA doit avoir son @MockitoBean ici, sinon le contexte ne demarre plus (JPA reel
-	// desactive ci-dessus, rien ne peut construire FeedbackRepository/ReportRepository sans ca).
+	// feat/traveler-experience (troubleshooting.md #9) : tout nouveau repository JPA doit avoir son
+	// @MockitoBean ici, sinon le contexte ne demarre plus.
 	@MockitoBean
 	private FeedbackRepository feedbackRepository;
 
@@ -56,11 +55,8 @@ class TravelServiceApplicationTests {
 	@MockitoBean
 	private RecommendationRepository recommendationRepository;
 
-	// feat/search-and-recommendations - ElasticsearchClient est un @Bean construit a la main
-	// (voir ElasticsearchClientConfig) : sans mock, le contexte tente une vraie connexion TCP
-	// vers app.elasticsearch.uri au demarrage (RestClient.builder(...).build() ne se connecte
-	// pas vraiment, mais le premier appel echouerait) - voir troubleshooting.md #16 (meme lecon
-	// pour Neo4jTransactionManager/Driver plus haut).
+	// ElasticsearchClient est construit a la main (ElasticsearchClientConfig) : sans mock, le contexte
+	// tente une vraie connexion TCP au demarrage (troubleshooting.md #16).
 	@MockitoBean
 	private ElasticsearchClient elasticsearchClient;
 

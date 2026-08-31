@@ -23,10 +23,8 @@ public class TravelServiceClientConfig {
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(3);
 
-    // payment-service n'a pas de RestClient.Builder auto-configure (troubleshooting.md #11), d'ou
-    // ce builder manuel, coherent avec PaymentProviderConfig.paymentRestClient() (Stripe/PayPal).
-    // @LoadBalanced resout l'URL logique "http://travel-service" vers une des 2 instances
-    // configurees ; le SSLContext du bundle mTLS "internal-services" n'est active qu'en profil docker.
+    // payment-service n'a pas de RestClient.Builder auto-configure (voir troubleshooting.md #11) : builder manuel.
+    // @LoadBalanced resout "http://travel-service" vers une des 2 instances ; SSLContext mTLS actif seulement en profil docker.
     @Bean
     @LoadBalanced
     public RestClient.Builder loadBalancedRestClientBuilder(

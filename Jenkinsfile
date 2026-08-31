@@ -1,13 +1,21 @@
-def SERVICES = ['api-gateway', 'auth-service', 'user-service', 'travel-service', 'payment-service']
+def ALL_SERVICES = ['api-gateway', 'auth-service', 'user-service', 'travel-service', 'payment-service']
+def DEPLOYED_BASE_URL = 'https://host.docker.internal:8443'
 
 def buildService(svc) {
     sh "cd backend/${svc} && ./mvnw -B clean verify -DforkCount=1 -DreuseForks=false"
 }
 
-def sonarService(svc) {
+// standalone=true : Build & Test a ete saute - on (re)compile nous-memes avant sonar:sonar.
+// returnStatus (pas de throw) : chaque service doit etre analyse meme si un precedent a echoue.
+def sonarService(svc, boolean standalone) {
+    def goal = standalone
+        ? 'clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar'
+        : 'org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar'
+    def status = 0
     withSonarQubeEnv('sonarqube') {
-        sh "cd backend/${svc} && ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar -Dsonar.projectKey=lets-travel-${svc} -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300"
+        status = sh(script: "cd backend/${svc} && ./mvnw -B ${goal} -DforkCount=1 -DreuseForks=false -Dsonar.projectKey=lets-travel-${svc} -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300", returnStatus: true)
     }
+    return status
 }
 
 def buildFrontend() {
@@ -19,17 +27,26 @@ def buildFrontend() {
     '''
 }
 
-def sonarFrontend() {
-    withSonarQubeEnv('sonarqube') {
-        sh "cd frontend && npx --yes @sonar/scan -Dsonar.projectKey=lets-travel-frontend -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300"
+// standalone=true : meme raison que sonarService - il faut generer le rapport lcov nous-memes
+// puisque la stage Build & Test n'a pas tourne dans ce run.
+def sonarFrontend(boolean standalone) {
+    if (standalone) {
+        buildFrontend()
     }
+    def status = 0
+    withSonarQubeEnv('sonarqube') {
+        status = sh(script: "cd frontend && npx --yes @sonar/scan -Dsonar.projectKey=lets-travel-frontend -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300", returnStatus: true)
+    }
+    return status
 }
 
 pipeline {
     agent any
 
     parameters {
-        booleanParam(name: 'SKIP_BUILD_TEST', defaultValue: false, description: 'Skip Build & Test + SonarQube (deploy-only iteration). Forces the build result to FAILURE.')
+        booleanParam(name: 'SKIP_BUILD_TEST', defaultValue: false, description: 'Saute la stage Build & Test. Sonar se debrouille seul si besoin. Force le resultat en FAILURE.')
+        booleanParam(name: 'SKIP_SONAR', defaultValue: false, description: 'Saute la stage SonarQube Analysis & Quality Gate. Force le resultat en FAILURE.')
+        booleanParam(name: 'SKIP_DEPLOY', defaultValue: false, description: 'Saute Deploy ET les tests e2e/k6 (qui ont besoin du deploiement complet pour tourner). Force le resultat en FAILURE.')
     }
 
     options {
@@ -72,23 +89,41 @@ pipeline {
             when { expression { !params.SKIP_BUILD_TEST } }
             steps {
                 script {
-                    SERVICES.each { svc -> buildService(svc) }
+                    // Frontend d'abord (~1min30) : un echec s'y voit tout de suite plutot
+                    // qu'apres les 5 services backend (voir troubleshooting.md #72).
                     buildFrontend()
+                    ALL_SERVICES.each { svc -> buildService(svc) }
                 }
             }
         }
 
         stage('SonarQube Analysis & Quality Gate') {
-            when { expression { !params.SKIP_BUILD_TEST } }
+            when { expression { !params.SKIP_SONAR } }
             steps {
                 script {
-                    SERVICES.each { svc -> sonarService(svc) }
-                    sonarFrontend()
+                    // On analyse TOUT le monde d'abord, on ne bloque qu'a la fin - sinon le premier
+                    // service en echec masque l'etat des suivants (voir troubleshooting.md).
+                    // Frontend en premier ici aussi (~1min, contre ~1-2min par service backend) :
+                    // meme logique fail-cheap-first que Build & Test (troubleshooting.md #72/#76).
+                    boolean standalone = params.SKIP_BUILD_TEST as boolean
+                    def failed = []
+                    if (sonarFrontend(standalone) != 0) {
+                        failed << 'frontend'
+                    }
+                    ALL_SERVICES.each { svc ->
+                        if (sonarService(svc, standalone) != 0) {
+                            failed << svc
+                        }
+                    }
+                    if (failed) {
+                        error("Quality Gate Sonar en echec pour : ${failed.join(', ')}")
+                    }
                 }
             }
         }
 
         stage('Deploy') {
+            when { expression { !params.SKIP_DEPLOY } }
             steps {
                 sh '''
                     set -e
@@ -129,14 +164,63 @@ pipeline {
                 '''
             }
         }
+
+        stage('Wait for stack ready') {
+            when { expression { !params.SKIP_DEPLOY } }
+            steps {
+                sh """
+                    set -e
+                    # Deploy attend deja les healthchecks Compose, mais nginx/les apps peuvent
+                    # finir de demarrer quelques secondes apres - filet de securite avant e2e/k6.
+                    # Verifie aussi un chemin traversant api-gateway, pas juste nginx->frontend
+                    # (healthcheck TCP d'api-gateway pas fiable pour son routage HTTP interne, cf. #78).
+                    for attempt in \$(seq 1 30); do
+                        frontend_code=\$(curl -sk -o /dev/null -w '%{http_code}' ${DEPLOYED_BASE_URL}/ || echo 000)
+                        gateway_code=\$(curl -sk -o /dev/null -w '%{http_code}' ${DEPLOYED_BASE_URL}/api/__stack_ready_probe__ || echo 000)
+                        if [ "\$frontend_code" = "200" ] && [ "\$gateway_code" != "000" ] && [ "\$gateway_code" != "502" ] && [ "\$gateway_code" != "503" ] && [ "\$gateway_code" != "504" ]; then
+                            echo "Stack prete (frontend=\$frontend_code, gateway=\$gateway_code)."
+                            exit 0
+                        fi
+                        echo "Stack pas prete (frontend=\$frontend_code, gateway=\$gateway_code), tentative \$attempt/30..."
+                        sleep 5
+                    done
+                    echo "Stack toujours pas prete apres 30 tentatives (2m30)." >&2
+                    exit 1
+                """
+            }
+        }
+
+        stage('E2E Tests (Playwright)') {
+            when { expression { !params.SKIP_DEPLOY } }
+            environment {
+                E2E_BASE_URL = "${DEPLOYED_BASE_URL}"
+            }
+            steps {
+                sh '''
+                    cd e2e
+                    npm ci
+                    npx playwright test
+                '''
+            }
+        }
+
+        stage('Load Tests (k6)') {
+            when { expression { !params.SKIP_DEPLOY } }
+            steps {
+                sh "docker run --rm -i --add-host=host.docker.internal:host-gateway grafana/k6 run -e BASE_URL=${DEPLOYED_BASE_URL} - < k6/lets-travel-load-test.js"
+            }
+        }
     }
 
     post {
         always {
             script {
-                if (params.SKIP_BUILD_TEST) {
+                // Un run partiel (une stage sautee) ne peut jamais valoir comme pipeline
+                // complete, meme si tout ce qui a tourne est vert - voir troubleshooting.md.
+                boolean fullRun = !params.SKIP_BUILD_TEST && !params.SKIP_SONAR && !params.SKIP_DEPLOY
+                if (!fullRun) {
                     currentBuild.result = 'FAILURE'
-                    currentBuild.description = 'Debug run (Build/Test/Sonar skipped) — forced FAILURE, not a real gate result.'
+                    currentBuild.description = "Run partiel (build=${!params.SKIP_BUILD_TEST}, sonar=${!params.SKIP_SONAR}, deploy+e2e+k6=${!params.SKIP_DEPLOY}) - FAILURE forcee, ce n'est pas un resultat de pipeline complet."
                 }
             }
         }

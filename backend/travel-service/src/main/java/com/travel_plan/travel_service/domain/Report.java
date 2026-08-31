@@ -18,9 +18,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
-// Signalement d'un manager ou d'un autre traveler par un Traveler, dans le contexte d'un
-// Travel auquel les deux etaient lies (voir ReportService.requireConsistentTarget). Reserve
-// a l'Admin en lecture (moderation) - voir SecurityConfig et docs/nouveautes-vs-travel-plan.md.
+// Signalement d'un manager/traveler par un Traveler sur un Travel commun (voir
+// ReportService.requireConsistentTarget). Lecture reservee a l'Admin (SecurityConfig).
 @Entity
 @Table(name = "reports")
 @Getter

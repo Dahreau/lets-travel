@@ -3,7 +3,18 @@
 <form [formGroup]="searchForm" (ngSubmit)="search()" class="card" style="margin-bottom: 16px">
   <div class="field">
     <label class="label" for="q">Recherche</label>
-    <input id="q" class="input" formControlName="q" placeholder="titre, ville, pays..." />
+    <input id="q" class="input" formControlName="q" placeholder="titre, ville, pays..." autocomplete="off" />
+    @if (suggestions().length > 0) {
+      <ul style="list-style: none; padding: 0; margin: 4px 0 0">
+        @for (suggestion of suggestions(); track suggestion.id) {
+          <li>
+            <a [routerLink]="['/browse', suggestion.id]" (click)="selectSuggestion()">
+              {{ suggestion.title }} — {{ suggestion.startDate }}
+            </a>
+          </li>
+        }
+      </ul>
+    }
   </div>
   <div class="form-actions">
     <button type="submit" class="btn btn-primary">$ chercher</button>

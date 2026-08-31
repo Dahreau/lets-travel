@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -6,12 +7,14 @@ import { extractErrorMessage } from '../../../core/http/api-error';
 import { ToastService } from '../../../core/notifications/toast';
 import { PageHeader } from '../../../shared/ui/page-header';
 import { Spinner } from '../../../shared/ui/spinner';
+import { AddressFields } from '../../../shared/ui/address-fields';
+import { NameContactFields } from '../../../shared/ui/name-contact-fields';
 import { UserRequest, UserRole } from '../../../core/models/user';
 import { UsersService } from '../users';
 
 @Component({
   selector: 'app-user-form',
-  imports: [ReactiveFormsModule, RouterLink, PageHeader, Spinner],
+  imports: [ReactiveFormsModule, RouterLink, PageHeader, Spinner, NameContactFields, AddressFields],
   templateUrl: './user-form.html',
 })
 export class UserForm implements OnInit {
@@ -42,7 +45,17 @@ export class UserForm implements OnInit {
       postalCode: ['', Validators.required],
       country: ['', Validators.required],
     }),
+    // Pas de Validators.required ici : verifie manuellement dans submit() uniquement
+    // quand wantsAccount() est coche.
+    username: [''],
+    password: [''],
   });
+
+  // Cree un compte de connexion avec le profil - jamais propose pour ADMIN ni en
+  // edition (voir UserService.create cote backend).
+  protected readonly wantsAccount = signal(false);
+  private readonly selectedRole = toSignal(this.form.controls.role.valueChanges, { initialValue: 'TRAVELER' as UserRole });
+  protected readonly canCreateAccount = computed(() => !this.isEdit() && this.selectedRole() !== 'ADMIN');
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
@@ -77,6 +90,10 @@ export class UserForm implements OnInit {
     this.hasAddress.update((value) => !value);
   }
 
+  protected toggleWantsAccount(): void {
+    this.wantsAccount.update((value) => !value);
+  }
+
   protected submit(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
@@ -85,6 +102,12 @@ export class UserForm implements OnInit {
     }
 
     const raw = this.form.getRawValue();
+
+    if (this.canCreateAccount() && this.wantsAccount() && (!raw.username.trim() || !raw.password.trim())) {
+      this.toastService.error("Nom d'utilisateur et mot de passe sont requis pour créer un compte de connexion.");
+      return;
+    }
+
     const request: UserRequest = {
       firstName: raw.firstName,
       lastName: raw.lastName,
@@ -92,6 +115,9 @@ export class UserForm implements OnInit {
       phone: raw.phone || null,
       role: raw.role,
       address: this.hasAddress() ? raw.address : null,
+      ...(this.canCreateAccount() && this.wantsAccount()
+        ? { username: raw.username.trim(), password: raw.password }
+        : {}),
     };
 
     this.saving.set(true);

@@ -299,6 +299,22 @@ a {
   margin-bottom: 12px;
 }
 
+.profile-fields {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  row-gap: 12px;
+  column-gap: 16px;
+  margin: 0;
+}
+
+.profile-fields dt {
+  color: var(--text-muted);
+}
+
+.profile-fields dd {
+  margin: 0;
+}
+
 .subcard-head {
   display: flex;
   align-items: center;

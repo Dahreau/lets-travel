@@ -89,4 +89,27 @@ class RecommendationRepositoryTest {
 
         assertThat(recommendationRepository.recommendTravelIds("newTraveler", 10)).isEmpty();
     }
+
+    @Test
+    void recommendTravelIdsIgnoresTravelsRatedPoorly() {
+        recommendationRepository.upsertTravel("badTrip", "Portugal", "BUDGET", "SHORT");
+        recommendationRepository.upsertTravel("similarToBadTrip", "Portugal", "PREMIUM", "LONG");
+        recommendationRepository.recordFeedback("traveler1", "badTrip", 1);
+
+        assertThat(recommendationRepository.recommendTravelIds("traveler1", 10)).isEmpty();
+    }
+
+    @Test
+    void recommendTravelIdsWeighsHighRatingAboveUnratedParticipation() {
+        recommendationRepository.upsertTravel("unrated", "Portugal", "BUDGET", "SHORT");
+        recommendationRepository.upsertTravel("rated5", "Japan", "PREMIUM", "LONG");
+        recommendationRepository.upsertTravel("matchesRated5Only", "Japan", "STANDARD", "MEDIUM");
+        recommendationRepository.upsertTravel("matchesUnratedOnly", "Portugal", "STANDARD", "MEDIUM");
+        recommendationRepository.recordParticipation("traveler1", "unrated");
+        recommendationRepository.recordFeedback("traveler1", "rated5", 5);
+
+        List<String> recommended = recommendationRepository.recommendTravelIds("traveler1", 10);
+
+        assertThat(recommended).containsExactly("matchesRated5Only", "matchesUnratedOnly");
+    }
 }

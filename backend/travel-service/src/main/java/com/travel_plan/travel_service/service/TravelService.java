@@ -128,7 +128,7 @@ public class TravelService {
         }
         if (requestedManagerId == null) {
             throw new InvalidTravelRequestException(
-                    "managerId is required when an admin creates or updates a travel on behalf of a manager");
+                    "managerId est obligatoire quand un admin cree ou modifie un voyage pour le compte d'un manager");
         }
         return requestedManagerId;
     }
@@ -138,7 +138,7 @@ public class TravelService {
             return;
         }
         if (!travel.getManagerId().equals(caller.userId())) {
-            throw new ForbiddenException("You can only manage your own travels");
+            throw new ForbiddenException("Vous ne pouvez gerer que vos propres voyages");
         }
     }
 

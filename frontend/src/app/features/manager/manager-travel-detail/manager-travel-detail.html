@@ -4,7 +4,13 @@
 
 @if (loading()) {
   <app-spinner />
-} @else {
+} @else if (travel(); as t) {
+  <div class="card">
+    <app-travel-summary-card [travel]="t" />
+  </div>
+
+  <app-travel-destinations-list [destinations]="t.destinations" />
+
   <h2 class="section-title">abonnés</h2>
 
   @if (subscribers().length === 0) {
@@ -35,6 +41,14 @@
               <td><app-badge [value]="row.subscription.status" /></td>
               <td>{{ row.subscription.subscribedAt }}</td>
               <td class="actions">
+                @if (row.traveler) {
+                  <a
+                    [routerLink]="['/manager/travelers', row.subscription.travelerId]"
+                    class="btn btn-ghost btn-sm"
+                  >
+                    voir le profil
+                  </a>
+                }
                 @if (row.subscription.status === 'ACTIVE') {
                   <button
                     type="button"
